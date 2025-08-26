@@ -9,7 +9,7 @@ class JobScorer:
         Given the following job description and resume, evaluate the match between the two and provide a match score between 0 and 100, where 100 indicates a perfect match.
 
         Job Description:
-        {job_description}
+        {job_description.to_dict()}
 
         Resume:
         {resume}
@@ -33,7 +33,6 @@ class JobScorer:
             )
             evaluation = response.choices[0].message.content.strip()
             print(evaluation)
-            breakpoint()
             return evaluation
         except openai.OpenAIError as e:
             print(f"Error scoring job match: {e}")

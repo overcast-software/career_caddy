@@ -22,35 +22,6 @@ class JobScrapper:
             print(f"Error fetching page: {e}")
             sys.exit(1)
 
-    def analyze_html_with_chatgpt(self, html_content, css_selectors_json):
-        prompt = f"""
-        Given the following webpage HTML content and CSS selectors JSON, extract the job title, company name, and the main job description:
-
-        HTML: {html_content}
-        CSS Selectors JSON: {css_selectors_json}
-
-        Please provide the title, company, and the description of the job in the following json format:
-
-        """ + """
-        {
-            "title": "{{title}}",
-            "description": "{{description}}",
-            "company": "{{company}}"
-        }
-        """
-
-        try:
-            response = self.client.completions.create(
-                engine="text-davinci-002",
-                prompt=prompt,
-                max_tokens=300  # Adjust based on expected output
-            )
-            return response.choices[0].text.strip()
-        except openai.OpenAIError as e:
-            print(f"Error analyzing with ChatGPT: {e}")
-            sys.exit(1)
-
-
 def get_api_key(args):
     if args.api_key:
         return args.api_key

@@ -21,17 +21,27 @@ class JobSiteParser:
         response.raise_for_status()  # Raise an error for bad responses
         return response.text
 
-    def find_css_selectors(self, url, html_content):
+    def find_css_selectors(self, html_content) -> str:
         prompt = (
-            f"Given the following HTML content, identify the CSS selectors for the job title, "
-            f"job description, and company name. Responses must be JSON compliant with keys: title, "
-            f"description, company, and url.  Remove any markdown from response and reply with only json\n\n"
-            f"url: {url}\n"
-            f"html: {html_content}"
+            f"Given the following HTML content, identify the CSS selectors for extracting the job title, \n"
+            f"job description, posted date and company name.\n"
+            f"Company name is the name of the company posting the job and no other information.\n"
+            f"Job description is the long form description of the job and it's requirements\n"
+            f"Job title is the role's title\n"
+            f"posted date is the either an obvious date of posting or null\n"
+            f"Responses must be JSON compliant with keys: title, description, company, and posted_date.\n"
+            "It is mandatory that the response has no markdown\n"
+            "and only contains a JSON compliant string.\n"
+            "Review the output to make sure before sending.\n\n"
+            f"html:\n {html_content}"
         )
         response = self.client.chat.completions.create(
             model="gpt-4o",
             messages=[
+                {
+                    "role": "system",
+                    "content": "You are a machine that can asses css selectors from html content.  You specialize in extracting job data from webpages. and you only reply in complain json format",
+                },
                 {
                     "role": "user",
                     "content": prompt,

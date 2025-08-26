@@ -2,10 +2,16 @@
 
 import os
 import argparse
+import json
+from urllib.parse import urlparse
+from datetime import datetime
 from openai import OpenAI
 from lib.scrappers.parser_creation import JobSiteParser, get_api_key
 from lib.scrappers.generic import JobScrapper
-from lib.database.db_handler import DatabaseHandler
+from lib.handlers.db_handler import DatabaseHandler
+from lib.handlers.job_handler import JobHandler
+from lib.models.scrape import Scrape
+from lib.models.job import Job
 from lib.parsers.generic import JobParser
 from lib.scoring.job_scorer import JobScorer
 
@@ -17,61 +23,76 @@ def parse_arguments():
     return parser.parse_args()
 
 def main():
-    args = parse_arguments()
-    url = args.url
-
-    # Get the API key
-    api_key = get_api_key(args)
-
-    # Initialize the database handler
     db_handler = DatabaseHandler()
+    try:
+        args = parse_arguments()
+        resume_path = args.resume or os.getenv('RESUME_PATH')
+        if not resume_path:
+            raise ValueError("A resume file path must be provided either as an argument or through the RESUME_PATH environment variable.")
 
-    # Check if the parser data already exists
-    existing_css_selectors = db_handler.fetch_parser_from_url(url)
-    if existing_css_selectors:
-        print("CSS Selectors (from database):", existing_css_selectors[0])
-    else:
-        # Instantiate the OpenAI client
-        client = OpenAI(api_key=api_key)
+        # Read the resume
+        with open(resume_path) as file:
+            resume = file.read()
+        api_key = get_api_key(args)
+        job = JobHandler(api_key)
+        job.resume = resume
 
-        # Create an instance of JobSiteParser
-        jsp = JobSiteParser(client)
 
-        # Fetch the webpage content
-        html_content = jsp.fetch_webpage(url)
+        # Check if the parser data already exists
 
-        # Use ChatGPT to find CSS selectors
-        css_selectors = jsp.find_css_selectors(url, html_content)
-        print("CSS Selectors (from scraping):", css_selectors)
+        scrape_record = Scrape.find_by(url=args.url)
+        # look for job description
 
-        # Save the data to the database
-        db_handler.save_data(url, css_selectors, html_content)
-    # Fetch the job description using the existing CSS selectors
-    client = OpenAI(api_key=api_key)
-    jp = JobParser(client)
-    job_data_id = existing_css_selectors[0]
-    selectors = existing_css_selectors[1]
-    url_id = existing_css_selectors[2]
-    html = existing_css_selectors[4]
-    job_description = jp.extract_data_with_selectors(selectors, html)
-    db_handler.save_job_description(job_description, job_data_id, url_id)
+        if scrape_record:
+            job.scrape = scrape_record
+            job.job_description = scrape_record.job
+        else:
+            # Create an instance of JobSiteParser
+            jsp = JobSiteParser(job.client)
 
-    # Determine the resume path
-    resume_path = args.resume or os.getenv('RESUME_PATH')
-    if not resume_path:
-        raise ValueError("A resume file path must be provided either as an argument or through the RESUME_PATH environment variable.")
+            # Fetch the webpage content
+            job.html_content = jsp.fetch_webpage(args.url)
 
-    # Read the resume
-    with open(resume_path) as file:
-        resume = file.read()
+            # Use ChatGPT to find CSS selectors as json string
+            # css_selectors = jsp.find_css_selectors(job.html_content)
+            # job.css_selectors = css_selectors
 
-    # Score the job match
-    job_scorer = JobScorer(client)
-    match_score = job_scorer.score_job_match(job_description, resume)
-    print("Match Score and Explanation:")
-    print(match_score)
+            parsed_url = urlparse(args.url)
+            host = parsed_url.netloc
+            new_scrape = Scrape(
+                url = args.url,
+                host = host,
+                html = job.html_content,
+                css_selectors_json = "{}",
+                scraped_at = datetime.utcnow()
+            )
+            job.scrape = new_scrape
+            scrape_record = job.scrape
 
-    db_handler.close()
+            jp = JobParser(job.client)
+            # jd1 = jp.extract_data_with_selectors(job.html_content, job.css_selectors)
+            jd = jp.analyze_html_with_chatgpt(job.html_content)
+
+            job_description_meta = None
+            try:
+                job_description_meta = json.loads(jd)
+            except Exception as e:
+                print("bad json")
+                breakpoint()
+
+            job.company = job_description_meta.get('company')
+            job.job_from_description(job_description_meta)
+            job.scrape.job_id = job.job_description.id
+            job.scrape.save()
+
+        # Score the job match
+        js = JobScorer(job.client)
+        match_score = js.score_job_match(job.job_description, resume)
+        print("Match Score and Explanation:")
+        print(match_score)
+
+    finally:
+        db_handler.close()
 
 if __name__ == "__main__":
     main()
