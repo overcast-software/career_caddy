@@ -14,7 +14,7 @@ A command-line tool for parsing job site URLs, extracting job descriptions using
 
 - Python 3.6+
 - OpenAI API key
-- Resume file (currently expects `/Users/oldbones/Network/syncthing/org/roam/job_hunt/resume.org`)
+- Resume file (path configurable via command-line argument or environment variable)
 
 ## Installation
 
@@ -33,17 +33,23 @@ A command-line tool for parsing job site URLs, extracting job descriptions using
 ## Usage
 
 ```bash
-python cli/cli.py <job_url> [--api-key <your_openai_api_key>]
+python cli/cli.py <job_url> [--api-key <your_openai_api_key>] [--resume <path_to_resume>]
 ```
 
 ### Arguments
 
 - `url` (required): The URL of the job posting to analyze
 - `--api-key` (optional): Your OpenAI API key (can also be set via environment variable)
+- `--resume` (optional): Path to your resume file (can also be set via RESUME_PATH environment variable)
 
-### Example
+### Examples
 
 ```bash
+# Using command-line arguments
+python cli/cli.py https://example.com/job-posting --api-key sk-your-api-key-here --resume /path/to/resume.org
+
+# Using environment variables
+export RESUME_PATH=/path/to/resume.org
 python cli/cli.py https://example.com/job-posting --api-key sk-your-api-key-here
 ```
 
@@ -64,7 +70,7 @@ The tool uses a local SQLite database (`job_data.db`) to store:
 
 ## Configuration
 
-- Update the resume file path in `cli/cli.py` to point to your resume location
+- Set your resume file path via the `--resume` argument or `RESUME_PATH` environment variable
 - Set your OpenAI API key via the `--api-key` argument or environment variable
 
 ## File Structure
