@@ -1,0 +1,5 @@
+* Inbox
+** TODO find the date posted along with other data
+
+[[file:/Users/oldbones/Projects/job_hunt/modules/scrappers/parser_creation.py::def find_css_selectors(self, url, html_content):]]
+*** TODO database column
