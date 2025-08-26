@@ -1,8 +1,22 @@
 * Inbox
-** TODO add docker compose and potentially a Dockerfile
+** TODO Some lib files don't need the command line. identify and remove
 
-[[file:/Users/oldbones/Projects/job_hunt/notes.org]]
+[[file:/Users/oldbones/Projects/job_hunt/lib/parsers/generic.py::"description": description,]]
+* TODO git 'er done [0/5]
 ** TODO find the date posted along with other data
-
+:LOGBOOK:
+CLOCK: [2025-08-26 Tue 09:54]
+:END:
 [[file:/Users/oldbones/Projects/job_hunt/modules/scrappers/parser_creation.py::def find_css_selectors(self, url, html_content):]]
 *** TODO database column
+** TODO create a score table
+*** columns
+**** score
+**** explanation
+**** job_id
+*** TODO score as JSON
+** TODO [#B] create resume table
+this table will correlate to the score
+
+** TODO [#B] add docker compose and potentially a Dockerfile
+[[file:/Users/oldbones/Projects/job_hunt/notes.org]]

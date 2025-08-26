@@ -1,6 +1,6 @@
 #+title: Notes
-I've got the css selectors and I want to save it off
-* Inbox
-** [2025-08-25 Mon 17:58] now we need to vet
-
-[[file:/Users/oldbones/Projects/job_hunt/modules/interface/cli.py::print(job_description)]]
+* inbox
+* Goals
+** Dog food what I need
+** SOLID principles
+** CLI first
