@@ -36,7 +36,6 @@ def main():
             if not user:
                 raise ValueError(f"No user found with name {os.getenv('USERNAME')}")
         else:
-            # Use the count method from BaseModel
             user_count = User.count()
             if user_count == 1:
                 user = User.first()

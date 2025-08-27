@@ -2,7 +2,7 @@
 ** TODO Some lib files don't need the command line. identify and remove
 
 [[file:/Users/oldbones/Projects/job_hunt/lib/parsers/generic.py::"description": description,]]
-* TODO git 'er done [1/4]
+* TODO git 'er done [4/5]
 ** DONE find the date posted along with other data
 CLOSED: [2025-08-26 Tue 14:06]
 :LOGBOOK:
@@ -11,15 +11,21 @@ CLOCK: [2025-08-26 Tue 09:54]--[2025-08-26 Tue 14:06] =>  4:12
 [[file:/Users/oldbones/Projects/job_hunt/modules/scrappers/parser_creation.py::def find_css_selectors(self, url, html_content):]]
 *** DONE database column
 CLOSED: [2025-08-26 Tue 14:06]
-** TODO create a score table
+** DONE create a score table
+CLOSED: [2025-08-26 Tue 21:27]
 *** columns
 **** score
 **** explanation
 **** job_id
 **** resume_id
-*** TODO score as JSON
-** TODO [#B] create resume table
+*** KILL score as JSON
+regex is good enought
+CLOSED: [2025-08-26 Tue 21:27]
+** TODO score_resume.py should show ascii table with list of job descriptions, prompting the use to pick and ID.  After they select via typing id then another table with resume comes up and they select id again.
+** DONE [#B] create resume table
+CLOSED: [2025-08-26 Tue 20:05]
 this table will correlate to the score
 
-** TODO [#B] add docker compose and potentially a Dockerfile
+** DONE [#B] add docker compose and potentially a Dockerfile
+CLOSED: [2025-08-26 Tue 20:05]
 [[file:/Users/oldbones/Projects/job_hunt/notes.org]]
