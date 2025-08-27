@@ -49,3 +49,4 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 api
+secrets.yml
