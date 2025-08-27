@@ -1,8 +1,6 @@
 * Inbox
-** TODO Some lib files don't need the command line. identify and remove
-
-[[file:/Users/oldbones/Projects/job_hunt/lib/parsers/generic.py::"description": description,]]
-* TODO git 'er done [4/5]
+* DONE git 'er done [5/5]
+CLOSED: [2025-08-26 Tue 21:54]
 ** DONE find the date posted along with other data
 CLOSED: [2025-08-26 Tue 14:06]
 :LOGBOOK:
@@ -21,7 +19,9 @@ CLOSED: [2025-08-26 Tue 21:27]
 *** KILL score as JSON
 regex is good enought
 CLOSED: [2025-08-26 Tue 21:27]
-** TODO score_resume.py should show ascii table with list of job descriptions, prompting the use to pick and ID.  After they select via typing id then another table with resume comes up and they select id again.
+** KILL score_resume.py should show ascii table with list of job descriptions, prompting the use to pick and ID.  After they select via typing id then another table with resume comes up and they select id again.
+Meh.
+CLOSED: [2025-08-26 Tue 21:54]
 ** DONE [#B] create resume table
 CLOSED: [2025-08-26 Tue 20:05]
 this table will correlate to the score
@@ -29,3 +29,7 @@ this table will correlate to the score
 ** DONE [#B] add docker compose and potentially a Dockerfile
 CLOSED: [2025-08-26 Tue 20:05]
 [[file:/Users/oldbones/Projects/job_hunt/notes.org]]
+* DONE Some lib files don't need the command line. identify and remove CLOSED: [2025-08-26 Tue 21:59]
+
+[[file:/Users/oldbones/Projects/job_hunt/lib/parsers/generic.py::"description": description,]]
+* TODO

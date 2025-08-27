@@ -4,3 +4,24 @@
 ** Dog food what I need
 ** SOLID principles
 ** CLI first
+* What does it do?
+** can save different versions of a resume
+why?
+because it's good to taylor your resume
+** can save a copy of a job description
+why?
+because saving it allows things to get tracked
+it allows for comparisons to happen without calling the website again or job descriptions
+**
+* WTF what's the future
+** CLI -> API
+can call via emacs if I want to
+** web UI
+more accessible
+** access through login
+algorithm for each hostname
+* Algorithm for each hostname
+- when a public url is available
+- when a login is required
+- when scraping doesn't work
+- when the name of the company is only in the URL
