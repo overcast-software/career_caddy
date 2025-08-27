@@ -79,7 +79,7 @@ The tool uses a local SQLite database (`job_data.db`) to store:
 ├── cli/
 │   └── cli.py              # Main CLI script
 ├── lib/
-│   ├── scrappers/          # Web scraping modules
+│   ├── scrapers/          # Web scraping modules
 │   ├── database/           # Database handling
 │   ├── parsers/            # Job data parsing
 │   └── scoring/            # Resume matching logic

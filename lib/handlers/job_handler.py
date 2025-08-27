@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from datetime import datetime
-from lib.scrappers.parser_creation import JobSiteParser
+from lib.scrapers.parser_creation import JobSiteParser
 from lib.parsers.generic import JobParser
 from lib.scoring.job_scorer import JobScorer
 from lib.models.company import Company
@@ -29,7 +29,7 @@ class JobHandler:
     def save_job_description(self, job_description, company_id):
         self.db_handler.save_job_description(job_description, company_id)
 
-    def save_scrapper_data(self, url, css_selectors_json, html):
+    def save_scraper_data(self, url, css_selectors_json, html):
         # Extract host from URL
         parsed_url = urlparse(url)
         host = parsed_url.netloc

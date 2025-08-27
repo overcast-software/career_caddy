@@ -7,8 +7,8 @@ import re
 from urllib.parse import urlparse
 from datetime import datetime
 from openai import OpenAI
-from lib.scrappers.parser_creation import JobSiteParser, get_api_key
-from lib.scrappers.generic import JobScrapper
+from lib.scrapers.parser_creation import JobSiteParser, get_api_key
+from lib.scrapers.generic import JobScraper
 from lib.handlers.db_handler import DatabaseHandler
 from lib.handlers.job_handler import JobHandler
 from lib.models.scrape import Scrape

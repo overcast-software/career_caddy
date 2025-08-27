@@ -5,7 +5,7 @@ import argparse
 import os
 import sys
 
-class JobScrapper:
+class JobScraper:
     def __init__(self, client):
         self.client = client
 
@@ -41,7 +41,7 @@ def main():
     api_key = get_api_key(args)
     client = OpenAI(api_key=api_key)
 
-    scraper = JobScrapper(client)
+    scraper = JobScraper(client)
     raw_html = scraper.get_raw_html(args.url)
 
     if raw_html:
