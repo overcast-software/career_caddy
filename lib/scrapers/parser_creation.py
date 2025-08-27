@@ -1,3 +1,6 @@
+# JobSiteParser
+# use chatgpt to find css selectors for building extractors
+# right now it informs the scrape record
 import argparse
 import requests
 from openai import OpenAI

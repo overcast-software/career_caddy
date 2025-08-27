@@ -27,6 +27,7 @@ def parse_arguments():
     return parser.parse_args()
 
 def main():
+    #instantiates the db - currently sqlite
     db_handler = DatabaseHandler()
     try:
         # Retrieve user based on environment variable or database state
@@ -55,61 +56,15 @@ def main():
         with open(resume_path) as file:
             resume_content = file.read()
         api_key = get_api_key(args)
-        job = JobHandler(api_key)
-        job.resume = resume_content
+        job_handler = JobHandler(args.url, api_key)
+        job_handler.process_url()
 
-
-        # Check if the parser data already exists
-
-        scrape_record = Scrape.find_by(url=args.url)
-        # look for job description
-
-        if scrape_record:
-            job.scrape = scrape_record
-            job.job_description = scrape_record.job
-        else:
-            # Create an instance of JobSiteParser
-            jsp = JobSiteParser(job.client)
-
-            # Fetch the webpage content
-            job.html_content = jsp.fetch_webpage(args.url)
-
-            # Use ChatGPT to find CSS selectors as json string
-            # css_selectors = jsp.find_css_selectors(job.html_content)
-            # job.css_selectors = css_selectors
-
-            parsed_url = urlparse(args.url)
-            host = parsed_url.netloc
-            new_scrape = Scrape(
-                url = args.url,
-                host = host,
-                html = job.html_content,
-                css_selectors_json = "{}",
-                scraped_at = datetime.utcnow()
-            )
-            job.scrape = new_scrape
-            scrape_record = job.scrape
-
-            jp = JobParser(job.client)
-            # jd1 = jp.extract_data_with_selectors(job.html_content, job.css_selectors)
-            jd = jp.analyze_html_with_chatgpt(job.html_content)
-
-            job_description_meta = None
-            try:
-                job_description_meta = json.loads(jd)
-            except Exception as e:
-                print("bad json")
-                breakpoint()
-
-            job.company = job_description_meta.get('company')
-            job.job_from_description(job_description_meta)
-            job.scrape.job_id = job.job_description.id
-            job.scrape.save()
+        job_handler.resume = resume_content
 
         # Score the job match
-        js = JobScorer(job.client)
-        match_score = js.score_job_match(job.job_description, resume_content)
-        print("Match Score and Explanation:")
+        scorer = JobScorer(job_handler.client)
+        match_score = scorer.score_job_match(job_handler.job.description, resume_content)
+        print("Match Score and Explanation:\n")
         print(match_score)
 
         # Extract match score into score table with regex
@@ -125,7 +80,7 @@ def main():
                 score=score_value,
                 explanation=explanation,
                 resume_id=resume.id,
-                job_id=job.job_description.id,
+                job_id=job_handler.job.id,
                 user_id=user.id
             )
             score.save()
