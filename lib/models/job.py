@@ -12,3 +12,4 @@ class Job(BaseModel):
     company_id = Column(Integer, ForeignKey('company.id'))
     posted_date = Column(DateTime, default=datetime.utcnow)
     company = relationship('Company')
+    scores = relationship('Score', back_populates='job')

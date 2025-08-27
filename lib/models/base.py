@@ -27,6 +27,13 @@ class BaseModel(Base):
             return None
 
     @classmethod
+    def first(cls, session=None, **kwargs):
+        """Retrieve the first record matching the criteria."""
+        if session is None:
+            session = cls.get_session()
+        return session.query(cls).filter_by(**kwargs).first()
+
+    @classmethod
     def first_or_create(cls, session=None, defaults=None, **kwargs):
         if session is None:
             session = cls.get_session()
@@ -66,6 +73,13 @@ class BaseModel(Base):
         if session is None:
             session = cls.get_session()
         return session.query(cls).get(id)
+
+    @classmethod
+    def count(cls, session=None):
+        """Count the number of records in the table."""
+        if session is None:
+            session = cls.get_session()
+        return session.query(cls).count()
 
     def save(self):
         """Save the current instance to the database."""
