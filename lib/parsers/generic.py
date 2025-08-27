@@ -5,10 +5,13 @@ from bs4 import BeautifulSoup
 import os
 import sys
 import json
+from jinja2 import Environment, FileSystemLoader
 
 class JobParser:
     def __init__(self, client):
         self.client = client
+        # Set up Jinja2 environment
+        self.env = Environment(loader=FileSystemLoader('templates'))
 
     def extract_data_with_selectors(self, html_content, css_selectors_json):
         # Parse the HTML content
@@ -31,26 +34,13 @@ class JobParser:
         }
 
     def analyze_html_with_chatgpt(self, html_content) -> str:
+        # Load and render the template
+        template = self.env.get_template('job_parser_prompt.j2')
+        prompt = template.render(html_content=html_content)
+
         messages = [
             {"role": "system", "content": "You are a bot that evaluates html of job posts to extract relevant data as JSON"},
-            {"role": "user", "content": f"""
-        Given the following webpage HTML content, extract the job title, company name, posted date and the job description fromt the html:
-
-        HTML: {html_content}
-
-        Please provide the title, company, posted_date and the description of the job in the following json format:\n
-        """+"""\n
-        {
-            "title": "{{title}}",
-            "description": "{{description}}",
-            "company": "{{company}}",
-            "posted_date": "{{posted_date}}"
-        }\n
-        posted date is null if not explicit.\n
-        It is mandatory that you remove any markdown from the response and only respond JSON complain string.\n
-        Be certain to evaluate the accuracy of the format of your answer before responding.
-        Make sure no markdown such as '```json' exist in the response.
-        """}
+            {"role": "user", "content": prompt}
         ]
 
         try:
