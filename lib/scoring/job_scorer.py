@@ -9,7 +9,7 @@ class JobScorer:
         Given the following job description and resume, evaluate the match between the two and provide a match score between 0 and 100, where 100 indicates a perfect match.
 
         Job Description:
-        {job_description.to_dict()}
+        {job_description}
 
         Resume:
         {resume}

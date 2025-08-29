@@ -1,0 +1,17 @@
+Given the following webpage HTML content, extract the job title, company name, posted date, and the job description from the HTML:
+
+HTML: {{ html_content }}
+
+Please provide the title, company, posted_date, and the description of the job in the following JSON format:
+
+{
+    "title": "{{title}}",
+    "description": "{{description}}",
+    "company": "{{company}}",
+    "posted_date": "{{posted_date}}"
+}
+
+posted date is null if not explicit.
+It is mandatory that you remove any markdown from the response and only respond with a JSON-compliant string.
+Be certain to evaluate the accuracy of the format of your answer before responding.
+Make sure no markdown such as '```json' exists in the response.
