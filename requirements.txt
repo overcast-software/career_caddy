@@ -3,3 +3,5 @@ openai
 beautifulsoup4
 sqlalchemy
 jinja2
+playwright>=1.35.0
+PyYAML
