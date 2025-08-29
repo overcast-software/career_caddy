@@ -18,6 +18,7 @@ from lib.models.user import User
 from lib.models.resume import Resume
 from lib.parsers.generic import JobParser
 from lib.scoring.job_scorer import JobScorer
+from lib.extractors.linkedin import LinkedInActor
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="CLI for parsing job site URLs and extracting CSS selectors.")
@@ -60,6 +61,13 @@ def main():
         job_handler.process_url()
 
         job_handler.resume = resume_content
+
+        score = Score.find_by(job_id=job_handler.scrape.job_id)
+        if score:
+            print('*'*88)
+            print('job scored already')
+            print('*'*88)
+            return
 
         # Score the job match
         scorer = JobScorer(job_handler.client)
