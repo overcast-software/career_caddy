@@ -14,7 +14,7 @@ class BaseModel(Base):
     @classmethod
     def get_session(cls):
         if cls._session is None:
-            raise RuntimeError("Session has not been set. Call set_session() first.")
+            raise RuntimeError("From models/base.py. Session has not been set. Call set_session() first.")
         return cls._session
 
     @classmethod

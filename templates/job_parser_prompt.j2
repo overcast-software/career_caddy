@@ -7,11 +7,14 @@ Please provide the title, company, posted_date, and the description of the job i
 {
     "title": "{{title}}",
     "description": "{{description}}",
-    "company": "{{company}}",
-    "posted_date": "{{posted_date}}"
+    "company_name": "{{company}}",
+    "company_display_name": "{{display_name}}",
+    "posted_date": "{{posted_date}}",
+    "extraction_date": "{{today_date}}"
 }
 
 posted date is null if not explicit.
+If the posted_date is relative, extrapolate it from {{today_date}}.
 It is mandatory that you remove any markdown from the response and only respond with a JSON-compliant string.
 Be certain to evaluate the accuracy of the format of your answer before responding.
 Make sure no markdown such as '```json' exists in the response.
