@@ -2,7 +2,7 @@ import requests
 import openai
 from openai import OpenAI
 from bs4 import BeautifulSoup
-from lib.models import Scrape
+from lib.models import Scrape, Job, Company
 import os
 import sys
 import json
@@ -14,35 +14,39 @@ class GenericParser:
         # Set up Jinja2 environment
         self.env = Environment(loader=FileSystemLoader('templates'))
 
-    def extract_data_with_selectors(self, html_content, css_selectors_json):
-        # Parse the HTML content
-        soup = BeautifulSoup(html_content, 'html.parser')
-
-        # Load the CSS selectors from JSON
-        selectors = json.loads(css_selectors_json)
-
-        # Extract data using the selectors
-        title = soup.select_one(selectors.get('title')).get_text(strip=True) if selectors.get('title') and soup.select_one(selectors.get('title')) else None
-        description = soup.select_one(selectors.get('description')).get_text(strip=True) if selectors.get('description') and soup.select_one(selectors.get('description')) else None
-        company = soup.select_one(selectors.get('company')).get_text(strip=True) if selectors.get('company') and soup.select_one(selectors.get('company')) else None
-        posted_date = soup.select_one(selectors.get('posted_date')).get_text(strip=True) if selectors.get('posted_date') and soup.select_one(selectors.get('posted_date')) else None
-
-        return {
-            "title": title,
-            "description": description,
-            "company": company,
-            "posted_date": posted_date
-        }
-
     def parse(self, scrape: Scrape):
-        breakpoint()
-        pass
+        job_description = self.analyze_html_with_ai(scrape)
+        evaluation = json.loads(job_description)
+        self.process_evaluation(scrape, evaluation)
 
+    def process_evaluation(self, scrape, evaluation):
+        """
+        Push dom into chatgpt for evaluation
+        """
+        try:
+            print("*"*88)
+            print("save off data")
+            print("*"*88)
 
-    def analyze_html_with_chatgpt(self, html_content) -> str:
+            company, _ = Company.first_or_create(
+                name=evaluation['company_name'],
+                display_name=evaluation.get('company_display_name', None)
+            )
+            job, _ = Job.first_or_create(
+                title=evaluation["title"],
+                company_id=company.id,
+                defaults={"description": evaluation.get("description")}
+            )
+            scrape.job_id = job.id
+            scrape.save()
+        except Exception as e:
+            print(e)
+            breakpoint()
+
+    def analyze_html_with_ai(self, scrape: Scrape) -> str:
         # Load and render the template
         template = self.env.get_template('job_parser_prompt.j2')
-        prompt = template.render(html_content=html_content)
+        prompt = template.render(html_content=scrape.html)
 
         messages = [
             {"role": "system", "content": "You are a bot that evaluates html of job posts to extract relevant data as JSON"},

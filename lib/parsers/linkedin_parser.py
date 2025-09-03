@@ -30,7 +30,7 @@ class LinkedInParser:
             print('job_content is none: evaluating.')
             print("*"*88)
             raise ValueError("job_content cannot be None")
-        evaluation = self.analyze_with_chatgpt(scrape.html, scrape.url)
+        evaluation = self.analyze_with_ai(scrape.html, scrape.url)
         if type(evaluation) is str:
             print("*"*88)
             print("convert to json")
@@ -67,7 +67,7 @@ class LinkedInParser:
             print(e)
             breakpoint()
 
-    def analyze_with_chatgpt(self, html_content, url) -> str:
+    def analyze_with_ai(self, html_content, url) -> str:
         template = self.env.get_template('job_parser_prompt.j2')
         # Get today's date
         today_date = datetime.now().strftime('%Y-%m-%d')
