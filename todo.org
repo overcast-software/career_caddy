@@ -32,4 +32,23 @@ CLOSED: [2025-08-26 Tue 20:05]
 * DONE Some lib files don't need the command line. identify and remove CLOSED: [2025-08-26 Tue 21:59]
 
 [[file:/Users/oldbones/Projects/job_hunt/lib/parsers/generic.py::"description": description,]]
-* TODO w
+* DONE Make a library that spins up a playwright browser. lib/browser.py
+CLOSED: [2025-01-27 Mon]
+* DONE make a file called cli/extract_job.py
+CLOSED: [2025-01-27 Mon]
+* DONE cli/extract_job.py spins up the playwrite browser
+CLOSED: [2025-01-27 Mon]
+* DONE cli/extract_job.py passes in url, username, password  client into the lib/browser.py instantiation
+CLOSED: [2025-01-27 Mon]
+* DONE browser goes to url and if it does not 301/302 it returns the DOM as a string
+CLOSED: [2025-01-27 Mon]
+* TODO finish linked in test by moving into a service.
+* TODO Define a service
+Service instantiates a URL of a job posting
+it will attempt to visit the url and get the contents
+if it is behind a login, it will log in.
+if the actual job application/description is somewhere else, it will track that down as well
+** TODO It has an additional service of allowing css selectors to circumvent having to go to chatgpt all the time
+* TODO The easy way to record a job posting
+navigate to the unrestricted job
+scrape then parse, alternatively

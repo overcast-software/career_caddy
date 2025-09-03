@@ -2,12 +2,13 @@ import requests
 import openai
 from openai import OpenAI
 from bs4 import BeautifulSoup
+from lib.models import Scrape
 import os
 import sys
 import json
 from jinja2 import Environment, FileSystemLoader
 
-class JobParser:
+class GenericParser:
     def __init__(self, client):
         self.client = client
         # Set up Jinja2 environment
@@ -32,6 +33,11 @@ class JobParser:
             "company": company,
             "posted_date": posted_date
         }
+
+    def parse(self, scrape: Scrape):
+        breakpoint()
+        pass
+
 
     def analyze_html_with_chatgpt(self, html_content) -> str:
         # Load and render the template
