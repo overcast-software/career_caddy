@@ -5,7 +5,7 @@ import requests
 import openai
 from openai import OpenAI
 from bs4 import BeautifulSoup
-from lib.models import Company, Job
+from lib.models import Company, JobPost
 import os
 import sys
 import json

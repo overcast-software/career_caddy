@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from lib.models.base import BaseModel as Base
-from lib.models import user, resume, score, job, scrape, company
+from lib.models import User, Resume, Score, JobPost, Scrape, Company
 
 class DatabaseHandler:
     def __init__(self, db_path='sqlite:///job_data.db'):

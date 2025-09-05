@@ -16,4 +16,4 @@ class Score(BaseModel):
 
     # Relationships
     resume = relationship('Resume', back_populates='scores')
-    job = relationship('Job', back_populates='scores')
+    job_post = relationship('JobPost', back_populates='scores')

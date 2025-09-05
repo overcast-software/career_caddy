@@ -24,7 +24,7 @@ class GenericScraper:
         else:
             print("contents already downloaded")
             html_content = scrape.html
-            await self.page.goto(self.url, wait_until='domcontentloaded',)
+            await self.browser.page.goto(self.url, wait_until='domcontentloaded',)
 
 
         #convert that shit to markdown

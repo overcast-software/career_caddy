@@ -14,7 +14,7 @@ class Scrape(BaseModel):
     id = Column(Integer, primary_key=True, autoincrement=True)
     url = Column(String, nullable=False)
     company_id = Column(Integer, ForeignKey('company.id'))
-    job_id = Column(Integer, ForeignKey('job.id'))
+    job_post_id = Column(Integer, ForeignKey('job_post.id'))
     css_selectors = Column(Text)
     job_content = Column(Text)
     external_link = Column(String)
@@ -23,7 +23,7 @@ class Scrape(BaseModel):
     state = Column(String)
     source_scrape_id = Column(Integer, ForeignKey('scrape.id'))
     html = Column(Text)
-    job = relationship('Job')
+    job_post = relationship('JobPost')
     company = relationship('Company')
 
     @property

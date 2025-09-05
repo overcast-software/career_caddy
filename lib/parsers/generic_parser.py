@@ -2,7 +2,7 @@ import requests
 import openai
 from openai import OpenAI
 from bs4 import BeautifulSoup
-from lib.models import Scrape, Job, Company
+from lib.models import Scrape, JobPost, Company
 import os
 import sys
 import json
@@ -32,7 +32,7 @@ class GenericParser:
                 name=evaluation['company_name'],
                 display_name=evaluation.get('company_display_name', None)
             )
-            job, _ = Job.first_or_create(
+            job, _ = JobPost.first_or_create(
                 title=evaluation["title"],
                 company_id=company.id,
                 defaults={"description": evaluation.get("description")}
