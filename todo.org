@@ -42,13 +42,22 @@ CLOSED: [2025-01-27 Mon]
 CLOSED: [2025-01-27 Mon]
 * DONE browser goes to url and if it does not 301/302 it returns the DOM as a string
 CLOSED: [2025-01-27 Mon]
-* TODO finish linked in test by moving into a service.
-* TODO Define a service
+* DONE finish linked in test by moving into a service.
+CLOSED: [2025-09-03 Wed 20:33]
+* DONE Define a service
+CLOSED: [2025-09-03 Wed 20:33]
 Service instantiates a URL of a job posting
 it will attempt to visit the url and get the contents
 if it is behind a login, it will log in.
 if the actual job application/description is somewhere else, it will track that down as well
-** TODO It has an additional service of allowing css selectors to circumvent having to go to chatgpt all the time
-* TODO The easy way to record a job posting
+** DONE It has an additional service of allowing css selectors to circumvent having to go to chatgpt all the time
+CLOSED: [2025-09-03 Wed 20:32]
+* DONE The easy way to record a job posting
+CLOSED: [2025-09-03 Wed 20:31]
 navigate to the unrestricted job
-scrape then parse, alternatively
+scrape then parse, alternatively use css selectors
+* TODO cli to score against a resume id and job id passed in to args
+* TODO cli is able to take a resume path and convert it to standard orgmode format and save to db
+* TODO cli has a command that takes a job id and makes a potential resume summary
+* TODO move job table to job_post table
+* IDEA experiment with AI filling out forms
