@@ -12,3 +12,4 @@ class User(BaseModel):
 
     # Relationships
     resumes = relationship('Resume', back_populates='user')
+    scores = relationship('Score')

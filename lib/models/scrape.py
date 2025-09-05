@@ -23,8 +23,10 @@ class Scrape(BaseModel):
     state = Column(String)
     source_scrape_id = Column(Integer, ForeignKey('scrape.id'))
     html = Column(Text)
-    job_post = relationship('JobPost')
-    company = relationship('Company')
+
+    # Relationships
+    job_post = relationship('JobPost', back_populates='scrapes')
+    company = relationship('Company', back_populates='scrapes')
 
     @property
     def host(self):
