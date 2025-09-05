@@ -51,3 +51,5 @@ Thumbs.db
 api
 secrets.yml
 cookies.json
+.ok
+.tool-versions
