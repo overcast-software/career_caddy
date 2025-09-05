@@ -42,6 +42,7 @@ def main():
     scorer = JobScorer(ai_client)
 
     evaluation = scorer.score_job_match(job.description, resume.content)
+
     print(f"Job: {job.title}")
     print(f"Resume: {resume.file_path}")
     print(f"Evaluation: {evaluation}")
@@ -50,10 +51,10 @@ def main():
     score = Score(
         job_post_id=job.id,
         resume_id=resume.id,
-        evaluation=evaluation
+        evaluation=evaluation.get('evaluation'),
+        score=evaluation.get('score')
     )
-    db_handler.session.add(score)
-    db_handler.session.commit()
+    score.save()
     print("Score saved to database.")
 
 if __name__ == "__main__":

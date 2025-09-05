@@ -28,3 +28,12 @@ algorithm for each hostname
 - when a login is required
 - when scraping doesn't work
 - when the name of the company is only in the URL
+* aider
+#+begin_src emacs-lisp
+    (setq aidermacs-config-file ".aider.conf.yml")
+    (setq aidermacs-auto-mode-files
+        '(".aider.instructions.md"
+            ".aider.chat.history.md"
+            "api_reference.org"
+            "conventions.md"))  ; Add your own files
+#+end_src

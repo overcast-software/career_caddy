@@ -15,6 +15,7 @@ class LinkedInService:
         self.url = url
         self.browser = browser
         self.ai_client = ai_client
+        self.creds = credentials
         self.scraper = LinkedInScraper(browser, url, credentials)
         self.parser = LinkedInParser(ai_client)
         self.scrape = None

@@ -4,9 +4,10 @@ from lib.scrapers import GenericScraper
 from lib.models import Scrape
 
 class GenericService:
-    def __init__(self, url, browser, ai_client):
+    def __init__(self, url, browser, ai_client, creds={}):
         self.url = url
         self.browser = browser
+        self.creds = creds  # Not referenced
         self.scraper = GenericScraper(browser, url)
         self.parser = GenericParser(ai_client)
         self.scrape = None
