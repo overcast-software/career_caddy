@@ -7,8 +7,8 @@ from .base import BaseModel
 class User(BaseModel):
     __tablename__ = 'user'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False)
-    email = Column(String, unique=True, nullable=False)
+    name = Column(String, nullable=True)
+    email = Column(String, unique=True, nullable=True)
 
     # Relationships
     resumes = relationship('Resume', back_populates='user')

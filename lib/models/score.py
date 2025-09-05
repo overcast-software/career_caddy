@@ -7,10 +7,11 @@ from .base import BaseModel
 class Score(BaseModel):
     __tablename__ = 'score'
     id = Column(Integer, primary_key=True, autoincrement=True)
-    score = Column(Integer, nullable=False)
-    explanation = Column(Text, nullable=False)
+    score = Column(Integer, nullable=True)
+    explanation = Column(Text, nullable=True)
+    evaluation = Column(Text, nullable=True)
     resume_id = Column(Integer, ForeignKey('resume.id'))
-    job_id = Column(Integer, ForeignKey('job.id'))
+    job_post_id = Column(Integer, ForeignKey('job_post.id'))
     user_id = Column(Integer, ForeignKey('user.id'))
 
     # Relationships

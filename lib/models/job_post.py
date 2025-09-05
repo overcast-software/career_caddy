@@ -4,8 +4,8 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from .base import BaseModel
 
-class Job(BaseModel):
-    __tablename__ = 'job'
+class JobPost(BaseModel):
+    __tablename__ = 'job_post'
     id = Column(Integer, primary_key=True, autoincrement=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     description = Column(Text)
@@ -13,7 +13,7 @@ class Job(BaseModel):
     company_id = Column(Integer, ForeignKey('company.id'))
     posted_date = Column(DateTime, default=datetime.utcnow)
     company = relationship('Company')
-    scores = relationship('Score', back_populates='job')
+    scores = relationship('Score', back_populates='job_post')
 
     @classmethod
     def from_json(cls, parsed_job: Dict[str, Any], company_id: int) -> Optional['Job']:
