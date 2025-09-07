@@ -53,3 +53,4 @@ secrets.yml
 cookies.json
 .ok
 .tool-versions
+*.sh
