@@ -54,3 +54,4 @@ cookies.json
 .ok
 .tool-versions
 *.sh
+.pyre_configuration
