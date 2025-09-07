@@ -38,9 +38,9 @@ async def main():
     host = parsed_url.netloc
 
     browser_manager = BrowserManager()
-    service_class = SelectService.select_service(host)
-    my_service = service_class(args.url, browser_manager, ai_client)
-
+    service_selector = SelectService(host)
+    creds = service_selector.get_creds(secrets)
+    my_service = service_selector.service(args.url, browser_manager, ai_client, creds)
     # Initialize BrowserManager
     try:
         await browser_manager.start_browser(headless=False)

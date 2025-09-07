@@ -16,11 +16,13 @@ def get_api_key():
         print("API key is required. Set OPENAI_API_KEY environment variable.")
         sys.exit(1)
 
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description="CLI for scoring resumes against job postings.")
     parser.add_argument('resume_id', type=int, help='The ID of the resume to score.')
     parser.add_argument('job_id', type=int, help='The ID of the job to score against.')
     return parser.parse_args()
+
 
 def main():
     args = parse_arguments()

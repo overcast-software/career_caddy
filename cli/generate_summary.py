@@ -29,7 +29,7 @@ def main():
 
     summary_service = SummaryService(job, resume)
     summary = summary_service.generate_summary()
-
+    
     print("="*60)
     print("RESUME SUMMARY")
     print("="*60)

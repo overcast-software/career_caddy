@@ -13,7 +13,7 @@ class JobPost(BaseModel):
     company_id = Column(Integer, ForeignKey('company.id'))
     posted_date = Column(DateTime, default=datetime.utcnow)
     extraction_date = Column(DateTime)
-
+    
     # Relationships
     company = relationship('Company', back_populates='job_posts')
     scores = relationship('Score', back_populates='job_post')
