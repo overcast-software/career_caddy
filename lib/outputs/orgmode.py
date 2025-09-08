@@ -5,6 +5,7 @@ import json
 import sys
 from datetime import datetime
 
+
 class OrgModeWriter:
     def __init__(self, json_data=None, json_file=None, destination_file=None):
         if json_data:
@@ -17,24 +18,34 @@ class OrgModeWriter:
 
     @staticmethod
     def read_json_file(file_path):
-        with open(file_path, 'r') as file:
+        with open(file_path, "r") as file:
             data = json.load(file)
         return data
 
     def write_org_mode(self):
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        with open(self.destination_file, 'a') as file:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(self.destination_file, "a") as file:
             file.write(f"* {timestamp}\n")
             file.write(f"** Title: {self.data['title']}\n")
             file.write(f"** Description: {self.data['description']}\n")
             file.write(f"** Company: {self.data['company']}\n")
 
+
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='Process JSON input for org-mode.')
-    parser.add_argument('-f', '--file', help='Path to the JSON file', type=str)
-    parser.add_argument('-d', '--destination', help='Path to the destination org file', required=True, type=str)
-    parser.add_argument('-s', '--stdin', help='Read JSON from stdin', action='store_true')
+    parser = argparse.ArgumentParser(description="Process JSON input for org-mode.")
+    parser.add_argument("-f", "--file", help="Path to the JSON file", type=str)
+    parser.add_argument(
+        "-d",
+        "--destination",
+        help="Path to the destination org file",
+        required=True,
+        type=str,
+    )
+    parser.add_argument(
+        "-s", "--stdin", help="Read JSON from stdin", action="store_true"
+    )
     return parser.parse_args()
+
 
 if __name__ == "__main__":
     args = parse_arguments()

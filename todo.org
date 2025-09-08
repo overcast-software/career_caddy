@@ -67,3 +67,6 @@ CLOSED: [2025-09-08 Mon]
 * DONE move job table to job_post table
 CLOSED: [2025-09-07 Sun 11:52]
 * IDEA experiment with AI filling out forms
+* TODO make storage of resume in org format
+it will be easier for me to decern
+* TODO

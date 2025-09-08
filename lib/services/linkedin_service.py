@@ -1,6 +1,4 @@
 # LinkedInService
-
-import asyncio
 from lib.parsers import LinkedInParser
 from lib.scrapers import LinkedInScraper
 from lib.models import Scrape
@@ -24,7 +22,7 @@ class LinkedInService:
     async def process(self) -> Scrape:
         # scrape and parse
         async for scrape in self.scraper.process():
-            #first scrapes linkedin then the external link
+            # first scrapes linkedin then the external link
             if "linkedin.com" in scrape.host:
                 # create job post based on linkedin url
                 self.scrape = scrape

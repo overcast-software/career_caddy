@@ -1,8 +1,8 @@
 # BrowserManager
 # Sensible defaults for typical scraping
-import asyncio
 import json
-from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import async_playwright, TimeoutError
+
 
 class BrowserManager:
     def __init__(self, cookies_file='cookies.json'):
@@ -32,7 +32,7 @@ class BrowserManager:
             await self.page.goto(url, wait_until='domcontentloaded', timeout=timeout)
             content = await self.page.content()
             return content
-        except PlaywrightTimeoutError:
+        except TimeoutError:
             content = await self.page.content()
             print(f"Timeout exceeded while navigating to {url}")
             return content
@@ -40,7 +40,6 @@ class BrowserManager:
             print("*"*88)
             print(f"Error navigating to {url}: {e}")
             print("*"*88)
-            breakpoint()
             return None
 
     async def save_cookies(self):

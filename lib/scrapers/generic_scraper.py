@@ -1,11 +1,6 @@
-import requests
-import openai
-from openai import OpenAI
-import argparse
-import os
 from lib.models.scrape import Scrape
-import sys
 from markdownify import markdownify as md
+
 
 class GenericScraper:
     def __init__(self, browser, url):
@@ -24,10 +19,12 @@ class GenericScraper:
         else:
             print("contents already downloaded")
             html_content = scrape.html
-            await self.browser.page.goto(self.url, wait_until='domcontentloaded',)
+            await self.browser.page.goto(
+                self.url,
+                wait_until="domcontentloaded",
+            )
 
-
-        #convert that shit to markdown
+        # convert that shit to markdown
         markdown_text = md(html_content)
         scrape.job_content = markdown_text
         scrape.save()

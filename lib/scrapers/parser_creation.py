@@ -7,13 +7,18 @@ from openai import OpenAI
 import os
 import sys
 
+
 class JobSiteParser:
     def __init__(self, client):
-        self.parser = argparse.ArgumentParser(description='Parse job site URL and extract CSS selectors.')
+        self.parser = argparse.ArgumentParser(
+            description="Parse job site URL and extract CSS selectors."
+        )
         self.client = client
 
     def setup_arguments(self):
-        self.parser.add_argument('url', type=str, help='The URL of the job site to parse.')
+        self.parser.add_argument(
+            "url", type=str, help="The URL of the job site to parse."
+        )
 
     def parse(self):
         self.setup_arguments()
@@ -48,25 +53,30 @@ class JobSiteParser:
                 {
                     "role": "user",
                     "content": prompt,
-                }
+                },
             ],
-            max_tokens=150
+            max_tokens=150,
         )
         return response.choices[0].message.content.strip()
+
 
 def get_api_key(args):
     if args.api_key:
         return args.api_key
-    elif 'OPENAI_API_KEY' in os.environ:
-        return os.environ['OPENAI_API_KEY']
+    elif "OPENAI_API_KEY" in os.environ:
+        return os.environ["OPENAI_API_KEY"]
     else:
         print("API key is required. Exiting...")
         sys.exit(1)
+
+
 # Usage
 def main():
-    parser = argparse.ArgumentParser(description="Scrape job details and analyze using OpenAI")
-    parser.add_argument('url', type=str, help='URL of the job description')
-    parser.add_argument('--api-key', type=str, help='OpenAI API key')
+    parser = argparse.ArgumentParser(
+        description="Scrape job details and analyze using OpenAI"
+    )
+    parser.add_argument("url", type=str, help="URL of the job description")
+    parser.add_argument("--api-key", type=str, help="OpenAI API key")
     args = parser.parse_args()
     url = args.url
 
@@ -79,6 +89,7 @@ def main():
     # Use ChatGPT to find CSS selectors
     css_selectors = jsp.find_css_selectors(url, html_content)
     print(css_selectors)
+
 
 if __name__ == "__main__":
     main()
