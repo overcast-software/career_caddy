@@ -1,9 +1,5 @@
-import requests
 import openai
-from openai import OpenAI
-from bs4 import BeautifulSoup
 from lib.models import Scrape, JobPost, Company
-import os
 import sys
 import json
 from jinja2 import Environment, FileSystemLoader

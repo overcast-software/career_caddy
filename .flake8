@@ -3,4 +3,5 @@ max-line-length = 120
 extend-ignore = E203,W503
 per-file-ignores =
     **/__init__.py:F401
+    cli/load_resume.py:C901
 exclude = .venv, __pycache__

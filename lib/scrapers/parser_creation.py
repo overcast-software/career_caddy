@@ -48,7 +48,11 @@ class JobSiteParser:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a machine that can asses css selectors from html content.  You specialize in extracting job data from webpages. and you only reply in complain json format",
+                    "content": (
+                        "You are a machine that can asses css selectors from html content."
+                        "You specialize in extracting job data from webpages. "
+                        "and you only reply in complain json format"
+                    ),
                 },
                 {
                     "role": "user",
