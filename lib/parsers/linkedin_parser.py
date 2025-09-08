@@ -56,7 +56,7 @@ class LinkedInParser:
             company, _ = Company.first_or_create(
                 name=evaluation['company']
             )
-            job, _ = Job.first_or_create(
+            job, _ = JobPost.first_or_create(
                 title=evaluation["title"],
                 company_id=company.id,
                 defaults={"description": evaluation.get("description")}
