@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from lib.models.base import BaseModel
 from lib.models.user import User
 from lib.models.resume import Resume
-from lib.models.job import Job
+from lib.models.job_post import JobPost
 from lib.models.score import Score
 
 def parse_arguments():
@@ -28,7 +28,7 @@ def main():
 
     # Get the resume and job
     resume = Resume.get(args.resume_id)
-    job = Job.get(args.job_id)
+    job = JobPost.get(args.job_id)
 
     if not resume:
         print(f"Resume with ID {args.resume_id} not found.")
@@ -42,9 +42,9 @@ def main():
     score = Score(
         score=args.score,
         explanation=args.explanation,
-        resume=resume,
-        job=job,
-        user=resume.user
+        resume_id=resume.id,
+        job_id=job.id,
+        user_id=getattr(resume, 'user_id', getattr(resume.user, 'id', None))
     )
 
     # Save the score to the database

@@ -56,8 +56,14 @@ CLOSED: [2025-09-03 Wed 20:32]
 CLOSED: [2025-09-03 Wed 20:31]
 navigate to the unrestricted job
 scrape then parse, alternatively use css selectors
-* TODO cli to score against a resume id and job id passed in to args
-* TODO cli is able to take a resume path and convert it to standard orgmode format and save to db
-* TODO cli has a command that takes a job id and makes a potential resume summary
-* TODO move job table to job_post table
+* DONE cli to score against a resume id (default id=1) and job id passed in to args
+CLOSED: [2025-09-08 Mon]
+* DONE cli to score a job id against all the resumes for a given user
+CLOSED: [2025-09-08 Mon]
+* DONE cli is able to take a resume path and convert it to standard orgmode format and save to db
+CLOSED: [2025-09-07 Sun 11:51]
+* DONE cli has a command that takes a job id and makes a potential resume summary filling in gaps.
+CLOSED: [2025-09-08 Mon]
+* DONE move job table to job_post table
+CLOSED: [2025-09-07 Sun 11:52]
 * IDEA experiment with AI filling out forms
