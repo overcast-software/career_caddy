@@ -1,6 +1,7 @@
 import openai
 from jinja2 import Environment, FileSystemLoader
 
+
 class JobScorer:
     def __init__(self, client):
         self.client = client

@@ -10,6 +10,7 @@ from lib.models.resume import Resume
 from lib.models.job_post import JobPost
 from lib.models.score import Score
 
+
 def get_api_key():
     key = os.getenv('OPENAI_API_KEY')
     if not key:
@@ -17,11 +18,13 @@ def get_api_key():
         sys.exit(1)
     return key
 
+
 def parse_arguments():
     p = argparse.ArgumentParser(description='Score a job against all resumes for a user.')
     p.add_argument('job_id', type=int, help='The ID of the job to score against.')
     p.add_argument('--user-email', help='Email of the user whose resumes to score.')
     return p.parse_args()
+
 
 def resolve_user(args):
     if args.user_email:
@@ -41,6 +44,7 @@ def resolve_user(args):
         raise ValueError('No users found in database. Please create a user first using cli/load_user.py')
     raise ValueError('Multiple users found. Set USERNAME env var or use --user-email to select a user.')
 
+
 def parse_eval(e):
     if isinstance(e, dict):
         s = e.get('score')
@@ -55,6 +59,7 @@ def parse_eval(e):
     s_val = int(m_score.group(1)) if m_score else None
     expl = m_expl.group(1).strip() if m_expl else text
     return s_val, expl
+
 
 def main():
     args = parse_arguments()

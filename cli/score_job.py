@@ -1,7 +1,6 @@
 import argparse
 import sys
 import os
-import yaml
 import re
 from lib.handlers.db_handler import DatabaseHandler
 from lib.models.resume import Resume
@@ -9,6 +8,7 @@ from lib.models.job_post import JobPost
 from lib.models.score import Score
 from lib.scoring.job_scorer import JobScorer
 from openai import OpenAI
+
 
 def get_api_key():
     if 'OPENAI_API_KEY' in os.environ:
@@ -81,6 +81,7 @@ def main():
     )
     score.save()
     print("Score saved to database.")
+
 
 if __name__ == "__main__":
     main()
