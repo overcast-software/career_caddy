@@ -1,12 +1,13 @@
 from lib.services import LinkedInService, GenericService
 
 from urllib.parse import urlparse
+
 KNOWN_HOSTS = {
-    'linkedin.com': LinkedInService,
+    "linkedin.com": LinkedInService,
 }
 
-class SelectService:
 
+class SelectService:
     def __init__(self, host):
         self.host = host
         self.service = self.select_service(host)
@@ -31,11 +32,11 @@ class SelectService:
             return None
 
         # Split the hostname into subdomains
-        parts = hostname.split('.')
+        parts = hostname.split(".")
 
         # Check if the first part is 'www'
-        if parts[0].lower() == 'www':
+        if parts[0].lower() == "www":
             # Remove 'www' and rebuild the hostname
-            return '.'.join(parts[1:])
+            return ".".join(parts[1:])
         else:
             return hostname

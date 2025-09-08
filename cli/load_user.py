@@ -6,11 +6,13 @@ from sqlalchemy.orm import sessionmaker
 from lib.models.base import BaseModel
 from lib.models.user import User
 
+
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='Load a user into the database.')
-    parser.add_argument('--name', help='Name of the user.')
-    parser.add_argument('--email', help='Email of the user.')
+    parser = argparse.ArgumentParser(description="Load a user into the database.")
+    parser.add_argument("--name", help="Name of the user.")
+    parser.add_argument("--email", help="Email of the user.")
     return parser.parse_args()
+
 
 def prompt_for_missing_info(args):
     if not args.name:
@@ -18,12 +20,15 @@ def prompt_for_missing_info(args):
     if not args.email:
         args.email = input("Enter the user's email: ")
 
+
 def main():
     args = parse_arguments()
     prompt_for_missing_info(args)
 
     # Create a database engine and session
-    engine = create_engine('sqlite:///job_data.db')  # Replace with your actual database URL
+    engine = create_engine(
+        "sqlite:///job_data.db"
+    )  # Replace with your actual database URL
     Session = sessionmaker(bind=engine)
     session = Session()
 
@@ -34,9 +39,12 @@ def main():
     user, created = User.first_or_create(name=args.name, email=args.email)
 
     if created:
-        print(f"User {user.name} with email {user.email} has been created successfully.")
+        print(
+            f"User {user.name} with email {user.email} has been created successfully."
+        )
     else:
         print(f"User {user.name} with email {user.email} already exists.")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

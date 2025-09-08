@@ -9,22 +9,28 @@ from lib.browser import BrowserManager
 from lib.handlers.db_handler import DatabaseHandler
 from lib.select_service import SelectService
 
-def load_secrets(file_path='secrets.yml'):
-    with open(file_path, 'r') as file:
+
+def load_secrets(file_path="secrets.yml"):
+    with open(file_path, "r") as file:
         return yaml.safe_load(file)
 
+
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="CLI for parsing job site URLs and extracting CSS selectors.")
-    parser.add_argument('url', type=str, help='The URL of the job site to parse.')
-    parser.add_argument('--api-key', type=str, help='OpenAI API key')
+    parser = argparse.ArgumentParser(
+        description="CLI for parsing job site URLs and extracting CSS selectors."
+    )
+    parser.add_argument("url", type=str, help="The URL of the job site to parse.")
+    parser.add_argument("--api-key", type=str, help="OpenAI API key")
     return parser.parse_args()
 
+
 def get_api_key():
-    if 'OPENAI_API_KEY' in os.environ:
-        return os.environ['OPENAI_API_KEY']
+    if "OPENAI_API_KEY" in os.environ:
+        return os.environ["OPENAI_API_KEY"]
     else:
         print("API key is required. Exiting...")
         sys.exit(1)
+
 
 async def main():
     DatabaseHandler()
@@ -49,6 +55,7 @@ async def main():
 
     finally:
         await browser_manager.close_browser()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

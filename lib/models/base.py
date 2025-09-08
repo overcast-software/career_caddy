@@ -3,6 +3,7 @@ from sqlalchemy.orm.exc import NoResultFound
 
 Base = declarative_base()
 
+
 class BaseModel(Base):
     __abstract__ = True
     _session = None
@@ -14,7 +15,9 @@ class BaseModel(Base):
     @classmethod
     def get_session(cls):
         if cls._session is None:
-            raise RuntimeError("From models/base.py. Session has not been set. Call set_session() first.")
+            raise RuntimeError(
+                "From models/base.py. Session has not been set. Call set_session() first."
+            )
         return cls._session
 
     @classmethod
@@ -89,4 +92,6 @@ class BaseModel(Base):
 
     def to_dict(self):
         """Convert the model instance to a dictionary."""
-        return {column.name: getattr(self, column.name) for column in self.__table__.columns}
+        return {
+            column.name: getattr(self, column.name) for column in self.__table__.columns
+        }

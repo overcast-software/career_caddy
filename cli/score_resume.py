@@ -6,19 +6,27 @@ from lib.models.resume import Resume
 from lib.models.job_post import JobPost
 from lib.models.score import Score
 
+
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='Score a resume against a job.')
-    parser.add_argument('--resume-id', type=int, required=True, help='ID of the resume to score.')
-    parser.add_argument('--job-id', type=int, required=True, help='ID of the job to score against.')
-    parser.add_argument('--score', type=int, required=True, help='Score (1-100).')
-    parser.add_argument('--explanation', required=True, help='Explanation of the score.')
+    parser = argparse.ArgumentParser(description="Score a resume against a job.")
+    parser.add_argument(
+        "--resume-id", type=int, required=True, help="ID of the resume to score."
+    )
+    parser.add_argument(
+        "--job-id", type=int, required=True, help="ID of the job to score against."
+    )
+    parser.add_argument("--score", type=int, required=True, help="Score (1-100).")
+    parser.add_argument(
+        "--explanation", required=True, help="Explanation of the score."
+    )
     return parser.parse_args()
+
 
 def main():
     args = parse_arguments()
 
     # Create a database engine and session
-    engine = create_engine('sqlite:///job_data.db')
+    engine = create_engine("sqlite:///job_data.db")
     Session = sessionmaker(bind=engine)
     session = Session()
 
@@ -43,13 +51,16 @@ def main():
         explanation=args.explanation,
         resume_id=resume.id,
         job_id=job.id,
-        user_id=getattr(resume, 'user_id', getattr(resume.user, 'id', None))
+        user_id=getattr(resume, "user_id", getattr(resume.user, "id", None)),
     )
 
     # Save the score to the database
     score.save()
 
-    print(f"Score of {score.score} for resume {resume.id} against job {job.id} has been saved.")
+    print(
+        f"Score of {score.score} for resume {resume.id} against job {job.id} has been saved."
+    )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

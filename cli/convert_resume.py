@@ -4,11 +4,20 @@ from lib.handlers.db_handler import DatabaseHandler
 from lib.models.resume import Resume
 from lib.models.user import User
 
+
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="CLI for converting resumes to database format.")
-    parser.add_argument('resume_path', type=str, help='The path to the resume file.')
-    parser.add_argument('--user-id', type=int, default=1, help='The user ID to associate with the resume.')
+    parser = argparse.ArgumentParser(
+        description="CLI for converting resumes to database format."
+    )
+    parser.add_argument("resume_path", type=str, help="The path to the resume file.")
+    parser.add_argument(
+        "--user-id",
+        type=int,
+        default=1,
+        help="The user ID to associate with the resume.",
+    )
     return parser.parse_args()
+
 
 def main():
     args = parse_arguments()
@@ -33,6 +42,7 @@ def main():
     except Exception as e:
         print(f"Error processing resume: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
