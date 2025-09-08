@@ -18,4 +18,4 @@ class Score(BaseModel):
     # Relationships
     resume = relationship("Resume", back_populates="scores")
     job_post = relationship("JobPost", back_populates="scores")
-    user = relationship("User")
+    user = relationship("User", overlaps="scores")

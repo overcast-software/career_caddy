@@ -23,7 +23,10 @@ def parse_arguments():
         description="CLI for generating resume summaries from job postings."
     )
     parser.add_argument(
-        "job_id", type=int, help="The ID of the job to generate a summary for."
+        "--job-id",
+        required=False,
+        type=int,
+        help="The ID of the job to generate a summary for.",
     )
     parser.add_argument(
         "--resume-id", type=int, help="Optional resume ID to use for context."
@@ -38,8 +41,11 @@ def main():
     client = OpenAI(api_key=api_key)
     db_handler = DatabaseHandler()
 
-    job = db_handler.session.query(JobPost).get(args.job_id)
-    if not job:
+    if args.job_id:
+        job = JobPost.get(args.job_id)
+    elif JobPost.count() > 0:
+        job = JobPost.last()
+    else:
         print(f"Job with ID {args.job_id} not found.")
         sys.exit(1)
 

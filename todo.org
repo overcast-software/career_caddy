@@ -68,5 +68,6 @@ CLOSED: [2025-09-08 Mon]
 CLOSED: [2025-09-07 Sun 11:52]
 * IDEA experiment with AI filling out forms
 * TODO make storage of resume in org format
-it will be easier for me to decern
-* TODO
+it will be easier for me to discern - for me at least
+* TODO Cover letter service
+mvp

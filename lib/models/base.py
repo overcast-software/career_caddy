@@ -37,6 +37,15 @@ class BaseModel(Base):
         return session.query(cls).filter_by(**kwargs).first()
 
     @classmethod
+    def last(cls, session=None, **kwargs):
+        """Retrieve the last record (by primary key descending) matching the criteria."""
+        if session is None:
+            session = cls.get_session()
+        query = session.query(cls).filter_by(**kwargs)
+        order_cols = [col.desc() for col in cls.__mapper__.primary_key]
+        return query.order_by(*order_cols).first()
+
+    @classmethod
     def first_or_create(cls, session=None, defaults=None, **kwargs):
         if session is None:
             session = cls.get_session()
