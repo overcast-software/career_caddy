@@ -1,6 +1,7 @@
+# Score a job based on job_id and resume_id
+#
 import argparse
 import sys
-import os
 import re
 from lib.handlers.db_handler import DatabaseHandler
 from lib.handlers.chatgpt_handler import ai_client
@@ -8,7 +9,6 @@ from lib.models.resume import Resume
 from lib.models.job_post import JobPost
 from lib.models.score import Score
 from lib.scoring.job_scorer import JobScorer
-from openai import OpenAI
 
 
 def parse_arguments():
