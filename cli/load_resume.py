@@ -4,9 +4,6 @@ import os
 import sys
 from pathlib import Path
 from typing import Set
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from lib.models.base import BaseModel
 from lib.models.user import User
 from lib.models.resume import Resume
 from lib.handlers.db_handler import DatabaseHandler

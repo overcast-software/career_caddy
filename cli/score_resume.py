@@ -2,7 +2,6 @@ import argparse
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from lib.models.base import BaseModel
-from lib.models.user import User
 from lib.models.resume import Resume
 from lib.models.job_post import JobPost
 from lib.models.score import Score

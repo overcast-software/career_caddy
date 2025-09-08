@@ -30,7 +30,7 @@ def main():
     parser = JobParser(client)
 
     # Assuming you have a function to fetch data from the database
-    from modules.database.db_handler import DatabaseHandler
+    from lib.handlers.db_handler import DatabaseHandler
     db_handler = DatabaseHandler()
     fetched_data = db_handler.fetch_parser_from_url(args.url)
     if fetched_data:

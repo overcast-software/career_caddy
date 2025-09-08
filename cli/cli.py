@@ -2,23 +2,14 @@
 
 import os
 import argparse
-import json
 import re
-from urllib.parse import urlparse
-from datetime import datetime
-from openai import OpenAI
-from lib.scrapers.parser_creation import JobSiteParser, get_api_key
-from lib.scrapers.generic import JobScraper
+from lib.scrapers.parser_creation import get_api_key
 from lib.handlers.db_handler import DatabaseHandler
 from lib.handlers.job_handler import JobHandler
-from lib.models.scrape import Scrape
-from lib.models.job import Job
 from lib.models.score import Score
 from lib.models.user import User
 from lib.models.resume import Resume
-from lib.parsers.generic import JobParser
 from lib.scoring.job_scorer import JobScorer
-from lib.extractors.linkedin import LinkedInActor
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="CLI for parsing job site URLs and extracting CSS selectors.")
