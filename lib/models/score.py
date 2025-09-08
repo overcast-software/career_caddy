@@ -1,6 +1,6 @@
 # score is a rich join between a job description and a resume
 # in addition to foriegn keys it has a score (1-100) and an explination (text)
-from sqlalchemy import Column, Integer, String, ForeignKey, Text
+from sqlalchemy import Column, Integer, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from .base import BaseModel
 
