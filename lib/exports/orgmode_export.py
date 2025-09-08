@@ -18,7 +18,7 @@ class OrgModeExport:
         self.env = Environment(loader=FileSystemLoader("templates"))
         self.example = example or self.example_resume()
 
-    async def process(self) -> str:
+    def process(self) -> str:
         return self.convert_with_ai()
 
     def convert_with_ai(self):
