@@ -67,7 +67,13 @@ CLOSED: [2025-09-08 Mon]
 * DONE move job table to job_post table
 CLOSED: [2025-09-07 Sun 11:52]
 * IDEA experiment with AI filling out forms
-* TODO make storage of resume in org format
+* DONE make storage of resume in org format
+CLOSED: [2025-09-08 Mon 20:18]
 it will be easier for me to discern - for me at least
-* TODO Cover letter service
+* DONE Cover letter service
+CLOSED: [2025-09-08 Mon 20:18]
 mvp
+* DONE cover letter table
+CLOSED: [2025-09-09 Tue]
+* DONE application table
+CLOSED: [2025-09-09 Tue]

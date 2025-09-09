@@ -73,7 +73,7 @@ def main():
     args = parse_arguments()
     db = DatabaseHandler()
 
-    job = db.session.query(JobPost).get(args.job_id)
+    job = JobPost.get(args.job_id)
     if not job:
         print(f"Job with ID {args.job_id} not found.")
         sys.exit(1)

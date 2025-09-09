@@ -55,8 +55,10 @@ def main():
             if s is not None and expl:
                 return int(s), str(expl)
         text = str(e)
-        m_score = re.search(r"(?i)\bscore\s*[:\-]\s*(\d{1,3})", text)
-        m_expl = re.search(r"(?i)\bexplanation\s*[:\-]\s*(.+)", text, re.DOTALL)
+        m_score = re.search(r"(?i)\**score\**\s*[:\-]\s*(\d{1,3})", text)
+        m_expl = re.search(
+            r"(?i)\**(explanation|evaluation)\**\s*[:\-]\s*(.+)", text, re.DOTALL
+        )
         s_val = int(m_score.group(1)) if m_score else None
         expl = m_expl.group(1).strip() if m_expl else text
         return s_val, expl

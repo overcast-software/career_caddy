@@ -29,11 +29,13 @@ class GenericParser:
                 name=evaluation["company_name"],
                 display_name=evaluation.get("company_display_name", None),
             )
+            print(f"company id: {company.id}")
             job, _ = JobPost.first_or_create(
                 title=evaluation["title"],
                 company_id=company.id,
                 defaults={"description": evaluation.get("description")},
             )
+            print(f"job post id: {job.id}")
             scrape.job_id = job.id
             scrape.save()
         except Exception as e:

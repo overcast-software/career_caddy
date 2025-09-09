@@ -14,3 +14,5 @@ class User(BaseModel):
     # Relationships
     resumes = relationship("Resume", back_populates="user")
     scores = relationship("Score")
+    cover_letters = relationship("CoverLetter", back_populates="user")
+    applications = relationship("Application", back_populates="user")
