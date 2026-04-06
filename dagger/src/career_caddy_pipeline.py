@@ -106,22 +106,7 @@ class CareerCaddy:
                 [
                     "sh", "-c",
                     "apt-get update && apt-get install -y --no-install-recommends "
-                    "python3 python3-pip curl "
-                    "libgtk-3-0 libglib2.0-0 libnss3 libatk1.0-0 "
-                    "libgbm1 libasound2 libx11-6 libxcomposite1 libxdamage1 "
-                    "libxrandr2 libxss1 libxtst6 libdbus-glib-1-2 xvfb "
-                    "&& rm -rf /var/lib/apt/lists/*",
-                ]
-            )
-            .with_exec(["pip3", "install", "--break-system-packages", "-q", "camoufox"])
-            .with_env_variable("CAMOUFOX_DATA_DIR", "/opt/camoufox")
-            .with_exec(["python3", "-m", "camoufox", "fetch"])
-            .with_exec(
-                [
-                    "sh", "-c",
-                    "ln -sf "
-                    "$(python3 -c 'from camoufox.pkgman import launch_path; print(launch_path())')"
-                    " /usr/local/bin/firefox",
+                    "chromium && rm -rf /var/lib/apt/lists/*",
                 ]
             )
             .with_directory("/app", src)
