@@ -52,6 +52,9 @@ services:
       GUNICORN_PORT: "8000"
       GUNICORN_WORKERS: "3"
       SA_SCHEMA_ON_POST_MIGRATE: "True"
+      BROWSER_SERVICE_URL: "http://host.docker.internal:3012"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy

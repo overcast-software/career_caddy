@@ -55,7 +55,16 @@ make help        # List all available commands
 
 ## Optional: Logfire Tracing
 
-The browser MCP server supports [Logfire](https://logfire.pydantic.dev/) tracing. It is disabled by default and requires no setup to run without it. To enable, set `LOGFIRE_TOKEN` in your `.env` file:
+The browser MCP server supports [Logfire](https://logfire.pydantic.dev/) tracing. It is disabled by default and requires no setup to run without it.
+
+**Getting a token:**
+
+1. Sign up at [logfire.pydantic.dev](https://logfire.pydantic.dev/)
+2. Create a project (e.g. `career-caddy`)
+3. Go to **Settings → Write tokens** and create a new token
+4. Copy the token value
+
+Then set it in your `.env` file:
 
 ```
 LOGFIRE_TOKEN=your-token-here
