@@ -5,3 +5,6 @@ requires-python = ">=3.11"
 dependencies = [
     "dagger-io",
 ]
+
+[project.entry-points."dagger.mod"]
+main_object = 'career_caddy_pipeline:CareerCaddy'
