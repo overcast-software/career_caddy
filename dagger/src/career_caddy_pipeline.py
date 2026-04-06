@@ -37,7 +37,7 @@ class CareerCaddy:
     @function
     async def build_api(
         self,
-        src: Annotated[dagger.Directory, DefaultPath("../api")] = None,
+        src: Annotated[dagger.Directory, DefaultPath("../api")],
     ) -> dagger.Container:
         """Build the Django API image and run linting + tests.
 
@@ -89,7 +89,7 @@ class CareerCaddy:
     @function
     async def build_frontend(
         self,
-        src: Annotated[dagger.Directory, DefaultPath("../frontend")] = None,
+        src: Annotated[dagger.Directory, DefaultPath("../frontend")],
     ) -> dagger.Container:
         """Build the Ember.js frontend image and run lint + tests."""
         src = (
@@ -112,7 +112,7 @@ class CareerCaddy:
     @function
     async def build_ai(
         self,
-        src: Annotated[dagger.Directory, DefaultPath("../ai")] = None,
+        src: Annotated[dagger.Directory, DefaultPath("../ai")],
     ) -> dagger.Container:
         """Build the AI agent image (Python 3.13 + Camoufox browser binary)."""
         src = (
@@ -148,8 +148,8 @@ class CareerCaddy:
         registry_token: Secret,
         org: str = "overcast-software",
         tag: str = "latest",
-        api_src: Annotated[dagger.Directory, DefaultPath("../api")] = None,
-        frontend_src: Annotated[dagger.Directory, DefaultPath("../frontend")] = None,
+        api_src: Annotated[dagger.Directory, DefaultPath("../api")],
+        frontend_src: Annotated[dagger.Directory, DefaultPath("../frontend")],
     ) -> list[str]:
         """Build all images and push to GHCR. Returns list of pushed image refs.
 
@@ -185,7 +185,7 @@ class CareerCaddy:
         app_dir: str = "/home/oldbones/Projects/career_caddy",
         tag: str = "latest",
         ssh_user: str = "deploy",
-        compose_file: Annotated[dagger.File, DefaultPath("../docker-compose.prod.yml")] = None,
+        compose_file: Annotated[dagger.File, DefaultPath("../docker-compose.prod.yml")],
     ) -> str:
         """Deploy to VPS: copy docker-compose.prod.yml, pull images, restart services.
 
