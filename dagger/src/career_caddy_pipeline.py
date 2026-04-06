@@ -82,7 +82,7 @@ class CareerCaddy:
             .with_env_variable("SECRET_KEY", "ci-test-secret-not-for-production")
             .with_env_variable("DEBUG", "True")
             .with_exec(["uv", "run", "ruff", "check", "."])
-            .with_exec(["uv", "run", "bandit", "-r", ".", "-x", "*/migrations/*", "-ll"])
+            .with_exec(["uv", "run", "bandit", "-r", ".", "-x", "*/migrations/*,./.venv/*", "-ll"])
             .with_exec(["uv", "run", "python", "manage.py", "test", "-v", "2"])
         )
 
