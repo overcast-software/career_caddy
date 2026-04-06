@@ -28,7 +28,7 @@ jobs:
             --registry-token=env:GITHUB_TOKEN \
             --org=overcast-software \
             --tag=${{ github.sha }} \
-            --registry-username=${{ github.actor }}
+            --registry-username=${{ github.repository_owner }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
