@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Dagger CLI
-        run: curl -fsSL https://dl.dagger.io/dagger/install.sh | BIN_DIR=/usr/local/bin sh
+        run: curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=v0.20.3 BIN_DIR=/usr/local/bin sh
 
       - name: Build and test API
         run: dagger -m ./dagger call build-api
