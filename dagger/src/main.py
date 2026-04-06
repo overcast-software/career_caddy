@@ -162,29 +162,15 @@ class CareerCaddy:
         )
 
         pushed_api = await (
-            dag.container()
-            .from_("python:3.11-slim")
-            .with_exec(
-                ["sh", "-c",
-                 "apt-get update && apt-get install -y --no-install-recommends "
-                 "build-essential libpq-dev curl && rm -rf /var/lib/apt/lists/*"]
-            )
-            .with_exec(["pip", "install", "uv"])
-            .with_directory("/app", api_src)
-            .with_workdir("/app")
-            .with_exec(["uv", "sync", "--frozen", "--no-dev"])
-            .with_exposed_port(8000)
+            api_src
+            .docker_build()
             .with_registry_auth(REGISTRY, org, registry_token)
             .publish(api_ref)
         )
 
         pushed_frontend = await (
-            dag.container()
-            .from_("node:20-slim")
-            .with_directory("/app", frontend_src)
-            .with_workdir("/app")
-            .with_exec(["npm", "ci"])
-            .with_exec(["npm", "run", "build"])
+            frontend_src
+            .docker_build()
             .with_registry_auth(REGISTRY, org, registry_token)
             .publish(frontend_ref)
         )
@@ -196,7 +182,7 @@ class CareerCaddy:
         self,
         ssh_key: Secret,
         host: str,
-        app_dir: str = "/opt/career-caddy",
+        app_dir: str = "/home/oldbones/Projects/career_caddy",
         tag: str = "latest",
         ssh_user: str = "deploy",
     ) -> str:
@@ -241,7 +227,7 @@ class CareerCaddy:
                     "/root/.ssh/id_rsa",
                     f"{ssh_user}@{host}",
                     f"cd {app_dir} && "
-                    f"echo IMAGE_TAG={tag} >> .env && "
+                    f"sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG={tag}/' .env || echo 'IMAGE_TAG={tag}' >> .env && "
                     f"docker compose -f docker-compose.prod.yml pull && "
                     f"docker compose -f docker-compose.prod.yml up -d --remove-orphans && "
                     f"docker image prune -f",
