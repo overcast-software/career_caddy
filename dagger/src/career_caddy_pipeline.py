@@ -233,11 +233,13 @@ class CareerCaddy:
                 [
                     "ssh",
                     "-i", "/root/.ssh/id_rsa",
+                    "-o", "StrictHostKeyChecking=no",
                     f"{ssh_user}@{host}",
-                    f"cd {app_dir} && "
-                    f"sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG={tag}/' .env || echo 'IMAGE_TAG={tag}' >> .env && "
-                    f"docker compose -f docker-compose.prod.yml pull && "
-                    f"docker compose -f docker-compose.prod.yml up -d --remove-orphans && "
+                    f"set -ex; "
+                    f"cd {app_dir}; "
+                    f"grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG={tag}/' .env || echo 'IMAGE_TAG={tag}' >> .env; "
+                    f"docker compose -f docker-compose.prod.yml pull; "
+                    f"docker compose -f docker-compose.prod.yml up -d --remove-orphans; "
                     f"docker image prune -f",
                 ]
             )
