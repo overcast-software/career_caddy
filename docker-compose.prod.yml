@@ -30,6 +30,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    mem_limit: 512m
 
   api:
     image: ghcr.io/overcast-software/career_caddy_api:${IMAGE_TAG:-latest}
@@ -49,6 +50,7 @@ services:
       BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN:-}
       GUNICORN_HOST: "0.0.0.0"
       GUNICORN_PORT: "8000"
+      GUNICORN_WORKERS: "3"
       SA_SCHEMA_ON_POST_MIGRATE: "True"
     depends_on:
       db:
@@ -59,6 +61,7 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 3
+    mem_limit: 512m
 
   frontend:
     image: ghcr.io/overcast-software/career-caddy-frontend:${IMAGE_TAG:-latest}
@@ -67,6 +70,7 @@ services:
       - "127.0.0.1:8087:80"
     depends_on:
       - api
+    mem_limit: 64m
 
 volumes:
   postgres_data:
