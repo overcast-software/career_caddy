@@ -1,0 +1,41 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish-and-deploy:
+    name: Publish images and deploy to VPS
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Dagger CLI
+        run: curl -fsSL https://dl.dagger.io/dagger/install.sh | BIN_DIR=/usr/local/bin sh
+
+      - name: Publish images to GHCR
+        run: |
+          dagger -m ./dagger call publish \
+            --registry-token=env:GITHUB_TOKEN \
+            --org=overcast-software \
+            --tag=${{ github.sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy to VPS
+        run: |
+          dagger -m ./dagger call deploy \
+            --ssh-key=env:DEPLOY_SSH_KEY \
+            --host=${{ secrets.DEPLOY_SSH_HOST }} \
+            --app-dir=${{ secrets.DEPLOY_APP_DIR }} \
+            --tag=${{ github.sha }} \
+            --ssh-user=${{ secrets.DEPLOY_SSH_USER }}
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}

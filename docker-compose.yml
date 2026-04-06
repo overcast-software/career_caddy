@@ -1,0 +1,132 @@
+---
+# Unified local development environment
+#
+# Profiles:
+#   (default)               Core stack: db + api + frontend + browser-mcp
+#   --profile mcp-gateway   + MCP gateway aggregator (3002) — caddy + email + browser on one endpoint
+#
+# Usage:
+#   docker compose up                          # core stack (includes browser-mcp)
+#   docker compose --profile mcp-gateway up   # core + full MCP gateway
+#
+# The caddy-pipeline (job_email_to_caddy.py) spawns browser_server.py as a
+# subprocess via stdio — it does NOT require browser-mcp to be running.
+# browser-mcp is only needed when an external client (e.g. Claude Desktop)
+# wants to connect to the browser via SSE.
+#
+# Copy .env.example to .env and fill in values before first run.
+
+services:
+
+  # ── Core ─────────────────────────────────────────────────────────────────
+
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: ${DB_NAME:-job_hunting}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql   # postgres 18+: mount the parent dir, not /data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./api
+    # Override production entrypoint to use Django dev server with hot reload
+    entrypoint: ""
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py initsa &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./api:/app
+      # Preserve the container's uv venv — the bind mount above would shadow it otherwise
+      - api_venv:/app/.venv
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-job_hunting}
+      DEBUG: "True"
+      SA_SCHEMA_ON_POST_MIGRATE: "True"
+      # Fallback for local dev — always set a real value in .env
+      SECRET_KEY: ${SECRET_KEY:-dev-only-insecure-do-not-use-in-production}
+      ALLOWED_HOSTS: "localhost,127.0.0.1,api"
+      USE_MCP_BROWSER_AGENT: "True"
+      BROWSER_MCP_SSE_URL: "http://browser-mcp:3004/sse"
+    depends_on:
+      db:
+        condition: service_healthy
+      browser-mcp:
+        condition: service_started
+
+  frontend:
+    image: node:20-slim
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    # Build Tailwind once then start Ember dev server; proxy API calls to the api service
+    command: >
+      sh -c "npm ci &&
+             npm run tailwind:build &&
+             npx ember serve --proxy http://api:8000"
+    ports:
+      - "4200:4200"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+    depends_on:
+      - api
+
+  # ── Browser MCP Server ───────────────────────────────────────────────────
+  # Exposes browser automation via SSE for Claude Desktop and browser_agent.py.
+  # Included in the default stack — browser scraping is a core feature.
+  # Not required for caddy-pipeline — the pipeline uses browser_server.py via stdio.
+
+  browser-mcp:
+    build:
+      context: ./ai
+    working_dir: /app
+    command: uv run python mcp_servers/browser_server.py
+    ports:
+      - "3004:3004"
+    env_file: .env
+    environment:
+      FASTMCP_HOST: "0.0.0.0"
+      FASTMCP_PORT: "3004"
+      CAMOUFOX_DATA_DIR: /opt/camoufox
+    volumes:
+      - ./ai/secrets.yml:/app/secrets.yml:ro
+
+  # ── MCP Gateway (--profile mcp-gateway) ──────────────────────────────────
+  # Aggregates email + caddy + browser tools under namespaced prefixes on port 3002.
+  # Use when connecting Claude Desktop or any MCP client that needs all tools on
+  # one endpoint (email_*, caddy_*, browser_*).
+
+  caddy-mcp:
+    profiles: [mcp-gateway]
+    build:
+      context: ./ai
+    working_dir: /app
+    command: uv run caddy-gateway
+    ports:
+      - "3002:3002"
+    env_file: .env
+    environment:
+      FASTMCP_HOST: "0.0.0.0"
+      FASTMCP_PORT: "3002"
+    volumes:
+      - ${NOTMUCH_MAILDIR:-/dev/null}:/mail:ro
+      - ./ai/secrets.yml:/app/secrets.yml:ro
+
+volumes:
+  postgres_data:
+  frontend_node_modules:
+  api_venv:

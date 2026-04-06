@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: ['feature/**', 'develop']
+  pull_request:
+    branches: [develop, main]
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Build and test (API + Frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Dagger CLI
+        run: curl -fsSL https://dl.dagger.io/dagger/install.sh | BIN_DIR=/usr/local/bin sh
+
+      - name: Build and test API
+        run: dagger -m ./dagger call build-api
+
+      - name: Build and test Frontend
+        run: dagger -m ./dagger call build-frontend

@@ -1,0 +1,8 @@
+{
+  "name": "career-caddy",
+  "engineVersion": "v0.18.0",
+  "sdk": {
+    "source": "python"
+  },
+  "source": "src"
+}
