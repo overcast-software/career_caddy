@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.backends.legacy:build"
+
 [project]
 name = "career-caddy-pipeline"
 version = "0.1.0"
@@ -5,6 +9,9 @@ requires-python = ">=3.11"
 dependencies = [
     "dagger-io",
 ]
+
+[tool.setuptools]
+py-modules = ["main"]
 
 [project.entry-points."dagger.mod"]
 main_object = 'main:CareerCaddy'
