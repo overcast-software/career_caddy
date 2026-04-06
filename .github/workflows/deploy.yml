@@ -25,12 +25,12 @@ jobs:
       - name: Publish images to GHCR
         run: |
           dagger -m ./dagger call publish \
-            --registry-token=env:GITHUB_TOKEN \
+            --registry-token=env:GHCR_TOKEN \
             --org=overcast-software \
             --tag=${{ github.sha }} \
             --registry-username=${{ github.actor }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
 
       - name: Deploy to VPS
         run: |
