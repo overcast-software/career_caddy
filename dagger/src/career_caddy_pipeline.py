@@ -146,10 +146,10 @@ class CareerCaddy:
     async def publish(
         self,
         registry_token: Secret,
-        org: str = "overcast-software",
-        tag: str = "latest",
         api_src: Annotated[dagger.Directory, DefaultPath("../api")],
         frontend_src: Annotated[dagger.Directory, DefaultPath("../frontend")],
+        org: str = "overcast-software",
+        tag: str = "latest",
     ) -> list[str]:
         """Build all images and push to GHCR. Returns list of pushed image refs.
 
@@ -182,10 +182,10 @@ class CareerCaddy:
         self,
         ssh_key: Secret,
         host: str,
+        compose_file: Annotated[dagger.File, DefaultPath("../docker-compose.prod.yml")],
         app_dir: str = "/home/oldbones/Projects/career_caddy",
         tag: str = "latest",
         ssh_user: str = "deploy",
-        compose_file: Annotated[dagger.File, DefaultPath("../docker-compose.prod.yml")],
     ) -> str:
         """Deploy to VPS: copy docker-compose.prod.yml, pull images, restart services.
 
