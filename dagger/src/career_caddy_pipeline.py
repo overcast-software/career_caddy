@@ -118,7 +118,7 @@ class CareerCaddy:
             .with_exec(
                 [
                     "sh", "-c",
-                    "python3 -c 'from camoufox.pkgman import get_path; print(get_path())'"
+                    "python3 -c 'from camoufox.pkgman import launch_path; print(launch_path())'"
                     " > /tmp/camoufox_path",
                 ]
             )
