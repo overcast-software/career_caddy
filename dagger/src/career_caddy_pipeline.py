@@ -106,9 +106,10 @@ class CareerCaddy:
                 [
                     "sh", "-c",
                     "apt-get update && apt-get install -y --no-install-recommends "
-                    "python3 python3-pip curl libglib2.0-0 libnss3 libatk1.0-0 "
+                    "python3 python3-pip curl "
+                    "libgtk-3-0 libglib2.0-0 libnss3 libatk1.0-0 "
                     "libgbm1 libasound2 libx11-6 libxcomposite1 libxdamage1 "
-                    "libxrandr2 libxss1 libxtst6 xvfb "
+                    "libxrandr2 libxss1 libxtst6 libdbus-glib-1-2 xvfb "
                     "&& rm -rf /var/lib/apt/lists/*",
                 ]
             )
