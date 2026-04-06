@@ -158,28 +158,31 @@ class CareerCaddy:
         frontend_src: Annotated[dagger.Directory, DefaultPath("../frontend")],
         org: str = "overcast-software",
         tag: str = "latest",
+        registry_username: str = "",
     ) -> list[str]:
         """Build all images and push to GHCR. Returns list of pushed image refs.
 
         Args:
             registry_token: GitHub token with packages:write permission
-            org: GitHub organization / username
+            org: GitHub organization (used in image path)
             tag: Image tag (use git SHA for immutable tags)
+            registry_username: GitHub actor username for GHCR auth (defaults to org)
         """
+        username = registry_username or org
         api_ref = f"{REGISTRY}/{org}/{API_IMAGE}:{tag}"
         frontend_ref = f"{REGISTRY}/{org}/{FRONTEND_IMAGE}:{tag}"
 
         pushed_api = await (
             api_src
             .docker_build()
-            .with_registry_auth(REGISTRY, org, registry_token)
+            .with_registry_auth(REGISTRY, username, registry_token)
             .publish(api_ref)
         )
 
         pushed_frontend = await (
             frontend_src
             .docker_build()
-            .with_registry_auth(REGISTRY, org, registry_token)
+            .with_registry_auth(REGISTRY, username, registry_token)
             .publish(frontend_ref)
         )
 

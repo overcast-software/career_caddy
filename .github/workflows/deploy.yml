@@ -27,7 +27,8 @@ jobs:
           dagger -m ./dagger call publish \
             --registry-token=env:GITHUB_TOKEN \
             --org=overcast-software \
-            --tag=${{ github.sha }}
+            --tag=${{ github.sha }} \
+            --registry-username=${{ github.actor }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
