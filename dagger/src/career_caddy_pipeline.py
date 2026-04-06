@@ -102,11 +102,39 @@ class CareerCaddy:
         return (
             dag.container()
             .from_("node:20-slim")
+            .with_exec(
+                [
+                    "sh", "-c",
+                    "apt-get update && apt-get install -y --no-install-recommends "
+                    "python3 python3-pip curl libglib2.0-0 libnss3 libatk1.0-0 "
+                    "libgbm1 libasound2 libx11-6 libxcomposite1 libxdamage1 "
+                    "libxrandr2 libxss1 libxtst6 xvfb "
+                    "&& rm -rf /var/lib/apt/lists/*",
+                ]
+            )
+            .with_exec(["pip3", "install", "--break-system-packages", "-q", "camoufox"])
+            .with_env_variable("CAMOUFOX_DATA_DIR", "/opt/camoufox")
+            .with_exec(["python3", "-m", "camoufox", "fetch"])
+            .with_exec(
+                [
+                    "sh", "-c",
+                    "echo FIREFOX_BIN=$(python3 -c "
+                    "\"import camoufox; print(camoufox.get_path())\""
+                    ") >> /etc/environment && "
+                    "python3 -c \"import camoufox; print(camoufox.get_path())\" > /tmp/camoufox_path",
+                ]
+            )
             .with_directory("/app", src)
             .with_workdir("/app")
+            .with_env_variable("CI", "true")
             .with_exec(["npm", "ci"])
             .with_exec(["npm", "run", "lint"])
-            .with_exec(["npm", "run", "test:ember"])
+            .with_exec(
+                [
+                    "sh", "-c",
+                    "export FIREFOX_BIN=$(cat /tmp/camoufox_path) && npm run test:ember",
+                ]
+            )
         )
 
     @function
