@@ -58,7 +58,7 @@ class CareerCaddy:
             .with_env_variable("POSTGRES_USER", "postgres")
             .with_env_variable("POSTGRES_PASSWORD", "postgres")
             .with_exposed_port(5432)
-            .as_service(name="db")
+            .as_service()
         )
 
         return (
