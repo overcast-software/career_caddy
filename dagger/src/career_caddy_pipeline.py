@@ -118,8 +118,9 @@ class CareerCaddy:
             .with_exec(
                 [
                     "sh", "-c",
-                    "python3 -c 'from camoufox.pkgman import launch_path; print(launch_path())'"
-                    " > /tmp/camoufox_path",
+                    "ln -sf "
+                    "$(python3 -c 'from camoufox.pkgman import launch_path; print(launch_path())')"
+                    " /usr/local/bin/firefox",
                 ]
             )
             .with_directory("/app", src)
@@ -127,12 +128,7 @@ class CareerCaddy:
             .with_env_variable("CI", "true")
             .with_exec(["npm", "ci"])
             .with_exec(["npm", "run", "lint"])
-            .with_exec(
-                [
-                    "sh", "-c",
-                    "export FIREFOX_BIN=$(cat /tmp/camoufox_path) && npm run test:ember",
-                ]
-            )
+            .with_exec(["npm", "run", "test:ember"])
         )
 
     @function
