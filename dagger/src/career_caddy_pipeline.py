@@ -9,15 +9,21 @@ Usage (from repo root):
   dagger -m ./dagger call build-frontend
   dagger -m ./dagger call build-ai
   dagger -m ./dagger call publish --registry-token=env:GITHUB_TOKEN --org=overcast-software --tag=latest
-  dagger -m ./dagger call deploy --ssh-key=file:~/.ssh/id_ed25519 --host=your-vps-ip --app-dir=/opt/career-caddy --tag=latest
+  dagger -m ./dagger call deploy --ssh-key=file:~/.ssh/id_ed25519 --host=your-vps-ip --app-dir=/home/oldbones/Projects/career_caddy --tag=latest
 
 In GitHub Actions, call via: dagger -m ./dagger call publish ...
+
+NOTE: Directory parameters use DefaultPath relative to the dagger/ module root.
+      Defaults: ../api → api/, ../frontend → frontend/, ../ai → ai/
+      Override: --src=./path/to/dir (or --api-src=, --frontend-src=, etc.)
 """
 
 from __future__ import annotations
 
+from typing import Annotated
+
 import dagger
-from dagger import dag, function, object_type, Secret
+from dagger import DefaultPath, dag, function, object_type, Secret
 
 
 REGISTRY = "ghcr.io"
@@ -29,15 +35,20 @@ FRONTEND_IMAGE = "career-caddy-frontend"
 class CareerCaddy:
 
     @function
-    async def build_api(self) -> dagger.Container:
+    async def build_api(
+        self,
+        src: Annotated[dagger.Directory, DefaultPath("../api")] = None,
+    ) -> dagger.Container:
         """Build the Django API image and run linting + tests.
 
         Runs: ruff check, bandit security scan, Django test suite.
         Requires a PostgreSQL service (started automatically as a sidecar).
         """
-        src = dag.host().directory(
-            "./api",
-            exclude=[".venv", "__pycache__", "*.pyc", ".git", "staticfiles"],
+        src = (
+            src
+            .without_directory(".venv")
+            .without_directory("staticfiles")
+            .without_directory(".git")
         )
 
         pg = (
@@ -68,27 +79,24 @@ class CareerCaddy:
             .with_env_variable(
                 "DATABASE_URL", "postgresql://postgres:postgres@db:5432/job_hunting_ci"
             )
-            .with_env_variable(
-                "SECRET_KEY", "ci-test-secret-not-for-production"
-            )
+            .with_env_variable("SECRET_KEY", "ci-test-secret-not-for-production")
             .with_env_variable("DEBUG", "True")
-            # Lint
             .with_exec(["uv", "run", "ruff", "check", "."])
-            .with_exec(
-                ["uv", "run", "bandit", "-r", ".", "-x", "*/migrations/*", "-ll"]
-            )
-            # Tests (hit real DB, matching api/CLAUDE.md guidance)
-            .with_exec(
-                ["uv", "run", "python", "manage.py", "test", "-v", "2"]
-            )
+            .with_exec(["uv", "run", "bandit", "-r", ".", "-x", "*/migrations/*", "-ll"])
+            .with_exec(["uv", "run", "python", "manage.py", "test", "-v", "2"])
         )
 
     @function
-    async def build_frontend(self) -> dagger.Container:
+    async def build_frontend(
+        self,
+        src: Annotated[dagger.Directory, DefaultPath("../frontend")] = None,
+    ) -> dagger.Container:
         """Build the Ember.js frontend image and run lint + tests."""
-        src = dag.host().directory(
-            "./frontend",
-            exclude=["node_modules", "dist", ".pnpm-store", ".git"],
+        src = (
+            src
+            .without_directory("node_modules")
+            .without_directory("dist")
+            .without_directory(".git")
         )
 
         return (
@@ -102,18 +110,17 @@ class CareerCaddy:
         )
 
     @function
-    async def build_ai(self) -> dagger.Container:
+    async def build_ai(
+        self,
+        src: Annotated[dagger.Directory, DefaultPath("../ai")] = None,
+    ) -> dagger.Container:
         """Build the AI agent image (Python 3.13 + Camoufox browser binary)."""
-        src = dag.host().directory(
-            "./ai",
-            exclude=[
-                ".venv",
-                "__pycache__",
-                "*.pyc",
-                ".git",
-                "screenshots",
-                "secrets.yml",
-            ],
+        src = (
+            src
+            .without_directory(".venv")
+            .without_directory("screenshots")
+            .without_file("secrets.yml")
+            .without_directory(".git")
         )
 
         return (
@@ -141,6 +148,8 @@ class CareerCaddy:
         registry_token: Secret,
         org: str = "overcast-software",
         tag: str = "latest",
+        api_src: Annotated[dagger.Directory, DefaultPath("../api")] = None,
+        frontend_src: Annotated[dagger.Directory, DefaultPath("../frontend")] = None,
     ) -> list[str]:
         """Build all images and push to GHCR. Returns list of pushed image refs.
 
@@ -151,15 +160,6 @@ class CareerCaddy:
         """
         api_ref = f"{REGISTRY}/{org}/{API_IMAGE}:{tag}"
         frontend_ref = f"{REGISTRY}/{org}/{FRONTEND_IMAGE}:{tag}"
-
-        api_src = dag.host().directory(
-            "./api",
-            exclude=[".venv", "__pycache__", "*.pyc", ".git", "staticfiles"],
-        )
-        frontend_src = dag.host().directory(
-            "./frontend",
-            exclude=["node_modules", "dist", ".pnpm-store", ".git"],
-        )
 
         pushed_api = await (
             api_src
@@ -185,6 +185,7 @@ class CareerCaddy:
         app_dir: str = "/home/oldbones/Projects/career_caddy",
         tag: str = "latest",
         ssh_user: str = "deploy",
+        compose_file: Annotated[dagger.File, DefaultPath("../docker-compose.prod.yml")] = None,
     ) -> str:
         """Deploy to VPS: copy docker-compose.prod.yml, pull images, restart services.
 
@@ -195,8 +196,6 @@ class CareerCaddy:
             tag: Image tag to deploy
             ssh_user: SSH user on the server
         """
-        compose_file = dag.host().file("./docker-compose.prod.yml")
-
         return await (
             dag.container()
             .from_("alpine:3.19")
@@ -214,8 +213,7 @@ class CareerCaddy:
             .with_exec(
                 [
                     "scp",
-                    "-i",
-                    "/root/.ssh/id_rsa",
+                    "-i", "/root/.ssh/id_rsa",
                     "/workspace/docker-compose.prod.yml",
                     f"{ssh_user}@{host}:{app_dir}/docker-compose.prod.yml",
                 ]
@@ -223,8 +221,7 @@ class CareerCaddy:
             .with_exec(
                 [
                     "ssh",
-                    "-i",
-                    "/root/.ssh/id_rsa",
+                    "-i", "/root/.ssh/id_rsa",
                     f"{ssh_user}@{host}",
                     f"cd {app_dir} && "
                     f"sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG={tag}/' .env || echo 'IMAGE_TAG={tag}' >> .env && "
