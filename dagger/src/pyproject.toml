@@ -7,4 +7,4 @@ dependencies = [
 ]
 
 [project.entry-points."dagger.mod"]
-main_object = 'career_caddy_pipeline:CareerCaddy'
+main_object = 'main:CareerCaddy'
