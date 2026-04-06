@@ -118,10 +118,8 @@ class CareerCaddy:
             .with_exec(
                 [
                     "sh", "-c",
-                    "echo FIREFOX_BIN=$(python3 -c "
-                    "\"import camoufox; print(camoufox.get_path())\""
-                    ") >> /etc/environment && "
-                    "python3 -c \"import camoufox; print(camoufox.get_path())\" > /tmp/camoufox_path",
+                    "python3 -c 'from camoufox.pkgman import get_path; print(get_path())'"
+                    " > /tmp/camoufox_path",
                 ]
             )
             .with_directory("/app", src)
