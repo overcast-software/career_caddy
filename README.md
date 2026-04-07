@@ -2,6 +2,51 @@
 
 A personal job hunt dashboard. Track applications, store job postings, manage your resume, and generate AI-assisted cover letters and application answers.
 
+## What Is This?
+
+Career Caddy is an AI-assisted, self-hosted job search tracker. The core problem it solves:
+job hunting is fragmented across dozens of websites with no central place for your activity,
+applications, or documents.
+
+The app is built around one philosophy: **Career Data is the center of everything.** Career
+Data is a markdown document you write once and refine over time — your professional background,
+skills, writing voice, and goals. Every AI feature (scoring, cover letters, summaries, answer
+drafting) uses Career Data as its foundational prompt context. Better Career Data means better
+AI output across the board.
+
+See the in-app documentation at `/docs` for the intended user workflow and explanation of
+every resource.
+
+## Architecture Overview
+
+Three independently deployable components:
+
+| Component | Stack | Role |
+|-----------|-------|------|
+| `frontend/` | Ember.js 6.x SPA | User interface, JSON:API client |
+| `api/` | Django REST Framework | Data layer, AI orchestration endpoints |
+| `ai/` | Pydantic-AI + MCP servers | Browser automation, email pipeline, agents |
+
+**Why Ember.js?** The app has complex nested routes (job post → application → question →
+answer) and many inter-resource relationships. Ember's conventions for nested routing, the
+Ember Data store, and the JSON:API adapter handle this complexity cleanly.
+
+**Why Django + SQLAlchemy?** Django handles authentication, migrations, and admin.
+SQLAlchemy handles the 30+ domain models, which benefit from its richer query expressiveness.
+
+**Why a separate AI layer?** The pipeline needs browser automation (Camoufox) and local
+email access (notmuch) — host-only capabilities that don't belong in a container. Running
+them as MCP servers makes them composable with any MCP client (Claude Desktop, etc.).
+
+## The Data Model at a Glance
+
+- **Career Data** — singleton per user, markdown blob, read on every AI call
+- **Job Post** — root resource; Scores, Cover Letters, Summaries, Scrapes, and Applications all link to it
+- **Scrape** — raw HTML capture of a job page; **Job Post** is the structured extraction from a scrape
+- **Score** — AI fit assessment (0–100); run before writing a cover letter to prioritize your time
+- **Questions / Answers** — exist at both application level and globally (companies reuse questions; you can reuse answers)
+- **Favorite flag** — on Cover Letters and Answers, feeds those outputs back into Career Data to improve future AI generations
+
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) with Docker Compose v2

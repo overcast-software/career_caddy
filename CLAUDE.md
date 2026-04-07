@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Three independently deployable components, each with its own `CLAUDE.md`:
 
 - `frontend/` — Ember.js 6.x SPA (see `frontend/CLAUDE.md`)
-- `api/` — Django REST Framework backend (see `api/CLAUDE.md`)
+- `api/` — Django REST Framework backend (see `api/CLAUDE.md` — not yet created)
 - `ai/` — Pydantic-AI agents + MCP servers (see `ai/CLAUDE.md`)
 
 ## Getting Started (Full Local Dev)
@@ -110,6 +110,11 @@ The **AI layer** runs locally. Agents chain MCP servers as tool providers. The m
 - AI agents → API: API key (`Authorization: Api-Key <key>`, managed via `/api/v1/api-keys/`)
 
 **Bootstrap detection**: Frontend GETs `/api/v1/healthcheck/` on every route. Response includes `bootstrap_open: true` when no users exist → routes to `/setup`. After initialization, `bootstrap_open` is always `false`.
+
+**Public frontend routes** (no auth required — skip the guard in `frontend/app/routes/application.js`):
+`setup`, `login`, `about` (redirects to `/docs`), `docs.*`
+
+To add a new public route, expand the `isPublic` check in `frontend/app/routes/application.js:18`.
 
 **Key non-CRUD endpoints**:
 - `GET  /api/v1/healthcheck/` — health + bootstrap state
