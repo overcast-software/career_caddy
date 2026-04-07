@@ -122,7 +122,12 @@ class CareerCaddy:
         self,
         src: Annotated[dagger.Directory, DefaultPath("../ai")],
     ) -> dagger.Container:
-        """Build the AI agent image (Python 3.13 + Camoufox browser binary)."""
+        """Build the slim AI agent image (Python 3.13, no Camoufox — production image).
+
+        Camoufox (~700 MB) is excluded from the production image. The browser-mcp
+        service is only for local dev and is built separately via docker compose
+        with INSTALL_CAMOUFOX=true.
+        """
         src = (
             src
             .without_directory(".venv")
@@ -138,16 +143,13 @@ class CareerCaddy:
                 [
                     "sh", "-c",
                     "apt-get update && apt-get install -y --no-install-recommends "
-                    "build-essential curl libglib2.0-0 libnss3 libatk1.0-0 "
-                    "libgbm1 libasound2 && rm -rf /var/lib/apt/lists/*",
+                    "build-essential curl && rm -rf /var/lib/apt/lists/*",
                 ]
             )
             .with_exec(["pip", "install", "uv"])
             .with_directory("/app", src)
             .with_workdir("/app")
             .with_exec(["uv", "sync", "--frozen", "--no-dev"])
-            .with_env_variable("CAMOUFOX_DATA_DIR", "/opt/camoufox")
-            .with_exec(["uv", "run", "python", "-m", "camoufox", "fetch"])
         )
 
     @function

@@ -2,17 +2,17 @@
 
 # ── Dev stack ──────────────────────────────────────────────────────────────
 
-up: ## Start core stack (db + api + frontend + browser-mcp)
+up: ## Start core stack (db + api + frontend)
 	docker compose down --remove-orphans 2>/dev/null || true
 	docker compose up
 
-up-ai: ## Alias for up (browser-mcp is now part of the default stack)
+up-ai: ## Start core stack + browser-mcp service (requires INSTALL_CAMOUFOX=true)
 	docker compose down --remove-orphans 2>/dev/null || true
-	docker compose up
+	docker compose --profile browser up
 
 up-mcp-gateway: ## Start core + browser MCP + full MCP gateway aggregator (port 3002)
 	docker compose down --remove-orphans 2>/dev/null || true
-	docker compose --profile ai --profile mcp-gateway up
+	docker compose --profile browser --profile mcp-gateway up
 
 down: ## Stop all services and remove orphan containers
 	docker compose down --remove-orphans
@@ -51,7 +51,7 @@ ci: ## Run API + frontend CI checks locally via Dagger (lint, tests, no secrets 
 	dagger -m ./dagger call build-api
 	dagger -m ./dagger call build-frontend
 
-ci-ai: ## Build the AI Docker image via Dagger (~5 min first run, downloads camoufox)
+ci-ai: ## Build the slim AI Docker image via Dagger (no camoufox — production image)
 	dagger -m ./dagger call build-ai
 
 # ── AI Pipeline ────────────────────────────────────────────────────────────
