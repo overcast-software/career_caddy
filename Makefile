@@ -36,6 +36,9 @@ shell-db: ## Open a psql shell in the running db container
 migrate: ## Run Django migrations
 	docker compose exec api python manage.py migrate
 
+demo-data: ## Seed guest user (Danny Noonan) and demo data — run after migrate
+	docker compose exec api python manage.py seed_guest
+
 # ── Tests ──────────────────────────────────────────────────────────────────
 
 test-api: ## Run Django test suite (requires running db service)
