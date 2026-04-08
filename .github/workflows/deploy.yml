@@ -47,7 +47,7 @@ jobs:
             --registry-token=env:GHCR_TOKEN \
             --org=overcast-software \
             --tag=${{ github.sha }} \
-            --registry-username=${{ github.repository_owner }}
+            --registry-username=${{ github.actor }}
         env:
           GHCR_TOKEN: ${{ github.token }}
 
