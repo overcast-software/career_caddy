@@ -214,7 +214,7 @@ class CareerCaddy:
             .from_("alpine:3.19")
             .with_exec(["apk", "add", "--no-cache", "openssh-client", "docker-cli"])
             .with_mounted_secret("/run/secrets/ssh_key", ssh_key)
-            .with_exec(["sh", "-c", "mkdir -p /root/.ssh && chmod 700 /root/.ssh && cp /run/secrets/ssh_key /root/.ssh/id_rsa && chmod 600 /root/.ssh/id_rsa"])
+            .with_exec(["sh", "-c", "mkdir -p /root/.ssh && chmod 700 /root/.ssh && tr -d '\\r' < /run/secrets/ssh_key > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_ed25519"])
             .with_exec(
                 [
                     "sh",
@@ -226,7 +226,7 @@ class CareerCaddy:
             .with_exec(
                 [
                     "scp",
-                    "-i", "/root/.ssh/id_rsa",
+                    "-i", "/root/.ssh/id_ed25519",
                     "/workspace/docker-compose.prod.yml",
                     f"{ssh_user}@{host}:{app_dir}/docker-compose.prod.yml",
                 ]
@@ -234,7 +234,7 @@ class CareerCaddy:
             .with_exec(
                 [
                     "ssh",
-                    "-i", "/root/.ssh/id_rsa",
+                    "-i", "/root/.ssh/id_ed25519",
                     "-o", "StrictHostKeyChecking=no",
                     f"{ssh_user}@{host}",
                     f"set -ex; "
