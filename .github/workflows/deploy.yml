@@ -49,7 +49,7 @@ jobs:
             --tag=${{ github.sha }} \
             --registry-username=${{ github.repository_owner }}
         env:
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_TOKEN: ${{ github.token }}
 
       - name: Deploy to VPS
         run: |
