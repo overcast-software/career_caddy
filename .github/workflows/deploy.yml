@@ -9,11 +9,30 @@ permissions:
   packages: write
 
 jobs:
+  ci:
+    name: Build and test (API + Frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Dagger CLI
+        run: curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=v0.20.3 BIN_DIR=/usr/local/bin sh
+
+      - name: Build and test API
+        run: dagger -m ./dagger call build-api
+
+      - name: Build and test Frontend
+        run: dagger -m ./dagger call build-frontend
+
   publish-and-deploy:
     name: Publish images and deploy to VPS
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
+    needs: ci
     steps:
       - uses: actions/checkout@v4
         with:
