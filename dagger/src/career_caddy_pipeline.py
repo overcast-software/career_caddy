@@ -213,8 +213,9 @@ class CareerCaddy:
             dag.container()
             .from_("alpine:3.19")
             .with_exec(["apk", "add", "--no-cache", "openssh-client", "docker-cli"])
-            .with_mounted_secret("/root/.ssh/id_rsa.b64", ssh_key)
-            .with_exec(["sh", "-c", "mkdir -p /root/.ssh && base64 -d /root/.ssh/id_rsa.b64 > /root/.ssh/id_rsa && chmod 600 /root/.ssh/id_rsa"])
+            .with_exec(["sh", "-c", "mkdir -p /root/.ssh && chmod 700 /root/.ssh"])
+            .with_mounted_secret("/root/.ssh/id_rsa", ssh_key)
+            .with_exec(["chmod", "600", "/root/.ssh/id_rsa"])
             .with_exec(
                 [
                     "sh",
