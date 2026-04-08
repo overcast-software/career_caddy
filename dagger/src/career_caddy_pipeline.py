@@ -106,7 +106,7 @@ class CareerCaddy:
                 [
                     "sh", "-c",
                     "apt-get update && apt-get install -y --no-install-recommends "
-                    "chromium && rm -rf /var/lib/apt/lists/*",
+                    "firefox-esr && rm -rf /var/lib/apt/lists/*",
                 ]
             )
             .with_directory("/app", src)
