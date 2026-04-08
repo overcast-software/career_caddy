@@ -9,20 +9,40 @@ make shell-api
 make shell-db
 make migrate
 
+# ── Lint (local, no Docker needed) ────────────────────────────────────────
+cd api && uv run ruff check .
+cd frontend && npm run lint
+
 # ── CI via Dagger (no secrets needed) ─────────────────────────────────────
-dagger -m ./dagger call build-api
-dagger -m ./dagger call build-frontend
-dagger -m ./dagger call build-ai
+dagger -m /home/oldbones/Network/syncthing/Projects/career_caddy/dagger call build-api
+dagger -m /home/oldbones/Network/syncthing/Projects/career_caddy/dagger call build-frontend
+dagger -m /home/oldbones/Network/syncthing/Projects/career_caddy/dagger call build-ai
 
 # ── Publish images to GHCR ────────────────────────────────────────────────
-dagger -m ./dagger call publish --registry-token=env:GITHUB_TOKEN --org=overcast-software --tag=latest
+dagger -m /home/oldbones/Network/syncthing/Projects/career_caddy/dagger call publish --registry-token=env:GITHUB_TOKEN --org=overcast-software --tag=latest
 
 # ── Deploy to VPS ─────────────────────────────────────────────────────────
-dagger -m ./dagger call deploy --ssh-key=file:~/.ssh/id_ed25519 --host=192.3.252.74 --ssh-user=oldbones --app-dir=/home/oldbones/Projects/career_caddy --tag=latest
+dagger -m /home/oldbones/Network/syncthing/Projects/career_caddy/dagger call deploy --ssh-key=file:/home/oldbones/.ssh/id_ed25519 --host=192.3.252.74 --ssh-user=oldbones --app-dir=/home/oldbones/Projects/career_caddy --tag=latest
 
 # ── AI pipeline ────────────────────────────────────────────────────────────
 make pipeline
 make pipeline-url URL=https://
+
+# ── GitHub CLI (gh) ────────────────────────────────────────────────────────
+# List recent workflow runs (pass/fail status)
+gh run list --limit 10
+
+# Watch a live run (Ctrl+C to stop)
+gh run watch
+
+# Show logs for failed steps only
+gh run view --log-failed
+
+# Re-run only the failed jobs from the last run
+gh run rerun --failed $(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
+
+# Open the latest run in browser
+gh run view --web
 
 # ── Misc ───────────────────────────────────────────────────────────────────
 make help
