@@ -76,6 +76,11 @@ Then surface to product owner rather than continuing to loop.
 
 * Tasks [0/10]
 
+** DONE Favorite answers bug + career-data dirty tracking [2026-04-10 api+frontend]
+CLOSED: [2026-04-10 Thu]
+#+NOTE: Favorited answers didn't appear in career-data. Fixed: all queries now derive "favorite questions" from favorited answers. question.favorite is read-only (synced on answer save/delete). Career-data model has isDirty tracking — toggling any favorite marks it dirty; career-data route re-fetches on next visit.
+[[file:notes.org::*Favorite answers not appearing in career-data][Analysis → notes.org]]
+
 ** TODO Backups: [0/2]
 [APPROVED 2026-04-09] — xlsx export via API, merge import with skip-duplicates, superuser-only import.
 [[file:notes.org::*Backups (export / import)][Decisions → notes.org]]
@@ -121,12 +126,21 @@ remove all the includes in the route because with multi-tenancy we need to not p
 #+NOTE: Branch = feature/test-coverage (cut from develop). API agent owns this.
 Added test_job_post.py, test_job_application.py, test_resume.py, test_answer.py — CRUD + model + auth tests for four previously uncovered resources. Ongoing; more coverage can be added incrementally.
 
-** TODO MCP exposure. Make a feature branch for surfacing mcp.   :APPROVED:
-[PENDING APPROVAL] — OAuth + security review required.
-[[file:notes.org::*MCP exposure][Considerations → notes.org]]
+** IN_PROGRESS MCP exposure at mcp.careercaddy.online [2026-04-10 ai+api]  :APPROVED:
+[[file:notes.org::*MCP deployment at mcp.careercaddy.online][Architecture → notes.org]]
+*** DONE Create =public_server.py= with API key auth and 21 tools
+*** DONE API: add "hold" status bypass to =ScrapeViewSet.create=
+*** DONE Add =caddy-public= entry point to =pyproject.toml=
+*** DONE Add =mcp= service to =docker-compose.prod.yml=
+*** DONE Upgrade FastMCP to 3.2.3
+*** TODO Frontend: admin-only "hold" radio for scrape creation
+*** DONE CI: build + push AI Docker image to GHCR (=INSTALL_CAMOUFOX=false=)
+*** TODO Configure Caddy reverse proxy + DNS for =mcp.careercaddy.online= [product-owner]
+*** TODO OAuth 2.0 support for in-app chat (Phase 2)
+Add =django-oauth-toolkit= to API; PKCE flow for Ember SPA; FastMCP =MultiAuth=.
+Separate workstream — API key auth covers current use cases.
 *** In app chat with AI is an idea
 *** external tools that can talk to the mcp sound awesome
-*** oauth needs to be part of it
 *** I want the agent to know who the user is. api-keys is one way, but I'd like the a chat app to know
 *** saved browser credentials is a major security vulnerability even for properly exposed MCP.
 

@@ -29,6 +29,7 @@ from dagger import DefaultPath, dag, function, object_type, Secret
 REGISTRY = "ghcr.io"
 API_IMAGE = "career_caddy_api"
 FRONTEND_IMAGE = "career-caddy-frontend"
+AI_IMAGE = "career_caddy_ai"
 
 
 @object_type
@@ -166,6 +167,7 @@ class CareerCaddy:
         registry_token: Secret,
         api_src: Annotated[dagger.Directory, DefaultPath("../api")],
         frontend_src: Annotated[dagger.Directory, DefaultPath("../frontend")],
+        ai_src: Annotated[dagger.Directory, DefaultPath("../ai")],
         org: str = "overcast-software",
         tag: str = "latest",
         registry_username: str = "",
@@ -181,6 +183,7 @@ class CareerCaddy:
         username = registry_username or org
         api_ref = f"{REGISTRY}/{org}/{API_IMAGE}:{tag}"
         frontend_ref = f"{REGISTRY}/{org}/{FRONTEND_IMAGE}:{tag}"
+        ai_ref = f"{REGISTRY}/{org}/{AI_IMAGE}:{tag}"
 
         pushed_api = await (
             api_src
@@ -196,7 +199,15 @@ class CareerCaddy:
             .publish(frontend_ref)
         )
 
-        return [pushed_api, pushed_frontend]
+        # AI image: build without Camoufox for the public MCP server
+        pushed_ai = await (
+            ai_src
+            .docker_build(build_args=[dagger.BuildArg("INSTALL_CAMOUFOX", "false")])
+            .with_registry_auth(REGISTRY, username, registry_token)
+            .publish(ai_ref)
+        )
+
+        return [pushed_api, pushed_frontend, pushed_ai]
 
     @function
     async def deploy(

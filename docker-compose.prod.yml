@@ -75,5 +75,31 @@ services:
       - api
     mem_limit: 64m
 
+  # ── Public MCP Server ────────────────────────────────────────────────────
+  # Exposes career-data tools via MCP protocol at mcp.careercaddy.online.
+  # Auth: clients supply their own jh_* API key — no CC_API_TOKEN needed.
+  # Security: no secrets.yml, no mail volumes, no browser automation.
+
+  mcp:
+    image: ghcr.io/overcast-software/career_caddy_ai:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8030:8000"
+    environment:
+      CC_API_BASE_URL: "http://api:8000"
+      FASTMCP_HOST: "0.0.0.0"
+      FASTMCP_PORT: "8000"
+    command: ["uv", "run", "caddy-public"]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/mcp || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    mem_limit: 256m
+
 volumes:
   postgres_data:

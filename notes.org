@@ -231,28 +231,59 @@ Which email transport / provider?
 *** Waiting on
 Approve the audit (frontend-led). API will run a parallel check for ownership leaks in included relations.
 
-** MCP exposure
+** MCP deployment at mcp.careercaddy.online [2026-04-10]
 [[file:todo.org::*MCP exposure][↑ todo.org]]
-Three distinct sub-problems:
 
-*** Which tools to expose
-- =caddy_*= tools: job CRUD, cover letter generation, scoring — these are the core application operations.
-- =email_*= tools: read/search notmuch email — exposes the host's email; high sensitivity.
-- =browser_*= tools: Camoufox automation — exposes credentials stored in =ai/secrets.yml=; must stay internal.
-- Proposal: expose =caddy_*= only in a first pass; =email_*= and =browser_*= remain internal.
+*** Architecture decision
+Separate =public_server.py= — NOT the existing gateway. The gateway aggregates email + browser + caddy tools for local use. The public server exposes only career-data tools (21 total) behind per-client API key auth.
 
-*** Auth model
-- API-key auth (current) works for agent-to-agent (the AI pipeline).
-- An in-app chat UI where the human is the subject needs OAuth 2.0 so the agent acts on behalf of the logged-in user.
-- OAuth adds significant infrastructure (authorization server, token exchange, PKCE flow).
+#+BEGIN_SRC
+MCP Client → mcp.careercaddy.online (Caddy, TLS) → public_server.py (FastMCP) → Django API → PostgreSQL
+#+END_SRC
 
-*** Security constraint
-Browser credentials in =ai/secrets.yml= must never be reachable via MCP under any configuration.
-This is a hard requirement regardless of what else is approved.
-**** IDEA credentials can be hidden in a method that takes a page object and selectors for user and password.  the method uses it's knowledge of username/password to log in and hand back the page.
+*** Auth: API key pass-through
+- FastMCP's =TokenVerifier= base class validates =jh_*= API keys by calling =GET /api/v1/me/= on the Django API.
+- On success, the raw token is stored in =AccessToken.token= and forwarded on every downstream HTTP call.
+- The Django API resolves user identity from the key — the MCP server never touches the DB.
+- Each tool reads the token via =get_access_token()= from FastMCP's dependency injection.
+- =get_current_user= tool: returns the authenticated user's profile so agents know who they act as.
 
-*** Waiting on
-Approve MCP scope (=caddy_*= read-only vs. write, first pass). Approve OAuth investigation as a separate workstream.
+*** Tools exposed (21)
+14 ported from =career_caddy_server.py=:
+- Companies: create, find_by_name, search, get
+- Job posts: create_with_company_check, find_by_link, search, get, update
+- Applications: create, get, get_for_job_post, update
+- Career data: get
+
+7 new:
+- =get_current_user= — authenticated user profile
+- =create_scrape= — queue URL with =status="hold"= for later processing
+- =get_scrapes=, =update_scrape= — scrape CRUD
+- =score_job_post= — POST score against career data or specific resume (async, returns pending)
+- =get_scores=, =get_scores_for_resume= — check scoring results
+
+*** "hold" status for scrapes
+API change: =ScrapeViewSet.create= accepts =status="hold"= and skips the =SCRAPING_ENABLED= check and browser dispatch. Creates the record and returns 201 immediately. Agents use this to queue URLs for a separate scraping process.
+
+*** Security invariants
+- =public_server.py= does NOT import =email_server=, =browser_server=, =gateway=, or =lib/browser/*=
+- Docker service does NOT mount =secrets.yml= or mail directories
+- No =CC_API_TOKEN= env var on the container — all auth from clients
+- Rate limiting via Caddy's =rate_limit= directive
+
+*** OAuth roadmap (Phase 2 — not yet implemented)
+For in-app chat where the agent acts as the logged-in user:
+1. Add =django-oauth-toolkit= to the API (authorization server)
+2. Implement PKCE flow for the Ember SPA
+3. Use FastMCP's =MultiAuth= to accept both API keys and OAuth tokens
+4. Frontend chat widget initiates PKCE, gets access token, passes to MCP
+Separate workstream. API key auth covers all current use cases.
+
+*** Deployment
+- =docker-compose.prod.yml=: new =mcp= service using AI image, port 8030, depends on API healthcheck
+- Caddy reverse proxy: =mcp.careercaddy.online { reverse_proxy localhost:8030 }=
+- DNS: A record for =mcp.careercaddy.online= → VPS IP
+- CI: build =ai/Dockerfile= with =INSTALL_CAMOUFOX=false= and push to GHCR
 
 ** Security audit — multi-tenancy data isolation
 [[file:todo.org::*Security audit][↑ todo.org]]
@@ -424,6 +455,33 @@ Approve the branch (API agent owns; smaller than originally feared given current
 [[file:todo.org::*Ian Finnis letter][↑ todo.org]]
 Deferred until official alpha phase. Draft is captured in todo.org.
 Move this entry to notes.org when alpha begins and send then.
+
+** Favorite answers not appearing in career-data [2026-04-10]
+[[file:todo.org::*Favorite answers bug][↑ todo.org]]
+
+*** Root cause
+=CareerData.favorite_answers= (=api/job_hunting/lib/models/career_data.py:26-35=) first fetches questions where =question.favorite=True=, then fetches answers for those questions where =answer.favorite=True=. This means an answer only appears in career-data if *both* the question and the answer are favorited.
+
+The frontend UI only exposes favoriting on answers (the star button on the answers index page says "Favorited answers appear in Career Data"). Users never favorite the parent question, so the query always returns an empty list.
+
+*** Fix (implemented [2026-04-10])
+Multi-layer fix across API and frontend:
+
+**** Backend
+- =CareerData.favorite_answers=: query answers directly by =answer.favorite=True= for the user
+- =CareerData.question_applications=: derive from answers with favorited answers, not =question.favorite=
+- =CareerData= endpoint: returns object refs (=resume_ids=, =cover_letter_ids=, =answer_ids=) in =meta=
+- =AnswerService=: all 3 query sites now derive "favorite questions" from favorited answers
+- =QuestionViewSet=: removed =favorite= from create/update whitelists (read-only)
+- =AnswerViewSet=: added update/partial_update; syncs =question.favorite= as denormalized cache after save/delete
+
+**** Frontend
+- =career-data= model: =@tracked isDirty= flag, =markDirty()= method. Default is clean (from API). Dirty is write-only.
+- =career-data/index= route: returns cached record if clean; fetches fresh if dirty or absent. =unloadAll= before re-fetch so the new record starts clean.
+- All 8 favorite toggle sites call =this.store.peekRecord('career-data', '1')?.markDirty()= after save.
+
+**** Design principle
+Nobody directly favorites a question. A question is "favorite" only because it has a favorited answer. The =question.favorite= DB column is kept as a denormalized cache synced by the API on answer save/delete.
 
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
