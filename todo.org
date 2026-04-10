@@ -136,6 +136,9 @@ Added test_job_post.py, test_job_application.py, test_resume.py, test_answer.py 
 *** TODO Frontend: admin-only "hold" radio for scrape creation
 *** DONE CI: build + push AI Docker image to GHCR (=INSTALL_CAMOUFOX=false=)
 *** TODO Configure Caddy reverse proxy + DNS for =mcp.careercaddy.online= [product-owner]
+*** TODO Pydantic-AI toolsets: replace MCPServerStdio with CareerCaddyToolset :APPROVED:
+[[file:notes.org::*Pydantic-AI toolsets][Plan → notes.org]]
+Create =lib/toolsets.py= with scoped =CareerCaddyToolset(AbstractToolset)=. Migrate =career_caddy_agent.py= and =job_email_to_caddy.py= from subprocess-based MCP to in-process toolsets.
 *** TODO OAuth 2.0 support for in-app chat (Phase 2)
 Add =django-oauth-toolkit= to API; PKCE flow for Ember SPA; FastMCP =MultiAuth=.
 Separate workstream — API key auth covers current use cases.

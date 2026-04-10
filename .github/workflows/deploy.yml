@@ -27,6 +27,9 @@ jobs:
       - name: Build and test Frontend
         run: dagger -m ./dagger call build-frontend
 
+      - name: Test AI (toolsets + security)
+        run: dagger -m ./dagger call test-ai
+
   publish-and-deploy:
     name: Publish images and deploy to VPS
     runs-on: ubuntu-latest

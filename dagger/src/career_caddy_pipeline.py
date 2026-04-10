@@ -162,6 +162,41 @@ class CareerCaddy:
         )
 
     @function
+    async def test_ai(
+        self,
+        src: Annotated[dagger.Directory, DefaultPath("../ai")],
+    ) -> dagger.Container:
+        """Run AI test suite (toolsets, api_tools, public_server security)."""
+        src = (
+            src
+            .without_directory(".venv")
+            .without_directory("screenshots")
+            .without_file("secrets.yml")
+            .without_directory(".git")
+        )
+
+        return (
+            dag.container()
+            .from_("python:3.13-slim")
+            .with_exec(
+                [
+                    "sh", "-c",
+                    "apt-get update && apt-get install -y --no-install-recommends "
+                    "build-essential curl && rm -rf /var/lib/apt/lists/*",
+                ]
+            )
+            .with_exec(["pip", "install", "uv"])
+            .with_workdir("/app")
+            .with_file("/app/pyproject.toml", src.file("pyproject.toml"))
+            .with_file("/app/uv.lock", src.file("uv.lock"))
+            .with_exec(["uv", "sync", "--frozen", "--no-install-project"])
+            .with_directory("/app", src)
+            .with_exec(["uv", "sync", "--frozen"])
+            .with_env_variable("LOGFIRE_SEND_TO_LOGFIRE", "false")
+            .with_exec(["uv", "run", "pytest", "tests/", "-v"])
+        )
+
+    @function
     async def publish(
         self,
         registry_token: Secret,

@@ -231,6 +231,89 @@ Which email transport / provider?
 *** Waiting on
 Approve the audit (frontend-led). API will run a parallel check for ownership leaks in included relations.
 
+** Pydantic-AI toolsets — dynamic tool scoping [2026-04-10]
+[[file:todo.org::*MCP exposure][↑ todo.org]]
+
+*** Problem
+All pydantic-ai agents connect to =career_caddy_server.py= via =MCPServerStdio=, spawning a full Python subprocess per agent run. Every agent gets the same 14 tools regardless of what it actually needs. This adds latency, memory overhead, and prevents fine-grained tool scoping.
+
+*** Solution: =CareerCaddyToolset(AbstractToolset)=
+A single custom toolset class with a =scope= parameter that selects which =lib/api_tools.py= functions to expose. No subprocess, no MCP protocol overhead — direct in-process calls.
+
+#+BEGIN_SRC python
+from lib.toolsets import CareerCaddyToolset, CareerCaddyDeps
+
+# Scoped to just what this agent needs
+agent = Agent(
+    "openai:gpt-4o-mini",
+    deps_type=CareerCaddyDeps,
+    toolsets=[CareerCaddyToolset(scope="scoring")],
+)
+result = await agent.run(prompt, deps=CareerCaddyDeps(api_token=token))
+#+END_SRC
+
+*** Deps type
+#+BEGIN_SRC python
+@dataclass
+class CareerCaddyDeps:
+    api_token: str
+    base_url: str = "http://localhost:8000"
+#+END_SRC
+
+The toolset builds an =ApiClient(deps.base_url, deps.api_token)= from =ctx.deps= at call time and passes it to each =api_tools.*= function.
+
+*** Scopes
+| Scope | Tools | Use case |
+|---|---|---|
+| =all= | All 19 functions | Full access |
+| =career_caddy= | Original 14 | Drop-in replacement for current MCPServerStdio |
+| =job_discovery= | company search/create, job post create/find/search | Email pipeline agent |
+| =scoring= | get_job_posts, get_career_data, score_job_post, get_scores | Scoring agent |
+| =application_tracking= | job application CRUD, update_job_post, find_by_link | Status update agent |
+| =scrape_management= | create_scrape, get_scrapes, update_scrape | Scrape queue agent |
+
+Custom tool lists also accepted: =CareerCaddyToolset(scope=["score_job_post", "get_career_data"])=
+
+*** Implementation: =ai/lib/toolsets.py= (new file)
+Contains:
+- =CareerCaddyDeps= dataclass
+- =TOOL_REGISTRY= — dict mapping tool names to =api_tools.*= functions
+- =SCOPES= — dict mapping scope names to sets of tool names
+- =_make_tool_wrapper(fn)= — builds a =RunContext=-aware wrapper that preserves the original function's signature (minus the =api= param) for pydantic-ai schema generation
+- =CareerCaddyToolset(AbstractToolset[CareerCaddyDeps])= — delegates to internal =FunctionToolset=
+- Factory functions: =job_discovery_toolset()=, =scoring_toolset()=, etc.
+
+*** Key challenge: signature preservation
+Pydantic-ai uses =inspect.signature()= to build JSON schemas for tool parameters. The wrapper must copy the original function's parameter list (minus =api: ApiClient=) and construct a new =__signature__=. Same pattern FastMCP uses internally for =@server.tool()=.
+
+*** Migration path
+1. Create =ai/lib/toolsets.py=
+2. Update =career_caddy_agent.py=: replace =MCPServerStdio= with =CareerCaddyToolset(scope="career_caddy")=, add =deps_type=CareerCaddyDeps=
+3. Update =job_email_to_caddy.py=: indirect — it calls =add_job_post()= which uses the agent
+4. =email_classifier_agent.py=: no change (uses email server only)
+5. =job_extractor_agent.py=: no change (pure LLM, no tools)
+
+*** Security: browser credentials are unreachable
+- =lib/api_tools.py= imports only =httpx=, =json=, =pydantic= — zero knowledge of =secrets.yml= or browser automation
+- =lib/toolsets.py= imports only from =lib/api_tools.py= and =pydantic_ai= — MUST NOT import from =lib/browser/*= or =mcp_servers/browser_server.py=
+- =CareerCaddyDeps= holds only =api_token= + =base_url= — no credential paths
+- No tool in the registry can read =secrets.yml=, trigger a browser login, or access notmuch email
+- Browser/email capabilities live exclusively in =browser_server.py= and =email_server.py=, which are never imported by the toolset
+- This is the same isolation model as =public_server.py= — enforced by import boundaries, not runtime checks
+
+*** What stays the same
+- =career_caddy_server.py= / =public_server.py= / =gateway.py= — still serve external MCP clients
+- =lib/api_tools.py= — the single source of truth for tool implementations
+- Email and browser MCP servers — separate tool sources, outside this scope
+
+*** Files
+| File | Action |
+|---|---|
+| =ai/lib/toolsets.py= | Create — CareerCaddyToolset + deps + scopes |
+| =ai/lib/api_tools.py= | No change — already the right shape |
+| =ai/agents/career_caddy_agent.py= | Migrate MCPServerStdio → CareerCaddyToolset |
+| =ai/agents/job_email_to_caddy.py= | Update add_job_post call to pass deps |
+
 ** MCP deployment at mcp.careercaddy.online [2026-04-10]
 [[file:todo.org::*MCP exposure][↑ todo.org]]
 
