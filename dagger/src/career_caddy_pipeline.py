@@ -72,8 +72,11 @@ class CareerCaddy:
                 ]
             )
             .with_exec(["pip", "install", "uv"])
-            .with_directory("/app", src)
             .with_workdir("/app")
+            .with_file("/app/pyproject.toml", src.file("pyproject.toml"))
+            .with_file("/app/uv.lock", src.file("uv.lock"))
+            .with_exec(["uv", "sync", "--frozen", "--no-install-project"])
+            .with_directory("/app", src)
             .with_exec(["uv", "sync", "--frozen"])
             .with_service_binding("db", pg)
             .with_env_variable(
@@ -109,10 +112,12 @@ class CareerCaddy:
                     "firefox-esr && rm -rf /var/lib/apt/lists/*",
                 ]
             )
-            .with_directory("/app", src)
             .with_workdir("/app")
+            .with_file("/app/package.json", src.file("package.json"))
+            .with_file("/app/package-lock.json", src.file("package-lock.json"))
             .with_env_variable("CI", "true")
             .with_exec(["npm", "ci"])
+            .with_directory("/app", src)
             .with_exec(["npm", "run", "lint"])
             .with_exec(["npm", "run", "test:ember"])
         )
@@ -147,8 +152,11 @@ class CareerCaddy:
                 ]
             )
             .with_exec(["pip", "install", "uv"])
-            .with_directory("/app", src)
             .with_workdir("/app")
+            .with_file("/app/pyproject.toml", src.file("pyproject.toml"))
+            .with_file("/app/uv.lock", src.file("uv.lock"))
+            .with_exec(["uv", "sync", "--frozen", "--no-dev", "--no-install-project"])
+            .with_directory("/app", src)
             .with_exec(["uv", "sync", "--frozen", "--no-dev"])
         )
 

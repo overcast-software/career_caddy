@@ -1,0 +1,212 @@
+#+title: CareerCaddy
+#+date:    2026-04-07
+#+contact: Contact name
+
+* HOW TO USE THIS FILE (agents: read this first)
+This is the living specification for CareerCaddy development.
+Two agents collaborate here: one in =frontend/=, one in =api/=.
+
+Rules:
+- When you begin a task: change =TODO= → =IN_PROGRESS= and add =[DATE agent]= e.g. =[2026-04-08 api]=
+- When you finish: mark =DONE= with =CLOSED:= timestamp
+- Leave notes for the other agent using =#+NOTE:= inside the subtree
+- Never mark DONE until =make test-api= or =make test-frontend= passes locally
+- API agent: always run =uv run ruff check .= in =api/= before every push
+- All branches cut from =develop=; PRs target =develop=
+- Do NOT touch items marked =[PENDING APPROVAL]=
+- *Max 2 CI attempts rule*: if tests/lint fail twice on the same problem, stop, document what failed and why in notes.org, and surface to the product owner. Do not loop indefinitely.
+- DONE tasks older than 30 days are archived to =todo_archive.org=. First prune: [2026-04-09].
+
+* Agentic Engineering — Curriculum Gaps [0/6]
+Items identified from the Agentic Engineering Curriculum (/home/oldbones/Downloads/agentic-engineering-curriculum.pdf) review on [2026-04-09].
+See [[file:notes.org::*Curriculum gap analysis][notes.org: Curriculum gap analysis]] for the full assessment.
+
+** DONE Prune stale decisions from notes.org and todo.org (institutional memory decay)
+CLOSED: [2026-04-09 Thu]
+[[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
+First quarterly prune complete. Archived 19 DONE subtrees to =todo_archive.org=. Trimmed CSS progress logs from notes.org. Updated stale "Waiting on" blocks.
+
+** TODO Add self-review pass before pushing (Evaluator-Optimizer pattern)
+[[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
+Currently: plan → implement → test → push. No explicit review gate.
+Curriculum pattern (gstack): plan → implement → /review → /qa → /ship as explicit cognitive mode switches.
+Proposal: before each push, agent does a quick self-audit:
+- Did any files change unexpectedly?
+- Does the diff match what was planned?
+- Are there any obvious regressions (dead code introduced, missing tests)?
+Add this checklist to CLAUDE.md or frontend/CLAUDE.md as a pre-push reminder.
+[PENDING APPROVAL] — Decide whether this is a formal checklist in CLAUDE.md or just a convention.
+
+** TODO Write a blueprint for the feature branch workflow
+[[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
+Curriculum: Stripe Blueprints interleave deterministic nodes (lints, tests, git) with agent nodes (planning, code).
+Our most repeated workflow: create branch → plan → implement → make test-frontend → push.
+Action: codify this as an explicit blueprint in CLAUDE.md or a =scripts/blueprint-feature.sh= stub so the deterministic steps (branch naming, test, lint, push) are not agent-improvised each time.
+[PENDING APPROVAL] — Confirm scope: just document in CLAUDE.md, or create a Makefile target?
+
+** TODO Establish a codename system for major subsystems
+[[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
+Curriculum: /Iris beats spec024 for human memory and AI comprehension./
+Currently: subsystems referenced by path (=api/=, =frontend/=, =ai/=) or generic names ("the AI pipeline").
+Proposal: assign short human-readable codenames to the 3–5 major subsystems for use in commit messages, notes, and agent prompts. Examples:
+- =Caddy= — the main Django API
+- =Fairway= — the Ember frontend (already using golf metaphors in CSS: tee-box, sandtrap, course, fairway)
+- =Caddie= (or =Loop=) — the Pydantic-AI pipeline
+[PENDING APPROVAL] — Product owner to confirm names or propose alternatives.
+
+** TODO Implement context hygiene strategy for notes.org and todo.org
+[[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
+Curriculum: "Just-in-Time context loading" — unnecessary context wastes tokens and degrades performance.
+notes.org is now ~400+ lines and growing. todo.org has many DONE items.
+Actions:
+- Move DONE tasks older than 30 days to an =todo_archive.org= file
+- Split notes.org into topic files (e.g., =notes-css.org=, =notes-api.org=) once it exceeds 600 lines
+- Add a note to CLAUDE.md: "Read only the sections of notes.org relevant to your current task"
+[PENDING APPROVAL] — Approve splitting strategy before implementing.
+
+** TODO Add handover documentation convention for stuck agents
+[[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
+Curriculum: when an agent hits "Max 2 CI rounds," it must generate a "Where I Got Stuck" artifact using Context → Choice → Rationale format. This prevents the human from re-diagnosing from scratch.
+Action: add to CLAUDE.md — if a problem cannot be resolved after 2 attempts, write a =#+NOTE:= in the relevant todo.org task with:
+- Context: what was being attempted
+- What failed: exact error or symptom
+- What was tried: the two approaches
+- Recommendation: what to investigate next
+Then surface to product owner rather than continuing to loop.
+
+* Tasks [0/10]
+
+** TODO Backups: [0/2]
+[APPROVED 2026-04-09] — xlsx export via API, merge import with skip-duplicates, superuser-only import.
+[[file:notes.org::*Backups (export / import)][Decisions → notes.org]]
+*** TODO export
+GET /api/v1/career-data/export/ → .xlsx with sheets: job-posts, job-applications, questions, answers. Library: openpyxl.
+*** TODO import
+POST /api/v1/career-data/import/ → multipart .xlsx upload. Merge with skip-duplicates. Superuser-only (IsAdminUser).
+
+** TODO tool tips. where could it be useful.                     :PENDING_APPROVAL:
+[PENDING APPROVAL] — Defer until shared components are built.
+[[file:notes.org::*Tooltips][Considerations → notes.org]]
+Favorites could be explained with tool tip
+using hyperui component patterns write the tooltip as a argument into and ember component
+
+** TODO revamp scrapes/edit page                                 :PENDING_APPROVAL:
+[PENDING APPROVAL] — feature/scrapes-improvements merged; unblocked pending clarification.
+[[file:notes.org::*Revamp scrapes/edit page][Considerations → notes.org]]
+use more recent conventions
+the spacing for the inputs looks good.
+
+** TODO As a superuser I want to be able to manage user accounts. :PENDING_APPROVAL:
+[PENDING APPROVAL] — Multi-tenancy approval needed.
+[[file:notes.org::*Superuser account management][Considerations → notes.org]]
+
+** DONE I want users to be able to sign up for waiting list
+CLOSED: [2026-04-09 Thu]
+API: Waitlist model + POST /api/v1/waitlist/ (unauthenticated, unique email, Django admin). Frontend: /waitlist public route with login-card style form.
+
+** TODO We're going to introduce email                           :PENDING_APPROVAL:
+[PENDING APPROVAL] — Library selection needed.
+[[file:notes.org::*Email — account recovery and library][Considerations → notes.org]]
+*** TODO account recovery
+If you lose your password we need to recover the account for that user
+*** TODO find django patterns for email processing and use the best library
+*** TODO document a plan for implementation
+
+** TODO Lazy load the child resources.                           :APPROVED:
+[PENDING APPROVAL] — API audit required before removing includes.
+[[file:notes.org::*Lazy load child resources][Considerations → notes.org]]
+remove all the includes in the route because with multi-tenancy we need to not pre-load everything in the parent route.
+
+** IN_PROGRESS We want to increase code coverage in testing [2026-04-08 api]
+#+NOTE: Branch = feature/test-coverage (cut from develop). API agent owns this.
+Added test_job_post.py, test_job_application.py, test_resume.py, test_answer.py — CRUD + model + auth tests for four previously uncovered resources. Ongoing; more coverage can be added incrementally.
+
+** TODO MCP exposure. Make a feature branch for surfacing mcp.   :APPROVED:
+[PENDING APPROVAL] — OAuth + security review required.
+[[file:notes.org::*MCP exposure][Considerations → notes.org]]
+*** In app chat with AI is an idea
+*** external tools that can talk to the mcp sound awesome
+*** oauth needs to be part of it
+*** I want the agent to know who the user is. api-keys is one way, but I'd like the a chat app to know
+*** saved browser credentials is a major security vulnerability even for properly exposed MCP.
+
+** TODO Security audit                                           :PENDING_APPROVAL:
+[PENDING APPROVAL] — Requires explicit approval.
+[[file:notes.org::*Security audit — multi-tenancy data isolation][Considerations → notes.org]]
+Multi-tenancy is a new feature and I want to make the data is secure
+
+** DONE Caching deploy steps so it goes faster
+CLOSED: [2026-04-10 Thu]
+[[file:notes.org::*Dockerfile caching][Considerations → notes.org]]
+All three Dockerfiles (api, frontend, ai) already had proper dependency-first caching. Fixed the Dagger pipeline (dagger/src/career_caddy_pipeline.py): build_api, build_frontend, and build_ai now copy dependency manifests and install before copying source, so source-only changes no longer bust the dependency cache.
+
+** TODO Tackling deprications                                    :PENDING_APPROVAL:
+[PENDING APPROVAL] — Easy shims ready to go; full sweep needs approval.
+[[file:notes.org::*Tackling Ember deprecations][Considerations → notes.org]]
+ember app has a ton of deprications, I want them delt with
+
+* observed [0/6]
+
+** DONE job-application breadcrumb UI
+CLOSED: [2026-04-10 Thu]
+[[file:notes.org::*Job-application breadcrumb UI][Considerations → notes.org]]
+Replaced the SVG StatusFlow with a reusable StatusSteps breadcrumb component (Adobe-inspired, HyperUI Tailwind pattern). Numbered circles with connecting lines — checkmarks for done, highlighted active, X for failed/terminal states. Used on show and edit pages. Terminal states (Vetted Bad, Rejected, Declined, etc.) branch off the main flow at the correct point. Shared utility in utils/job-application-steps.js.
+
+** DONE SPA and plausible
+CLOSED: [2026-04-10 Thu]
+[[file:notes.org::*SPA analytics with Plausible][Considerations → notes.org]]
+No action needed. Plausible automatically tracks pushState-based SPA navigation. Script is already in application.hbs with hash extension included. Self-hosted at analytics.careercaddy.online.
+
+** TODO fonts and buttons from "under construction"              :APPROVED:
+[PENDING APPROVAL] — Design direction needed.
+[[file:notes.org::*Fonts and buttons from "under construction" page][Considerations → notes.org]]
+I was really impressed by the under construction html generated
+file:///home/oldbones/Projects/career_caddy_frontend/under-construction.html
+I want this font and button style for the main app
+CareerCaddy with two colors is amazing
+Dark mode should follow this color palette
+
+** TODO Documentation in footer                                  :APPROVED:
+[PENDING APPROVAL] — Nav structure decisions needed.
+Documentation should link to the specific resource that the person is looking at.
+make it subtly blue if it's specific to a resource
+if on companies/id/job-posts the documentation should be to companies and not job-posts. A more specific link can be inserted later elsewhere.
+
+** TODO user settings page.                                      :PENDING_APPROVAL:
+[PENDING APPROVAL] — Defer until after CSS consolidation and shared components.
+[[file:notes.org::*User settings page][Considerations → notes.org]]
+Wait until after common components are constructed
+ability to update profile
+set dark mode (when feature rolls out)
+set color palette
+
+** TODO resume template - review                                 :APPROVED:
+[PENDING APPROVAL] — Defer until shared components refactored.
+[[file:notes.org::*Resume template review][Considerations → notes.org]]
+Resume editing is for tweaking around the edges for the sake of career-data info
+resume show and edit paths were some of the first things to be build.
+I'm certain that there is cruft or some refactoring that would be good.
+When reusable components are created and templates refactored, review the resume design patterns and streamline.
+
+** TODO Design plans for surfacing browser screenshots.          :APPROVED:
+[PENDING APPROVAL] — Needs discussion.
+[[file:notes.org::*Browser screenshot visibility (scrape debugging)][Considerations → notes.org]]
+it might be just for debugging, but browser scraping is difficult and as a super user I want visibility
+
+** TODO Completely remove SQLAlchemy from api                    :PENDING_APPROVAL:
+[PENDING APPROVAL] — Large refactor, not urgent.
+[[file:notes.org::*Remove SQLAlchemy from API][Considerations → notes.org]]
+not important as any others, but it's refactored out, it's time to remove it.
+
+** TODO Ian Finnis letter                                        :PENDING_APPROVAL:
+[PENDING APPROVAL] — Post-alpha only. Moved to notes.org when alpha phase begins.
+[[file:notes.org::*Ian Finnis letter][Considerations → notes.org]]
+write a message to ian finnis asking permission to use his likeness for the webpage
+point out that it's a free service and use lamans terms to explain the virtues of open source in this context
+point out that I was watching him and tommy fleetwood win the fedex cup in September when I began writing
+I want to be able to link to his specific social media or anything else that he requests.
+reenforce that I don't make any money off of this site. in fact I loose money on server costs
+My technical blog at dougheadley.com I can be reached at doug@overcastsoftware.com
+I am a new golfer that started maybe 4 years ago.
+I won't send this message out until after going into official alpha phase so add it to notes.org
+he is here on social media https://www.instagram.com/finoEFC/

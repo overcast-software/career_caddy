@@ -1,0 +1,431 @@
+#+title: CareerCaddy — Notes & Decision Records
+#+date: 2026-04-08
+
+* Curriculum gap analysis [2026-04-09]
+Review of Agentic Engineering Curriculum (=/home/oldbones/Downloads/agentic-engineering-curriculum.pdf=, 114 pages).
+Reviewed pages 1–40 (executive summary, all modules, framework deep dives, maturity model).
+
+** What we're doing well
+
+| Principle | Curriculum source | How we implement it |
+|---|---|---|
+| Living Specifications | DreamingBinary | =todo.org= + =notes.org= evolve via Q&A, appended during implementation |
+| Session summarization | DreamingBinary | Claude Code auto-summaries + notes.org progress logs after each track |
+| Spec-first development | DreamingBinary / Anthropic | Plan mode before implementation; tasks specified with context + rationale |
+| Decision documentation | DreamingBinary | notes.org uses Context → Choice → Rationale format |
+| Shift-left testing | Stripe Blueprints | =make test-frontend= before every push; CLAUDE.md enforces "never mark DONE until tests pass" |
+| Simplicity first | Anthropic | Single LLM + living specs; no orchestration added before it was needed |
+| Conditional agent rules | Stripe | Root =CLAUDE.md= + =frontend/CLAUDE.md= (subdirectory-scoped guidance) |
+| Human-in-the-loop | All frameworks | PENDING_APPROVAL gates on all non-trivial decisions; plan mode approval before implementation |
+| Human-readable spec names | DreamingBinary | Branch names are descriptive (=feature/css-track-3=); tasks are named, not numbered |
+
+We are solidly at *Phase 2 (Agentic Coding)* of the curriculum's maturity model: spec-first approach, multi-phase builds, exhaustive documentation. The spec is the contract.
+
+** Gaps identified (added to todo.org)
+
+| Gap | Curriculum principle | Severity |
+|---|---|---|
+| Notes/todo only grow, never pruned | Institutional Memory Decay (Module 7.3) | Medium — will degrade as docs grow |
+| No self-review pass before pushing | Evaluator-Optimizer pattern (Anthropic) | Low — works now, becomes risky at scale |
+| No formal blueprint for feature workflow | Stripe Blueprints (Module 4) | Low — improvised each time, creates inconsistency |
+| No codename system for subsystems | DreamingBinary codename system | Low — cosmetic but aids agent comprehension |
+| No context hygiene strategy | FinOps / Context Bloat (Module 7.2) | Medium — notes.org will slow agents as it grows |
+| No handover document convention | RX / Human-in-the-Loop (Module 7.1) | Medium — when agents get stuck, re-diagnosis is expensive |
+
+** What we deliberately skip (correct decisions)
+
+- *Blueprints as formal scripts*: At solo-developer scale, the Makefile + plan mode covers the same ground. Full blueprint infrastructure is for 10+ engineer teams.
+- *Tiger Agents / production queue*: Single user, local execution. The curriculum explicitly says Layer 4 "not needed yet" for solo developers.
+- *MCP Toolshed (50 tools)*: We have MCP for browser and career-data. That's appropriate for our scale.
+- *NVIDIA NIM / self-hosted inference*: Not economically justified at this scale.
+
+** Maturity progression target
+
+Currently Phase 2. To reach Phase 3 (Agentic Engineering):
+- Implement the 6 gaps above
+- The codename system and memory pruning are the highest-leverage items
+- Blueprint formalization can wait until the team grows
+
+* Pending Approval — Decision Considerations
+Decisions needed from the product owner before agents begin work.
+Reply inline or update todo.org to unblock.
+
+** Backups (export / import)
+[[file:todo.org::*Backups][↑ todo.org]]
+
+*** Export
+- Format choice: true Excel (.xlsx with one sheet per resource) or one CSV file per resource zipped together?
+  one xlsx
+- Who generates the file — the API (streaming download) or the frontend assembling JSON into a client-side blob?
+  api
+- Which resources are included: job-posts, job-applications, questions, answers — anything else (resumes, companies)?
+  just listed no resumes or companies.  no summaries or scores; those can be regenerated
+
+*** Import
+- One-way restore (wipe & replace) or merge with existing data?
+  merge
+- Conflict strategy on merge: skip duplicates, overwrite, or error and report?
+  skip duplicates.  the user can remove ones that they don't like
+- Should import be superuser-only or available to any user?
+  super user for now
+
+*** API notes [api]
+- Export endpoint: =GET /api/v1/career-data/export/= returning =application/vnd.openxmlformats-officedocument.spreadsheetml.sheet= via =StreamingHttpResponse= with =Content-Disposition: attachment=. Library: =openpyxl= (already available in many Django stacks, adds ~2 MB to the image).
+- Import endpoint: =POST /api/v1/career-data/import/= accepting =multipart/form-data= with a file field. Parse with =openpyxl= or Python's =csv= module; run inside a DB transaction so a bad row rolls back the whole import.
+- Both endpoints use the existing =IsAuthenticated= permission; superuser-only restriction can be toggled via =IsAdminUser= if decided above.
+- No new models needed — purely a read/write layer over existing ones.
+
+*** Waiting on
+~~Format choice (.xlsx vs CSV) and conflict strategy (skip / overwrite / error).~~ APPROVED [2026-04-09]. xlsx, merge, skip duplicates, superuser-only.
+
+** Tooltips
+[[file:todo.org::*tool tips][↑ todo.org]]
+- Only one concrete example was given: the ★ favorites button.
+- Proposal: build a shared =<Tooltip>= Glimmer component that accepts a =@text= arg and wraps any element; adopt the HyperUI tooltip pattern.
+- Scope question: audit all ambiguous UI affordances first, or implement favorites tooltip only and expand later?
+
+*** Waiting on
+Approve the shared-component pattern and confirm scope (favorites-only to start, or full audit).
+
+** Revamp scrapes/edit page
+[[file:todo.org::*revamp scrapes/edit page][↑ todo.org]]
+- =feature/scrapes-improvements= is merged; this is now unblocked.
+- "More recent conventions" — does this mean matching the existing =panel-card= / =field-label= / =field-input= patterns used on job-posts/edit and companies/edit?
+- Or is there a specific layout change in mind (e.g. side-by-side fields, inline status)?
+
+*** Waiting on
+Confirm the target convention. Agents will pattern-match against an existing edit page unless told otherwise.
+
+** CSS maturation / HyperUI / dark mode / jade palette [COMPLETED 2026-04-09]
+All 4 tracks complete. Branch chain: main ← track-1 ← track-2 ← track-3 ← track-4.
+- Track 1: input audit + standardisation (11 commits, structural bugs fixed across forms)
+- Track 2: shared components — =EmptyState= (17 sites), =Buttons::Favorite= (6 sites)
+- Track 3: dead CSS removal (−419 lines), TOC + section markers added. app.css 2462 → 2043 lines.
+- Track 4: 5 new CSS tokens (=--surface=, =--surface-alt=, =--surface-hover=, =--tee-bg=, =--page-bg=), dark mode (=[data-theme="dark"]=), jade palette, ThemeService + sidebar toggle.
+- Dark mode polish: Tailwind =dark:= wired to =data-theme=, table/form/button/PowerSelect dark variants, body =color: var(--text)=, Tailwind gray utility overrides via CSS specificity.
+
+*** Decisions
+- [2026-04-08 product-owner] APPROVED — all four tracks, in order.
+- [2026-04-09 product-owner] Lean on Tailwind; HyperUI is the reference; new components use Tailwind only.
+
+*** Key references (still relevant for future work)
+- HyperUI repo: =~/Sandbox/hyperui= (survives reboots). Reclone: =git clone https://github.com/markmead/hyperui ~/Sandbox/hyperui=
+- Component examples: =~/Sandbox/hyperui/public/examples/application/{category}/{n}.html=
+- Steps/breadcrumb: =steps/5.html= (numbered circles) — recommended base for =JobApplications::StepBar=
+- Toggles: =toggles/1.html= (pure CSS checkbox toggle) — used for dark mode toggle
+- CSS tokens (=:root=): =--text=, =--muted=, =--bg=, =--card=, =--border=, =--accent=, =--danger=, =--radius=, =--space-1…6=, =--surface=, =--surface-alt=, =--surface-hover=, =--tee-bg=, =--page-bg=
+- Dark mode: =[data-theme="dark"]= on =<html>=, managed by =ThemeService= (=app/services/theme.js=), persisted to localStorage
+- Tailwind dark mode: =darkMode: ['selector', '[data-theme="dark"]']= in =tailwind.config.js=; Tailwind gray utilities globally overridden via CSS specificity in =app.css=
+- Shared components: =EmptyState= (17 sites), =Buttons::Favorite= (6 sites)
+- app.css: 2043 lines with TOC and section markers; =.builder-form= pattern for forms
+
+#+NOTE: Full commit-by-commit progress logs for tracks 1–4 and dark mode polish are in git history (branches feature/css-track-1 through feature/css-track-4). Pruned [2026-04-09].
+
+** Superuser account management
+[[file:todo.org::*As a superuser I want to be able to manage user accounts][↑ todo.org]]
+
+- Currently no row-level ownership on the 33 domain models — any authenticated user can read any record.
+- Multi-tenancy requires adding an =owner= FK on every model and filtering every queryset.
+- Implementation options:
+  - Django custom =get_queryset= on every ViewSet (surgical, low magic).
+  - A shared mixin =OwnedQuerysetMixin= that enforces =owner=request.user= automatically.
+- Superuser role: Django =is_staff= flag or a dedicated =role= field on the User model?
+  is staff is fine
+- This is a large API-first feature; frontend follows once the ownership model is defined.
+
+*** Decision [2026-04-08 product-owner]
+- Multi-tenancy: APPROVED.
+- Ownership model: use =is_staff= as the superuser flag.
+- No new =owner= FK needed — leverage existing fields (confirmed below).
+
+*** API notes [api]
+No new FK column needed on any model. Every endpoint already has a user reference; the field name just varies.
+Enforce at the queryset level per ViewSet using a class attribute =user_lookup= that names the ORM filter expression:
+
+| ViewSet | Existing field | queryset filter |
+|---|---|---|
+| =CoverLetterViewSet= | =user= | =user_id=request.user.id= |
+| =JobApplicationViewSet= | =user= | =user_id=request.user.id= |
+| =ResumeViewSet= | =user= | =user_id=request.user.id= |
+| =ScoreViewSet= | =user= | =user_id=request.user.id= |
+| =SummaryViewSet= | =user= | =user_id=request.user.id= |
+| =ProjectViewSet= | =user= | =user_id=request.user.id= |
+| =JobPostViewSet= | =created_by= | =created_by_id=request.user.id= |
+| =QuestionViewSet= | =created_by= | =created_by_id=request.user.id= |
+| =AnswerViewSet= | none direct | =question__created_by_id=request.user.id= |
+| =ScrapeViewSet= | none direct | =job_post__created_by_id=request.user.id= |
+| =CompanyViewSet= | none | intentionally shared — no filter |
+| Skill, Status | none | global lookup tables — no filter |
+| Pivot tables (ResumeSKill etc.) | none | scoped via parent endpoint only |
+
+Mixin approach (one place, covers most ViewSets):
+#+BEGIN_SRC python
+class OwnedQuerysetMixin:
+    user_lookup = "user_id"          # override per ViewSet where needed
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.is_staff:
+            return qs
+        return qs.filter(**{self.user_lookup: self.request.user.id})
+#+END_SRC
+
+ViewSets with a different field name just set =user_lookup = "created_by_id"= or ="question__created_by_id"=.
+No model migrations. No new columns.
+
+*** Waiting on
+~~Multi-tenancy approved?~~ APPROVED. Proceed after security-audit branch confirms the full list.
+
+** Waiting list sign-up
+[[file:todo.org::*I want users to be able to sign up for waiting list][↑ todo.org]]
+
+- Depends on multi-tenancy approval if you want waitlisted users to become real accounts later.
+- Simpler standalone path: unauthenticated =POST /api/v1/waitlist/= endpoint storing email + timestamp; no login required; admin reviews via Django admin.
+- Standalone path has zero dependency on multi-tenancy.
+
+*** API notes [api]
+- Standalone implementation: one new =Waitlist= Django model (=email=, =signed_up_at=, =notes=); one unauthenticated =AllowAny= endpoint with basic email-format validation.
+- No new library needed — Django's =EmailValidator= handles format checks.
+- Admin review: =Waitlist= registered in =admin.py= so it appears in Django admin at =/admin/=.
+- Promoting a waitlisted user: manual Django admin action to start; can be automated later.
+
+*** Waiting on
+Standalone waitlist endpoint now, or wait for multi-tenancy?
+
+** Email — account recovery and library
+[[file:todo.org::*We're going to introduce email][↑ todo.org]]
+
+- Django has =django.core.mail= built in; the library question is which transport to use.
+- Recommended options:
+  - =django-anymail= — single package, swappable backends (Mailgun, Postmark, AWS SES). Best for production.
+  - =django.core.mail= + SMTP — fine for self-hosted (e.g. pointing at a local Postfix or a Gmail relay).
+- Account recovery flow:
+  1. Unauthenticated =POST /api/v1/password-reset/= — accepts email, generates signed token, sends link.
+  2. Unauthenticated =POST /api/v1/password-reset/confirm/= — accepts token + new password.
+  3. New frontend routes: =/forgot-password= and =/reset-password?token=...= (both public, no auth guard).
+- Django has =django.contrib.auth.tokens.PasswordResetTokenGenerator= ready to use.
+
+*** API notes [api]
+- Zero new models: =PasswordResetTokenGenerator= stores state in a HMAC signed by the user's password hash + last login timestamp — tokens auto-expire when the password changes.
+- Email content: Jinja2 template at =api/templates/password_reset_email.txt= (plain text first; HTML later).
+- New env vars needed: =EMAIL_BACKEND=, =EMAIL_HOST=, =EMAIL_PORT=, =EMAIL_HOST_USER=, =EMAIL_HOST_PASSWORD=, =DEFAULT_FROM_EMAIL=. These slot into settings.py cleanly.
+- =django-anymail= adds just two env vars: =ANYMAIL_ESP_NAME= and =ANYMAIL_API_KEY= — simplest production path.
+- Both new endpoints are =AllowAny= + =csrf_exempt= (same pattern as =guest_session=).
+
+*** Waiting on
+Which email transport / provider?
+
+** Lazy load child resources
+[[file:todo.org::*Lazy load the child resources][↑ todo.org]]
+
+- Currently routes eagerly include related records (e.g. =include: 'job-post,company'= on scrapes show).
+- Removing includes means the page renders first, then fires secondary =findRecord= calls on demand.
+- User-visible impact: some detail sections will be blank briefly until the secondary fetch resolves.
+- Multi-tenancy benefit: pre-loading cross-owner data becomes impossible, reducing data-leak risk.
+- Approach: audit each =include= in Ember routes, classify as load-bearing (required for render) vs. incidental (only used in one conditional block).
+
+*** API notes [api]
+- The API already supports lazy loading — all resources are individually retrievable; no API changes needed.
+- Side-effect to verify: some ViewSet =retrieve()= methods skip ownership checks on included relations (e.g. a cover letter =include=resume= might return a resume owned by a different user if IDs were guessed). The security-audit branch will flag these.
+- Once includes are removed from the frontend, the API's =_build_included= code path (=views.py= ~line 700) becomes dead for those routes — can be removed later as clean-up.
+
+*** Waiting on
+Approve the audit (frontend-led). API will run a parallel check for ownership leaks in included relations.
+
+** MCP exposure
+[[file:todo.org::*MCP exposure][↑ todo.org]]
+Three distinct sub-problems:
+
+*** Which tools to expose
+- =caddy_*= tools: job CRUD, cover letter generation, scoring — these are the core application operations.
+- =email_*= tools: read/search notmuch email — exposes the host's email; high sensitivity.
+- =browser_*= tools: Camoufox automation — exposes credentials stored in =ai/secrets.yml=; must stay internal.
+- Proposal: expose =caddy_*= only in a first pass; =email_*= and =browser_*= remain internal.
+
+*** Auth model
+- API-key auth (current) works for agent-to-agent (the AI pipeline).
+- An in-app chat UI where the human is the subject needs OAuth 2.0 so the agent acts on behalf of the logged-in user.
+- OAuth adds significant infrastructure (authorization server, token exchange, PKCE flow).
+
+*** Security constraint
+Browser credentials in =ai/secrets.yml= must never be reachable via MCP under any configuration.
+This is a hard requirement regardless of what else is approved.
+**** IDEA credentials can be hidden in a method that takes a page object and selectors for user and password.  the method uses it's knowledge of username/password to log in and hand back the page.
+
+*** Waiting on
+Approve MCP scope (=caddy_*= read-only vs. write, first pass). Approve OAuth investigation as a separate workstream.
+
+** Security audit — multi-tenancy data isolation
+[[file:todo.org::*Security audit][↑ todo.org]]
+
+- The audit scope: all 33 domain models, every ViewSet =.get_queryset()=, every custom action endpoint.
+- Output: a report listing which endpoints are currently unscoped (any user can read any record) and a remediation plan.
+- Should run before or in parallel with the superuser account management feature.
+- Low risk to start: the audit branch only reads code and writes a report; no production changes until approved.
+
+*** API notes [api]
+- Known unscoped endpoints right now (from reading =views.py=):
+  - =CompanyViewSet.list= — returns all companies for all users (companies are shared by design, but verify this is intentional).
+  - =JobPostViewSet.list= — returns all job posts regardless of =created_by=.
+  - =CoverLetterViewSet.list= — already scoped to =user_id=request.user.id=; safe.
+  - =ResumeViewSet.list= — scoped via user FK; safe.
+  - =SummaryViewSet.list= — scoped via =user_id=; safe.
+  - =AnswerViewSet= — no scoping; any user can read any answer.
+  - =QuestionViewSet= — no scoping visible; needs check.
+  - Custom =career-data= endpoint — scoped to authenticated user (safe, but a path parameter lets any user request any =user_id=; soft risk).
+- Automated tool: =bandit= is already in CI but doesn't catch query-scoping gaps; the audit is a code-read + test exercise.
+- Output format: a markdown report committed to =api/SECURITY_AUDIT.md=, no code changes in the same branch.
+
+*** Waiting on
+Approve the audit branch (read-only, report only). Code changes in a separate branch after review. APPROVED
+
+** Dockerfile caching
+[[file:todo.org::*Caching deploy steps so it goes faster][↑ todo.org]]
+
+- Standard optimisation: copy dependency manifests (=pyproject.toml=, =uv.lock= for API; =package.json= for frontend) before source code so the dependency layer is cached between rebuilds.
+- Self-contained, zero risk, no design decisions required.
+- Expected improvement: rebuilds after source-only changes drop from ~3 min to ~30 sec.
+
+*** API notes [api]
+- Current API Dockerfile copies the entire source tree before =uv sync=, busting the dependency cache on every code change.
+- Fix: copy =pyproject.toml= + =uv.lock= → run =uv sync --frozen --no-install-project= → copy source → run =uv sync= again. Two-stage install, cache-friendly.
+- The =--no-install-project= flag installs dependencies only (not the app itself), so the heavy layer is cached as long as lockfile doesn't change.
+- Dagger pipeline in =dagger/src/main.py= may also benefit from the same reordering.
+- No risk to production behaviour; purely build-time change.
+
+*** Waiting on
+Simple approve — no further input needed.
+
+** Tackling Ember deprecations
+[[file:todo.org::*Tackling deprications][↑ todo.org]]
+- Deprecation warnings are already visible in test output (=ember-data:deprecate-legacy-imports= for =StringTransform=, =DateTransform=, =BooleanTransform=).
+- Easy fixes (zero risk): create =app/transforms/string.js=, =date.js=, =boolean.js= re-exporting from =@ember-data/serializer/transform=. Three files, three lines each.
+- Larger sweep: legacy =@ember/object= patterns, old serializer inheritance — these need more careful branch-by-branch work.
+
+*** Waiting on
+Approve starting with the transform shims (isolated, safe). Full sweep can be a follow-on branch.
+
+** Job-application breadcrumb UI
+[[file:todo.org::*job-application][↑ todo.org]]
+- You saw an Adobe-style breadcrumb/status flow that's more readable than the current status bar.
+- Current status bar location: =frontend/app/components/job-applications/compact.hbs= and the show page.
+
+*** Reference HTML [2026-04-09 product-owner]
+This is the live HTML captured from an Adobe job application. It's a slick-slider-based step progress bar:
+- Steps: My Information → My Experience → Application Questions → Voluntary Disclosures → Self Identify → Review
+- Active step has class =active progress-current=; completed steps have =progress-complete=; upcoming steps are unstyled.
+- Each step has a number bubble (=.number=) and a label (=.title=).
+- The slider uses Slick (a JS carousel) to handle overflow — steps scroll horizontally on narrow screens.
+- Relevant structure: =<li class="slide slick-slide [state-classes]">= containing =<span class="number">= + =<span class="title">=.
+
+#+BEGIN_SRC html
+<div class="navigation-summary" role="toolbar" id="breadcrumb-summary">
+  <ul class="progressbarlist breadcrumb-list">
+    <!-- Steps: My Information (complete), My Experience (complete),
+         Application Questions (complete), Voluntary Disclosures (active/current),
+         Self Identify (upcoming), Review (upcoming) -->
+    <!-- Each li has atm-id, atm-value, role="button", class="slide slick-slide [progress-*]" -->
+  </ul>
+</div>
+#+END_SRC
+
+css is here
+/home/oldbones/Network/syncthing/Projects/career_caddy/status.css
+Our implementation plan:
+- Build a =<JobApplications::StepBar>= Glimmer component that accepts =@steps= (array of labels) and =@currentStep= (index or id).
+- No Slick JS needed — use CSS =overflow-x: auto= with a flex row for horizontal scrolling.
+- Completed steps: checkmark or filled number circle. Active step: highlighted. Upcoming: muted.
+- Replace the status bar in =job-applications/compact.hbs= and the show page.
+
+#+NOTE: CSS for this component was previously noted in todo.org but was lost. Product owner to re-share or confirm direction.
+
+*** Waiting on
+Confirm design direction: checkmark vs. filled-number for completed steps. CSS for the number bubbles if previously drafted.
+
+** SPA analytics with Plausible [COMPLETE 2026-04-10]
+[[file:todo.org::*SPA and plausible][↑ todo.org]]
+- Plausible is privacy-friendly, GDPR-compliant, open-source, and can be self-hosted.
+- Self-hosted at =analytics.careercaddy.online= (separate service, not in this build).
+- Plausible automatically tracks =pushState=-based SPA navigation — no extra service or =routeDidChange= listener needed.
+- The =hash= script extension is included for hash-based routing support as well.
+- Script is in =frontend/app/templates/application.hbs= (lines 8–14), gated behind =this.isProduction=.
+
+*** References
+- SPA support docs (original removed, web archive): =https://web.archive.org/web/20260131081337/https://plausible.io/docs/spa-support=
+- Plausible source: =https://github.com/plausible/analytics=
+- Hash-based routing docs: =https://plausible.io/docs/hash-based-routing=
+
+** Fonts and buttons from "under construction" page
+[[file:todo.org::*fonts and buttons from "under construction"][↑ todo.org]]
+- You liked the font and two-colour button style from the generated under-construction page.
+- That file is at =file:///home/oldbones/Projects/career_caddy_frontend/under-construction.html=.
+- Plan: read the file, extract font family, colour tokens, and button classes, then apply them to =app.css= as the foundation for the CSS overhaul and dark mode palette.
+- This should happen *before* the CSS maturation tracks above — it sets the design tokens everything else inherits.
+#+NOTE: [2026-04-09 prune] CSS tracks are complete. Dark mode palette was drawn from under-construction.html. Font/button adoption is the remaining piece.
+
+** User settings page
+[[file:todo.org::*user settings page][↑ todo.org]]
+- Content: update profile (name, email, password), dark mode toggle, colour palette picker.
+- ~~Blocked on CSS consolidation and shared components (CSS maturation tracks 1–3).~~ CSS tracks complete [2026-04-09]. Unblocked.
+- ~~Dark mode toggle has no effect until the dark mode track is complete.~~ Dark mode + ThemeService landed.
+
+*** API notes [api]
+- Profile update: =PATCH /api/v1/users/{id}/= already exists and supports =first_name=, =last_name=, =email= — no new endpoint needed.
+- Password change: add =POST /api/v1/users/{id}/change-password/= accepting =current_password= + =new_password=; validate old password before updating.
+- Dark mode / palette preferences: store as JSON on the =Profile= model (=api/job_hunting/models/profile.py=); a =preferences= JSONField with sensible defaults.
+
+*** Waiting on
+~~Stays blocked until CSS maturation tracks 1–3 are approved and in progress.~~ UNBLOCKED [2026-04-09]. Ready for approval.
+
+** Resume template review
+[[file:todo.org::*resume template - review][↑ todo.org]]
+- Resume show and edit were among the first pages built; likely cruft and inconsistent patterns.
+- Review scope: compare against current conventions (RouteLayout, field-label/field-input, Panel::Card), identify divergences, refactor in small commits.
+- ~~Blocked on shared component refactor (CSS maturation track 2) so there are stable components to refactor towards.~~ Shared components landed (EmptyState, Buttons::Favorite). Unblocked.
+
+*** Waiting on
+~~Stays blocked until shared components exist.~~ UNBLOCKED [2026-04-09]. Ready for approval.
+
+** Browser screenshot visibility (scrape debugging)
+[[file:todo.org::*Design plans for surfacing browser screenshots][↑ todo.org]]
+- Camoufox captures screenshots during scraping; currently only visible in the AI layer logs.
+- A superuser debug view would surface the last screenshot per scrape via the API and a frontend page.  may be more in the future
+- Security: screenshots must be served behind a superuser-only endpoint, not a public path; no CDN caching.
+- Implementation: the AI layer saves the screenshot path or base64; the API exposes it on the scrape resource; frontend renders it on the scrape show page for admins.
+
+*** API notes [api]
+- The =Scrape= model (=api/job_hunting/models/scrape.py=) would get a =screenshot_path= or =screenshot_b64= field.
+- Simpler path: store a file path; serve via a =GET /api/v1/scrapes/{id}/screenshot/= endpoint that reads the file and returns =image/png= with =IsAdminUser= permission — no base64 bloat in JSON responses.
+- The AI layer already has the screenshot in memory after a Camoufox call; it just needs to save it to a shared path accessible by the API container (i.e. a shared Docker volume).
+- Infrastructure change: mount a shared =screenshots/= volume between the =ai= and =api= services in =docker-compose.yml=.
+
+*** Waiting on
+Approve for superuser-gated debug use, or defer until post-alpha?
+APPROVED There may be many screenshots, not just the final one.  Puting in an image path is my choice with `/api/v1/scrapes/{id}/screenshots` (plural)
+
+** Remove SQLAlchemy from API
+[[file:todo.org::*Completely remove SQLAlchemy from api][↑ todo.org]]
+
+- The API uses SQLAlchemy for all 33 domain models; Django ORM only handles auth tables.
+- Removing it means rewriting all 33 model classes, replacing SQLAlchemy sessions with Django ORM, and re-running migrations.
+- Estimated effort: large (multi-week API branch). No user-facing impact. Reduces stack complexity significantly.
+- Low urgency; the current dual-ORM setup works, it's just technical debt.
+
+*** API notes [api]
+- A migration plan already exists at =api/job_hunting/SA_REMOVAL_PLAN.md= — read it before starting.
+- Current state: all 33 domain models are already Django ORM models (the SA removal is largely done at the model layer). The remaining SA usage is in =lib/db.py= (session management), =lib/models/base.py= (BaseModel mixin), and a handful of =get_session()= calls in ViewSets.
+- Concrete remaining work: delete =lib/db.py=, remove =BaseModel.get_session()= calls, remove =get_session= overrides from ViewSets, drop =sqlalchemy= from =pyproject.toml=.
+- Risk: low — if the model layer is already Django ORM, the session removal is mechanical.
+- Benefit: removes ~5 MB from the Docker image, eliminates the two-step startup (=manage.py migrate= + =manage.py initsa=), simplifies =settings.py=.
+
+*** Waiting on
+Approve the branch (API agent owns; smaller than originally feared given current state).
+
+** Ian Finnis letter
+[[file:todo.org::*Ian Finnis letter][↑ todo.org]]
+Deferred until official alpha phase. Draft is captured in todo.org.
+Move this entry to notes.org when alpha begins and send then.
+
+* Scratch / Working Notes
+(use this section for ephemeral notes during development)
+* personal notes
+docker compose -f docker-compose.prod.yml exec api python manage.py createsuperuser
