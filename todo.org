@@ -81,13 +81,17 @@ CLOSED: [2026-04-10 Thu]
 #+NOTE: Favorited answers didn't appear in career-data. Fixed: all queries now derive "favorite questions" from favorited answers. question.favorite is read-only (synced on answer save/delete). Career-data model has isDirty tracking — toggling any favorite marks it dirty; career-data route re-fetches on next visit.
 [[file:notes.org::*Favorite answers not appearing in career-data][Analysis → notes.org]]
 
-** TODO Backups: [0/2]
+** DONE Backups: [2/2]
+CLOSED: [2026-04-11 Fri]
 [APPROVED 2026-04-09] — xlsx export via API, merge import with skip-duplicates, superuser-only import.
 [[file:notes.org::*Backups (export / import)][Decisions → notes.org]]
-*** TODO export
+*** DONE export
+CLOSED: [2026-04-11 Fri]
 GET /api/v1/career-data/export/ → .xlsx with sheets: job-posts, job-applications, questions, answers. Library: openpyxl.
-*** TODO import
+*** DONE import
+CLOSED: [2026-04-11 Fri]
 POST /api/v1/career-data/import/ → multipart .xlsx upload. Merge with skip-duplicates. Superuser-only (IsAdminUser).
+#+NOTE: 8 tests in test_career_data_export_import.py covering export format, auth, import creation, skip-duplicates, superuser-only, bad file, and full round-trip.
 
 ** TODO tool tips. where could it be useful.                     :PENDING_APPROVAL:
 [PENDING APPROVAL] — Defer until shared components are built.
@@ -122,6 +126,10 @@ If you lose your password we need to recover the account for that user
 [[file:notes.org::*Lazy load child resources][Considerations → notes.org]]
 remove all the includes in the route because with multi-tenancy we need to not pre-load everything in the parent route.
 
+** DONE Disable runtime/prompts creation in production [2026-04-11 api]
+CLOSED: [2026-04-11 Fri]
+=write_prompt_to_file()= now returns =""= immediately when =DEBUG=False=. Added =runtime/= to =.gitignore=.
+
 ** IN_PROGRESS We want to increase code coverage in testing [2026-04-08 api]
 #+NOTE: Branch = feature/test-coverage (cut from develop). API agent owns this.
 Added test_job_post.py, test_job_application.py, test_resume.py, test_answer.py — CRUD + model + auth tests for four previously uncovered resources. Ongoing; more coverage can be added incrementally.
@@ -135,10 +143,12 @@ Added test_job_post.py, test_job_application.py, test_resume.py, test_answer.py 
 *** DONE Upgrade FastMCP to 3.2.3
 *** TODO Frontend: admin-only "hold" radio for scrape creation
 *** DONE CI: build + push AI Docker image to GHCR (=INSTALL_CAMOUFOX=false=)
+*** DONE AI test suite: 44 tests in CI (toolsets, api_tools, public_server security)
 *** TODO Configure Caddy reverse proxy + DNS for =mcp.careercaddy.online= [product-owner]
-*** TODO Pydantic-AI toolsets: replace MCPServerStdio with CareerCaddyToolset :APPROVED:
+*** DONE Pydantic-AI toolsets: replace MCPServerStdio with CareerCaddyToolset
+CLOSED: [2026-04-10 Thu]
 [[file:notes.org::*Pydantic-AI toolsets][Plan → notes.org]]
-Create =lib/toolsets.py= with scoped =CareerCaddyToolset(AbstractToolset)=. Migrate =career_caddy_agent.py= and =job_email_to_caddy.py= from subprocess-based MCP to in-process toolsets.
+Created =lib/toolsets.py=. Migrated =career_caddy_agent.py=. 44-test suite added. CI integration done.
 *** TODO OAuth 2.0 support for in-app chat (Phase 2)
 Add =django-oauth-toolkit= to API; PKCE flow for Ember SPA; FastMCP =MultiAuth=.
 Separate workstream — API key auth covers current use cases.
@@ -189,13 +199,23 @@ Documentation should link to the specific resource that the person is looking at
 make it subtly blue if it's specific to a resource
 if on companies/id/job-posts the documentation should be to companies and not job-posts. A more specific link can be inserted later elsewhere.
 
-** TODO user settings page.                                      :PENDING_APPROVAL:
-[PENDING APPROVAL] — Defer until after CSS consolidation and shared components.
+** IN_PROGRESS user settings page [2026-04-11 frontend+api]       :APPROVED:
 [[file:notes.org::*User settings page][Considerations → notes.org]]
-Wait until after common components are constructed
-ability to update profile
-set dark mode (when feature rolls out)
-set color palette
+Route: =/settings= with two subnav tabs: Profile | Data.
+Profile tab: view/edit user profile (name, email, phone, linkedin, github, address).
+Data tab: import/export xlsx actions (moved here since they're actions, not nav).
+Career Data remains its own top-level sidebar link (it's a resource view).
+*** DONE Profile tab — view/edit profile fields
+CLOSED: [2026-04-11 Fri]
+API: exposed linkedin, github, address, links in DjangoUserSerializer; persist in =_upsert=.
+Frontend: settings/index route + controller + template with @tracked intermediaries, edit/save/cancel.
+*** DONE Data tab — export/import xlsx
+CLOSED: [2026-04-11 Fri]
+Frontend: settings/data route + controller + template. Raw fetch for blob download + multipart upload.
+*** DONE Sidebar — add "Settings" cog link (bottom section near dark mode toggle)
+CLOSED: [2026-04-11 Fri]
+*** DONE Router — add =settings= route with =data= child
+CLOSED: [2026-04-11 Fri]
 
 ** TODO resume template - review                                 :APPROVED:
 [PENDING APPROVAL] — Defer until shared components refactored.

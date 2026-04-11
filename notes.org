@@ -482,13 +482,25 @@ Confirm design direction: checkmark vs. filled-number for completed steps. CSS f
 - ~~Blocked on CSS consolidation and shared components (CSS maturation tracks 1–3).~~ CSS tracks complete [2026-04-09]. Unblocked.
 - ~~Dark mode toggle has no effect until the dark mode track is complete.~~ Dark mode + ThemeService landed.
 
+*** Design decisions [2026-04-11]
+- =/settings= with two subnav tabs: *Profile* (default) and *Data* (import/export).
+- Career Data stays as its own top-level sidebar link — it's a resource view, not an action.
+- Import/export xlsx are actions, so they live under Settings > Data, not in the main nav.
+- Settings cog link goes in the sidebar bottom section near the dark mode toggle.
+- Follows the admin page pattern: parent route loads currentUser, child routes inherit model.
+- Profile fields exposed: first_name, last_name, email, phone, linkedin, github, address. =links= JSON is read-only for v1.
+
 *** API notes [api]
 - Profile update: =PATCH /api/v1/users/{id}/= already exists and supports =first_name=, =last_name=, =email= — no new endpoint needed.
-- Password change: add =POST /api/v1/users/{id}/change-password/= accepting =current_password= + =new_password=; validate old password before updating.
-- Dark mode / palette preferences: store as JSON on the =Profile= model (=api/job_hunting/models/profile.py=); a =preferences= JSONField with sensible defaults.
+- New fields to expose: linkedin, github, address, links (already on Profile model, not yet in serializer).
+- =DjangoUserSerializer.to_resource()= needs to include the 4 new profile fields in attributes.
+- =DjangoUserSerializer.parse_payload()= needs to accept the 4 new profile fields.
+- =DjangoUserViewSet._upsert()= needs to persist linkedin/github/address/links alongside phone.
+- Password change: add =POST /api/v1/users/{id}/change-password/= (future — not in v1).
+- Dark mode / palette preferences: store as JSON on the =Profile= model (future — not in v1).
 
 *** Waiting on
-~~Stays blocked until CSS maturation tracks 1–3 are approved and in progress.~~ UNBLOCKED [2026-04-09]. Ready for approval.
+~~Stays blocked until CSS maturation tracks 1–3 are approved and in progress.~~ UNBLOCKED [2026-04-09]. APPROVED [2026-04-11].
 
 ** Resume template review
 [[file:todo.org::*resume template - review][↑ todo.org]]
@@ -565,6 +577,47 @@ Multi-layer fix across API and frontend:
 
 **** Design principle
 Nobody directly favorites a question. A question is "favorite" only because it has a favorited answer. The =question.favorite= DB column is kept as a denormalized cache synced by the API on answer save/delete.
+
+* Linting techniques [2026-04-11]
+
+** Frontend linting (Ember)
+The frontend has four lint targets run in parallel via =npm run lint=:
+- =lint:js= — ESLint (=eslint . --cache=)
+- =lint:hbs= — ember-template-lint
+- =lint:css= — Stylelint
+- =lint:format= — Prettier (=prettier . --cache --check=)
+
+*** Running lint
+#+begin_src bash
+npm --prefix /path/to/frontend run lint        # all four in parallel
+npm --prefix /path/to/frontend run lint:js     # just ESLint
+npm --prefix /path/to/frontend run lint:hbs    # just template lint
+npm --prefix /path/to/frontend run lint:format # just prettier check
+#+end_src
+
+*** Fixing prettier issues
+Prettier must be run from within the frontend submodule context so that =prettier-plugin-ember-template-tag= resolves correctly. Running prettier from the repo root will fail because the root =noop.js= can't find the plugin.
+
+#+begin_src bash
+# Check what's wrong:
+npm --prefix /path/to/frontend run lint:format
+
+# Auto-fix (pass files after -- --write):
+npm --prefix /path/to/frontend run lint:format -- --write /absolute/path/to/file.hbs
+#+end_src
+
+*** Key gotcha
+Do NOT run =npx prettier= from the repo root — it picks up the root config and fails to resolve the Ember template tag plugin. Always use =npm --prefix frontend run lint:format=.
+
+** API linting (Django)
+Single linter: ruff.
+
+#+begin_src bash
+uv run --directory /path/to/api ruff check .         # check all
+uv run --directory /path/to/api ruff check path/to/file.py  # check specific files
+#+end_src
+
+Ruff must be run via =uv run= because the project uses a uv-managed virtualenv. Always lint before pushing (per CLAUDE.md).
 
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
