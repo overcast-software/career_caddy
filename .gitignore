@@ -1,2 +1,4 @@
 .env
 __pycache__/
+.claude/
+todo_archive.org
