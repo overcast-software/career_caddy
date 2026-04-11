@@ -1,0 +1,213 @@
+#+title: CareerCaddy — Archived Notes & Decision Records
+#+date: 2026-04-11
+#+description: Completed decision records archived from notes.org. Full detail in git history.
+
+* Archived [2026-04-11] — Second prune
+
+** Curriculum gap analysis [2026-04-09]
+Review of Agentic Engineering Curriculum (=/home/oldbones/Downloads/agentic-engineering-curriculum.pdf=, 114 pages).
+Reviewed pages 1–40 (executive summary, all modules, framework deep dives, maturity model).
+
+*** What we're doing well
+
+| Principle | Curriculum source | How we implement it |
+|---|---|---|
+| Living Specifications | DreamingBinary | =todo.org= + =notes.org= evolve via Q&A, appended during implementation |
+| Session summarization | DreamingBinary | Claude Code auto-summaries + notes.org progress logs after each track |
+| Spec-first development | DreamingBinary / Anthropic | Plan mode before implementation; tasks specified with context + rationale |
+| Decision documentation | DreamingBinary | notes.org uses Context → Choice → Rationale format |
+| Shift-left testing | Stripe Blueprints | =make test-frontend= before every push; CLAUDE.md enforces "never mark DONE until tests pass" |
+| Simplicity first | Anthropic | Single LLM + living specs; no orchestration added before it was needed |
+| Conditional agent rules | Stripe | Root =CLAUDE.md= + =frontend/CLAUDE.md= (subdirectory-scoped guidance) |
+| Human-in-the-loop | All frameworks | PENDING_APPROVAL gates on all non-trivial decisions; plan mode approval before implementation |
+| Human-readable spec names | DreamingBinary | Branch names are descriptive (=feature/css-track-3=); tasks are named, not numbered |
+
+We are solidly at *Phase 2 (Agentic Coding)* of the curriculum's maturity model: spec-first approach, multi-phase builds, exhaustive documentation. The spec is the contract.
+
+*** Gaps identified (added to todo.org)
+
+| Gap | Curriculum principle | Severity |
+|---|---|---|
+| Notes/todo only grow, never pruned | Institutional Memory Decay (Module 7.3) | Medium — will degrade as docs grow |
+| No self-review pass before pushing | Evaluator-Optimizer pattern (Anthropic) | Low — works now, becomes risky at scale |
+| No formal blueprint for feature workflow | Stripe Blueprints (Module 4) | Low — improvised each time, creates inconsistency |
+| No codename system for subsystems | DreamingBinary codename system | Low — cosmetic but aids agent comprehension |
+| No context hygiene strategy | FinOps / Context Bloat (Module 7.2) | Medium — notes.org will slow agents as it grows |
+| No handover document convention | RX / Human-in-the-Loop (Module 7.1) | Medium — when agents get stuck, re-diagnosis is expensive |
+
+*** What we deliberately skip (correct decisions)
+
+- *Blueprints as formal scripts*: At solo-developer scale, the Makefile + plan mode covers the same ground. Full blueprint infrastructure is for 10+ engineer teams.
+- *Tiger Agents / production queue*: Single user, local execution. The curriculum explicitly says Layer 4 "not needed yet" for solo developers.
+- *MCP Toolshed (50 tools)*: We have MCP for browser and career-data. That's appropriate for our scale.
+- *NVIDIA NIM / self-hosted inference*: Not economically justified at this scale.
+
+*** Maturity progression target
+
+Currently Phase 2. To reach Phase 3 (Agentic Engineering):
+- Implement the 6 gaps above
+- The codename system and memory pruning are the highest-leverage items
+- Blueprint formalization can wait until the team grows
+
+** Backups (export / import)
+[[file:todo.org::*Backups][↑ todo.org]]
+
+*** Export
+- Format choice: true Excel (.xlsx with one sheet per resource) or one CSV file per resource zipped together?
+  one xlsx
+- Who generates the file — the API (streaming download) or the frontend assembling JSON into a client-side blob?
+  api
+- Which resources are included: job-posts, job-applications, questions, answers — anything else (resumes, companies)?
+  just listed no resumes or companies.  no summaries or scores; those can be regenerated
+
+*** Import
+- One-way restore (wipe & replace) or merge with existing data?
+  merge
+- Conflict strategy on merge: skip duplicates, overwrite, or error and report?
+  skip duplicates.  the user can remove ones that they don't like
+- Should import be superuser-only or available to any user?
+  super user for now
+
+*** API notes [api]
+- Export endpoint: =GET /api/v1/career-data/export/= returning =application/vnd.openxmlformats-officedocument.spreadsheetml.sheet= via =StreamingHttpResponse= with =Content-Disposition: attachment=. Library: =openpyxl= (already available in many Django stacks, adds ~2 MB to the image).
+- Import endpoint: =POST /api/v1/career-data/import/= accepting =multipart/form-data= with a file field. Parse with =openpyxl= or Python's =csv= module; run inside a DB transaction so a bad row rolls back the whole import.
+- Both endpoints use the existing =IsAuthenticated= permission; superuser-only restriction can be toggled via =IsAdminUser= if decided above.
+- No new models needed — purely a read/write layer over existing ones.
+
+*** Waiting on
+~~Format choice (.xlsx vs CSV) and conflict strategy (skip / overwrite / error).~~ APPROVED [2026-04-09]. xlsx, merge, skip duplicates, superuser-only.
+
+** CSS maturation / HyperUI / dark mode / jade palette [COMPLETED 2026-04-09]
+All 4 tracks complete. Branch chain: main <- track-1 <- track-2 <- track-3 <- track-4.
+- Track 1: input audit + standardisation (11 commits, structural bugs fixed across forms)
+- Track 2: shared components — =EmptyState= (17 sites), =Buttons::Favorite= (6 sites)
+- Track 3: dead CSS removal (-419 lines), TOC + section markers added. app.css 2462 -> 2043 lines.
+- Track 4: 5 new CSS tokens (=--surface=, =--surface-alt=, =--surface-hover=, =--tee-bg=, =--page-bg=), dark mode (=[data-theme="dark"]=), jade palette, ThemeService + sidebar toggle.
+- Dark mode polish: Tailwind =dark:= wired to =data-theme=, table/form/button/PowerSelect dark variants, body =color: var(--text)=, Tailwind gray utility overrides via CSS specificity.
+
+*** Decisions
+- [2026-04-08 product-owner] APPROVED — all four tracks, in order.
+- [2026-04-09 product-owner] Lean on Tailwind; HyperUI is the reference; new components use Tailwind only.
+
+*** Key references (still relevant for future work)
+- HyperUI repo: =~/Sandbox/hyperui= (survives reboots). Reclone: =git clone https://github.com/markmead/hyperui ~/Sandbox/hyperui=
+- Component examples: =~/Sandbox/hyperui/public/examples/application/{category}/{n}.html=
+- Steps/breadcrumb: =steps/5.html= (numbered circles) — recommended base for =JobApplications::StepBar=
+- Toggles: =toggles/1.html= (pure CSS checkbox toggle) — used for dark mode toggle
+- CSS tokens (=:root=): =--text=, =--muted=, =--bg=, =--card=, =--border=, =--accent=, =--danger=, =--radius=, =--space-1...6=, =--surface=, =--surface-alt=, =--surface-hover=, =--tee-bg=, =--page-bg=
+- Dark mode: =[data-theme="dark"]= on =<html>=, managed by =ThemeService= (=app/services/theme.js=), persisted to localStorage
+- Tailwind dark mode: =darkMode: ['selector', '[data-theme="dark"]']= in =tailwind.config.js=; Tailwind gray utilities globally overridden via CSS specificity in =app.css=
+- Shared components: =EmptyState= (17 sites), =Buttons::Favorite= (6 sites)
+- app.css: 2043 lines with TOC and section markers; =.builder-form= pattern for forms
+
+#+NOTE: Full commit-by-commit progress logs for tracks 1-4 and dark mode polish are in git history (branches feature/css-track-1 through feature/css-track-4). Pruned [2026-04-09].
+
+** Waiting list sign-up
+[[file:todo.org::*I want users to be able to sign up for waiting list][↑ todo.org]]
+
+- Depends on multi-tenancy approval if you want waitlisted users to become real accounts later.
+- Simpler standalone path: unauthenticated =POST /api/v1/waitlist/= endpoint storing email + timestamp; no login required; admin reviews via Django admin.
+- Standalone path has zero dependency on multi-tenancy.
+
+*** API notes [api]
+- Standalone implementation: one new =Waitlist= Django model (=email=, =signed_up_at=, =notes=); one unauthenticated =AllowAny= endpoint with basic email-format validation.
+- No new library needed — Django's =EmailValidator= handles format checks.
+- Admin review: =Waitlist= registered in =admin.py= so it appears in Django admin at =/admin/=.
+- Promoting a waitlisted user: manual Django admin action to start; can be automated later.
+
+*** Waiting on
+Standalone waitlist endpoint now, or wait for multi-tenancy?
+
+** Dockerfile caching
+[[file:todo.org::*Caching deploy steps so it goes faster][↑ todo.org]]
+
+- Standard optimisation: copy dependency manifests (=pyproject.toml=, =uv.lock= for API; =package.json= for frontend) before source code so the dependency layer is cached between rebuilds.
+- Self-contained, zero risk, no design decisions required.
+- Expected improvement: rebuilds after source-only changes drop from ~3 min to ~30 sec.
+
+*** API notes [api]
+- Current API Dockerfile copies the entire source tree before =uv sync=, busting the dependency cache on every code change.
+- Fix: copy =pyproject.toml= + =uv.lock= -> run =uv sync --frozen --no-install-project= -> copy source -> run =uv sync= again. Two-stage install, cache-friendly.
+- The =--no-install-project= flag installs dependencies only (not the app itself), so the heavy layer is cached as long as lockfile doesn't change.
+- Dagger pipeline in =dagger/src/main.py= may also benefit from the same reordering.
+- No risk to production behaviour; purely build-time change.
+
+*** Waiting on
+Simple approve — no further input needed.
+
+** SPA analytics with Plausible [COMPLETE 2026-04-10]
+[[file:todo.org::*SPA and plausible][↑ todo.org]]
+- Plausible is privacy-friendly, GDPR-compliant, open-source, and can be self-hosted.
+- Self-hosted at =analytics.careercaddy.online= (separate service, not in this build).
+- Plausible automatically tracks =pushState=-based SPA navigation — no extra service or =routeDidChange= listener needed.
+- The =hash= script extension is included for hash-based routing support as well.
+- Script is in =frontend/app/templates/application.hbs= (lines 8-14), gated behind =this.isProduction=.
+
+*** References
+- SPA support docs (original removed, web archive): =https://web.archive.org/web/20260131081337/https://plausible.io/docs/spa-support=
+- Plausible source: =https://github.com/plausible/analytics=
+- Hash-based routing docs: =https://plausible.io/docs/hash-based-routing=
+
+** Favorite answers not appearing in career-data [2026-04-10]
+[[file:todo.org::*Favorite answers bug][↑ todo.org]]
+
+*** Root cause
+=CareerData.favorite_answers= (=api/job_hunting/lib/models/career_data.py:26-35=) first fetches questions where =question.favorite=True=, then fetches answers for those questions where =answer.favorite=True=. This means an answer only appears in career-data if *both* the question and the answer are favorited.
+
+The frontend UI only exposes favoriting on answers (the star button on the answers index page says "Favorited answers appear in Career Data"). Users never favorite the parent question, so the query always returns an empty list.
+
+*** Fix (implemented [2026-04-10])
+Multi-layer fix across API and frontend:
+
+**** Backend
+- =CareerData.favorite_answers=: query answers directly by =answer.favorite=True= for the user
+- =CareerData.question_applications=: derive from answers with favorited answers, not =question.favorite=
+- =CareerData= endpoint: returns object refs (=resume_ids=, =cover_letter_ids=, =answer_ids=) in =meta=
+- =AnswerService=: all 3 query sites now derive "favorite questions" from favorited answers
+- =QuestionViewSet=: removed =favorite= from create/update whitelists (read-only)
+- =AnswerViewSet=: added update/partial_update; syncs =question.favorite= as denormalized cache after save/delete
+
+**** Frontend
+- =career-data= model: =@tracked isDirty= flag, =markDirty()= method. Default is clean (from API). Dirty is write-only.
+- =career-data/index= route: returns cached record if clean; fetches fresh if dirty or absent. =unloadAll= before re-fetch so the new record starts clean.
+- All 8 favorite toggle sites call =this.store.peekRecord('career-data', '1')?.markDirty()= after save.
+
+**** Design principle
+Nobody directly favorites a question. A question is "favorite" only because it has a favorited answer. The =question.favorite= DB column is kept as a denormalized cache synced by the API on answer save/delete.
+
+** Job-application breadcrumb UI
+[[file:todo.org::*job-application][↑ todo.org]]
+- You saw an Adobe-style breadcrumb/status flow that's more readable than the current status bar.
+- Current status bar location: =frontend/app/components/job-applications/compact.hbs= and the show page.
+
+*** Reference HTML [2026-04-09 product-owner]
+This is the live HTML captured from an Adobe job application. It's a slick-slider-based step progress bar:
+- Steps: My Information -> My Experience -> Application Questions -> Voluntary Disclosures -> Self Identify -> Review
+- Active step has class =active progress-current=; completed steps have =progress-complete=; upcoming steps are unstyled.
+- Each step has a number bubble (=.number=) and a label (=.title=).
+- The slider uses Slick (a JS carousel) to handle overflow — steps scroll horizontally on narrow screens.
+- Relevant structure: =<li class="slide slick-slide [state-classes]">= containing =<span class="number">= + =<span class="title">=.
+
+#+BEGIN_SRC html
+<div class="navigation-summary" role="toolbar" id="breadcrumb-summary">
+  <ul class="progressbarlist breadcrumb-list">
+    <!-- Steps: My Information (complete), My Experience (complete),
+         Application Questions (complete), Voluntary Disclosures (active/current),
+         Self Identify (upcoming), Review (upcoming) -->
+    <!-- Each li has atm-id, atm-value, role="button", class="slide slick-slide [progress-*]" -->
+  </ul>
+</div>
+#+END_SRC
+
+css is here
+/home/oldbones/Network/syncthing/Projects/career_caddy/status.css
+Our implementation plan:
+- Build a =<JobApplications::StepBar>= Glimmer component that accepts =@steps= (array of labels) and =@currentStep= (index or id).
+- No Slick JS needed — use CSS =overflow-x: auto= with a flex row for horizontal scrolling.
+- Completed steps: checkmark or filled number circle. Active step: highlighted. Upcoming: muted.
+- Replace the status bar in =job-applications/compact.hbs= and the show page.
+
+#+NOTE: CSS for this component was previously noted in todo.org but was lost. Product owner to re-share or confirm direction.
+
+*** Waiting on
+Confirm design direction: checkmark vs. filled-number for completed steps. CSS for the number bubbles if previously drafted.

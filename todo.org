@@ -184,14 +184,13 @@ CLOSED: [2026-04-10 Thu]
 [[file:notes.org::*SPA analytics with Plausible][Considerations → notes.org]]
 No action needed. Plausible automatically tracks pushState-based SPA navigation. Script is already in application.hbs with hash extension included. Self-hosted at analytics.careercaddy.online.
 
-** TODO fonts and buttons from "under construction"              :APPROVED:
-[PENDING APPROVAL] — Design direction needed.
+** IN_PROGRESS fonts and buttons from "under construction" [2026-04-11 frontend] :APPROVED:
 [[file:notes.org::*Fonts and buttons from "under construction" page][Considerations → notes.org]]
-I was really impressed by the under construction html generated
-file:///home/oldbones/Projects/career_caddy_frontend/under-construction.html
-I want this font and button style for the main app
-CareerCaddy with two colors is amazing
-Dark mode should follow this color palette
+[[file:notes.org::*Color Palette System][Palette system → notes.org]]
+Color palette system implemented: indigo (default), blue, jade, rose, amber, violet.
+Settings > Appearance tab with palette cards + dark mode toggle.
+All ~50 template files migrated from hardcoded blue/indigo to =accent-*= Tailwind classes.
+Remaining: font adoption from under-construction.html.
 
 ** TODO Documentation in footer                                  :APPROVED:
 [PENDING APPROVAL] — Nav structure decisions needed.
@@ -201,7 +200,7 @@ if on companies/id/job-posts the documentation should be to companies and not jo
 
 ** IN_PROGRESS user settings page [2026-04-11 frontend+api]       :APPROVED:
 [[file:notes.org::*User settings page][Considerations → notes.org]]
-Route: =/settings= with two subnav tabs: Profile | Data.
+Route: =/settings= with three subnav tabs: Profile | Data | Appearance.
 Profile tab: view/edit user profile (name, email, phone, linkedin, github, address).
 Data tab: import/export xlsx actions (moved here since they're actions, not nav).
 Career Data remains its own top-level sidebar link (it's a resource view).
