@@ -130,10 +130,11 @@ CLOSED: [2026-04-12 Sat]
 CLOSED: [2026-04-12 Sat]
 #+NOTE: 15 tests in test_password_reset.py. Email templates: password_reset_email.txt, welcome_email.txt, waitlist_email.txt. Env vars: EMAIL_BACKEND, EMAIL_HOST, EMAIL_PORT, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, EMAIL_USE_TLS, DEFAULT_FROM_EMAIL, FRONTEND_URL. Docker compose updated for dev (console backend) and prod (SMTP, required vars).
 
-** TODO Lazy load the child resources.                           :APPROVED:
-[PENDING APPROVAL] — API audit required before removing includes.
+** DONE Lazy load the child resources. [2026-04-12 frontend]      :APPROVED:
+CLOSED: [2026-04-12 Sat]
 [[file:notes.org::*Lazy load child resources][Considerations → notes.org]]
-remove all the includes in the route because with multi-tenancy we need to not pre-load everything in the parent route.
+Removed eager includes from 12 show/edit/new routes — async relationships resolve on demand. Refactored StatusLog component from =peekAll= to hasMany relationship access. Trimmed index route includes to only what rows display (company, job-post). Converted 3 sub-routes from parent re-fetch to =store.query= with filter params. Kept includes on paginated lists where every row needs the belongsTo data. Resume routes untouched (sub-resources are the page content).
+#+NOTE: Resumes use =query('resume', { slim: 1 })= for pre-warm, not =findAll=. Index routes keep includes for belongsTo data displayed in every row — removing those creates N+1 which is worse than a single sideloaded response.
 
 ** DONE Disable runtime/prompts creation in production [2026-04-11 api]
 CLOSED: [2026-04-11 Fri]

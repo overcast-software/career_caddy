@@ -119,22 +119,30 @@ Archived to [[file:notes_archive.org::*Waiting list sign-up][notes_archive.org]]
 - 15 tests in =test_password_reset.py=
 - Docker: console backend in dev, SMTP in prod (=EMAIL_HOST= etc. required)
 
-** Lazy load child resources
+** Lazy load child resources [DONE 2026-04-12]
 [[file:todo.org::*Lazy load the child resources][↑ todo.org]]
 
-- Currently routes eagerly include related records (e.g. =include: 'job-post,company'= on scrapes show).
-- Removing includes means the page renders first, then fires secondary =findRecord= calls on demand.
-- User-visible impact: some detail sections will be blank briefly until the secondary fetch resolves.
-- Multi-tenancy benefit: pre-loading cross-owner data becomes impossible, reducing data-leak risk.
-- Approach: audit each =include= in Ember routes, classify as load-bearing (required for render) vs. incidental (only used in one conditional block).
+*** Outcome
+- 12 show/edit/new routes: all includes removed. Ember async relationships auto-fetch on demand.
+- StatusLog component: refactored from =store.peekAll= to =applicationStatuses= hasMany relationship.
+- 3 sub-routes (questions under job-posts/job-applications, answers under questions): converted from parent re-fetch with includes to =store.query= with =filter[job_post_id]=, =filter[application_id]=, =filter[question_id]= params.
+- Index/list routes: kept includes for belongsTo data every row displays (company, job-post). Removing these creates N+1 which is worse than a single sideloaded response.
+- Resume routes: untouched — sub-resources ARE the page content.
+- Where resumes appear in non-resume routes (cover-letters/index, summaries/index): pre-warmed with =query('resume', { slim: 1 })= instead of full =findAll=.
+
+*** What was removed vs kept
+| Route type | Before | After |
+|---|---|---|
+| show/edit/new | 1–7 includes per route | 0 (async resolves) |
+| job-posts/index | =scores,cover-letters,company,scores.resume= | =company= only |
+| cover-letters/index | =job-post,resume= | =job-post= + slim resume pre-warm |
+| summaries/index | =job-post,resume= | =job-post= + slim resume pre-warm |
+| Other index routes | unchanged | unchanged (rows need the data) |
 
 *** API notes [api]
-- The API already supports lazy loading — all resources are individually retrievable; no API changes needed.
-- Side-effect to verify: some ViewSet =retrieve()= methods skip ownership checks on included relations (e.g. a cover letter =include=resume= might return a resume owned by a different user if IDs were guessed). The security-audit branch will flag these.
-- Once includes are removed from the frontend, the API's =_build_included= code path (=views.py= ~line 700) becomes dead for those routes — can be removed later as clean-up.
-
-*** Waiting on
-Approve the audit (frontend-led). API will run a parallel check for ownership leaks in included relations.
+- No API changes needed — all resources individually retrievable.
+- =_build_included= ownership gap (only checks 4 of 10+ types) is now less exploitable since show/edit routes no longer request includes. Security audit should still address this for the index routes that keep includes.
+- Sub-route =store.query= calls use API filter params that already existed: =filter[job_post_id]=, =filter[application_id]=, =filter[question_id]=.
 
 ** Pydantic-AI toolsets — dynamic tool scoping [2026-04-10]
 [[file:todo.org::*MCP exposure][↑ todo.org]]
