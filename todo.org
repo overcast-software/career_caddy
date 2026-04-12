@@ -155,6 +155,10 @@ Separate workstream — API key auth covers current use cases.
 *** In app chat with AI is an idea
 *** external tools that can talk to the mcp sound awesome
 *** I want the agent to know who the user is. api-keys is one way, but I'd like the a chat app to know
+*** DONE Agent identity awareness — profile injection + MCP instructions [2026-04-11]
+System prompt in chat_server.py now explicitly tells the agent to use injected profile data.
+Fallback to username/email when first_name is empty. public_server.py has FastMCP instructions
+telling MCP clients to call get_current_user at session start.
 *** saved browser credentials is a major security vulnerability even for properly exposed MCP.
 
 ** TODO Security audit                                           :PENDING_APPROVAL:

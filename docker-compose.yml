@@ -63,6 +63,7 @@ services:
       ALLOWED_HOSTS: "localhost,127.0.0.1,api"
       USE_MCP_BROWSER_AGENT: "True"
       BROWSER_MCP_SSE_URL: "http://browser-mcp:3004/sse"
+      CHAT_SERVICE_URL: "http://chat:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -82,6 +83,29 @@ services:
       - "4200:4200"
     environment:
       CHOKIDAR_USEPOLLING: "true"
+    depends_on:
+      - api
+
+  # ── Chat Service ─────────────────────────────────────────────────────────
+  # SSE streaming chat — API proxies to this service after JWT auth.
+
+  chat:
+    build:
+      context: ./ai
+      args:
+        INSTALL_CAMOUFOX: "false"
+    working_dir: /app
+    command: uv run caddy-chat
+    volumes:
+      - ./ai:/app
+      - chat_venv:/app/.venv
+    environment:
+      CC_API_BASE_URL: "http://api:8000"
+      CHAT_HOST: "0.0.0.0"
+      CHAT_PORT: "8000"
+      CHAT_MODEL: ${CHAT_MODEL:-openai:gpt-4o-mini}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     depends_on:
       - api
 
@@ -133,3 +157,4 @@ volumes:
   postgres_data:
   frontend_node_modules:
   api_venv:
+  chat_venv:

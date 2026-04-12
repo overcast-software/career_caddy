@@ -53,6 +53,7 @@ services:
       GUNICORN_WORKERS: "2"
       SA_SCHEMA_ON_POST_MIGRATE: "True"
       BROWSER_SERVICE_URL: "http://host.docker.internal:3012"
+      CHAT_SERVICE_URL: "http://chat:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -100,6 +101,34 @@ services:
       start_period: 15s
       retries: 3
     mem_limit: 256m
+
+  # ── Chat Server (internal) ─────────────────────────────────────────────
+  # SSE streaming chat endpoint — API proxies to this service.
+  # Not exposed to the internet; only reachable via the Docker network.
+
+  chat:
+    image: ghcr.io/overcast-software/career_caddy_ai:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8031:8000"
+    environment:
+      CC_API_BASE_URL: "http://api:8000"
+      CHAT_HOST: "0.0.0.0"
+      CHAT_PORT: "8000"
+      CHAT_MODEL: ${CHAT_MODEL:-openai:gpt-4o-mini}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    command: ["uv", "run", "caddy-chat"]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    mem_limit: 512m
 
 volumes:
   postgres_data:

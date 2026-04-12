@@ -228,6 +228,17 @@ MCP Client → mcp.careercaddy.online (Caddy, TLS) → public_server.py (FastMCP
 - The Django API resolves user identity from the key — the MCP server never touches the DB.
 - Each tool reads the token via =get_access_token()= from FastMCP's dependency injection.
 - =get_current_user= tool: returns the authenticated user's profile so agents know who they act as.
+- plan for AI integration chat on the frontend
+- plan for AI integration via slack
+**** I have a branch at  /home/oldbones/Network/syncthing/Projects/career_caddy_ai/lib/tiger-agents-for-work
+It is capable of doing chat in slack
+however it's a hack on the original, and I'd like to not need to depend on a fork of that tiger project
+The agent should work on behalf of the person talking to it and no other.  It serves multiple users by using the correct api key
+- AI integration should have authorization access
+- By leveraging toolsets,   the AI should be constrained by user account auth.  some users will only get readonly for example
+**** I have  /home/oldbones/Network/syncthing/Projects/career_caddy_ai/run_email_web.py that I'd like to rework into and application to test mcp/careercaddy.online
+**** a chat client live in a sidebar on the right hand side of the web appliation although a full screen can be found at /caddy
+**** The chat can only be accessed by authed users with access and login from the front end will inform the agent on which user to act for.
 
 *** Tools exposed (21)
 14 ported from =career_caddy_server.py=:
@@ -259,6 +270,35 @@ For in-app chat where the agent acts as the logged-in user:
 3. Use FastMCP's =MultiAuth= to accept both API keys and OAuth tokens
 4. Frontend chat widget initiates PKCE, gets access token, passes to MCP
 Separate workstream. API key auth covers all current use cases.
+
+*** Agent identity awareness [2026-04-11]
+Two paths for the agent to know the user's identity:
+
+**** Web chat (chat_server.py) — JWT pass-through (Option C)
+- Frontend sends JWT in =Authorization: Bearer= header to =/api/v1/chat/=
+- Django proxy validates the JWT, then forwards the *same token* to the chat service
+- No temporary API keys created — eliminates the DB write per message overhead
+- Chat service calls =GET /api/v1/me/= with the forwarded token to fetch user profile
+- Profile (name, email, linkedin, github) is injected into the system prompt
+- Same token used for all downstream tool calls via =ApiClient=
+- System prompt explicitly instructs the agent to use this data and never deny access
+- Name fallback chain: =first_name last_name= → =username= → =email= → "authenticated but no profile"
+- Chat service accepts both JWTs and =jh_*= API keys — the API's auth stack handles either
+
+**** Public MCP server (public_server.py)
+- FastMCP =instructions= parameter tells MCP clients to call =get_current_user= at session start
+- =get_current_user= tool returns the authenticated user's full profile from the token claims
+- No system prompt injection needed — the MCP client's own LLM handles the instructions
+- Auth: =jh_*= API keys provisioned by the user (long-lived, for CLI/Slack/third-party apps)
+
+**** Key insight
+The web chat injects profile into the system prompt (server-side). The MCP server provides
+instructions for the client to fetch it (client-side). Both paths achieve the same result:
+the agent knows who the user is from the first message.
+
+Two auth token types serve different clients:
+- JWT: browser sessions (short-lived, auto-refreshed by the SPA)
+- API key (=jh_*=): MCP clients, Slack, CLI, third-party apps (long-lived, user-provisioned)
 
 *** Deployment
 - =docker-compose.prod.yml=: new =mcp= service using AI image, port 8030, depends on API healthcheck
