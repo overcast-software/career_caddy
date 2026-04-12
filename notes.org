@@ -109,8 +109,15 @@ Archived to [[file:notes_archive.org::*Waiting list sign-up][notes_archive.org]]
 - =django-anymail= adds just two env vars: =ANYMAIL_ESP_NAME= and =ANYMAIL_API_KEY= — simplest production path.
 - Both new endpoints are =AllowAny= + =csrf_exempt= (same pattern as =guest_session=).
 
-*** Waiting on
-Which email transport / provider?
+*** Implementation [2026-04-12]
+- Transport: =django.core.mail= + SMTP (user-provided credentials in =.env=)
+- No new dependencies — Django's built-in email + =PasswordResetTokenGenerator=
+- API endpoints: =POST /api/v1/password-reset/= and =POST /api/v1/password-reset/confirm/=
+- Frontend routes: =/forgot-password= and =/reset-password= (public, no auth guard)
+- Three email templates: =password_reset_email.txt=, =welcome_email.txt=, =waitlist_email.txt=
+- Welcome email sent on user registration; waitlist confirmation on signup
+- 15 tests in =test_password_reset.py=
+- Docker: console backend in dev, SMTP in prod (=EMAIL_HOST= etc. required)
 
 ** Lazy load child resources
 [[file:todo.org::*Lazy load the child resources][↑ todo.org]]
@@ -299,6 +306,78 @@ the agent knows who the user is from the first message.
 Two auth token types serve different clients:
 - JWT: browser sessions (short-lived, auto-refreshed by the SPA)
 - API key (=jh_*=): MCP clients, Slack, CLI, third-party apps (long-lived, user-provisioned)
+
+*** Chat UI architecture [2026-04-11]
+
+**** Grid-based sidebar
+The chat sidebar is a CSS grid area (=course-chat=), not a fixed overlay. It pushes the subnav
+and main content exactly like the left sidebar pushes from the other side. Grid definitions:
+- =course--chat-open=: adds =chat= column at =24rem=
+- =course--sidebar-open.course--chat-open=: three columns (sidebar + main + chat)
+- Mobile: chat takes full width, hides main content
+
+Opening one sidebar closes the other (mutual exclusion via =MainApplication= actions).
+
+**** Shared conversation state
+Both the sidebar panel and the =/caddy= full-page route render =<Chat::Panel />=, which reads
+from the singleton =chat= service. =sidebarOpen= state lives on the service so =MainApplication=
+and =Chat::Sidebar= can coordinate. Messages, streaming state, and conversation ID persist across
+route transitions within the same browser tab.
+
+**** Footer toggle
+The floating bubble button was replaced with an inline "Chat with AI" link in the footer =<nav>=.
+Hidden for guests. Hidden when the chat sidebar is already open.
+
+*** Chat markdown + SPA link navigation [2026-04-12]
+
+**** Markdown rendering
+Assistant messages in =<Chat::Message>= render through =<MarkdownToHtml>= (ember-cli-showdown).
+User messages remain plain text. Compact =.chat-markdown= CSS (tighter spacing than =.markdown-content=)
+with accent-colored links and dark mode support.
+
+**** SPA-aware links
+=chat/message.js= intercepts clicks on =<a href>= inside assistant messages. Relative paths
+(e.g. =/companies/42/job-applications=) route through =this.router.transitionTo()= — no page reload.
+External links (=http=, =mailto:=) pass through normally. This lets the AI link users directly
+to resources: "Check your [Disney applications](/companies/42/job-applications)".
+
+**** Auth bouncer messages
+Instead of raw HTTP errors, unauthenticated/guest chat attempts show friendly AI-style responses:
+- 401 (not logged in): "I'd love to help, but I need you to log in first. Head over to the [login page](/login)..."
+- 403 (guest account): "I can see you're browsing as a guest — welcome! [Sign up or log in](/login)..."
+Both use markdown links that navigate via the Ember router.
+
+*** Flash messages standard [2026-04-11]
+
+**** Severity types
+| Type | Use for | Example |
+|------|---------|---------|
+| =success= | Action completed | "Company saved." |
+| =danger= | Action failed | "Failed to save company." |
+| =warning= | Permissions, caution | "This feature requires a full account." |
+| =info= | Status, progress | "Generating cover letter..." |
+
+Retired: =alert=, =error=, =warn= — replaced across all 26 files.
+
+**** Message style
+- Sentence case, end with period
+- Success: ="{Thing} saved."=, ="{Thing} deleted."=, ="{Thing} created."=
+- Failure: ="Failed to save {thing}."=
+- No "successfully" filler
+- 403: no local flash — adapter handles globally with =sticky: true=
+
+**** Save pattern
+All saves use async/await with try/catch and 403 guard:
+#+BEGIN_SRC javascript
+try {
+  await record.save();
+  this.flashMessages.success('Thing saved.');
+} catch (error) {
+  if (error?.status !== 403) {
+    this.flashMessages.danger('Failed to save thing.');
+  }
+}
+#+END_SRC
 
 *** Deployment
 - =docker-compose.prod.yml=: new =mcp= service using AI image, port 8030, depends on API healthcheck

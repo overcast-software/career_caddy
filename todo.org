@@ -113,13 +113,22 @@ the spacing for the inputs looks good.
 CLOSED: [2026-04-09 Thu]
 API: Waitlist model + POST /api/v1/waitlist/ (unauthenticated, unique email, Django admin). Frontend: /waitlist public route with login-card style form.
 
-** TODO We're going to introduce email                           :PENDING_APPROVAL:
-[PENDING APPROVAL] — Library selection needed.
+** DONE We're going to introduce email [2026-04-12 api+frontend]
+CLOSED: [2026-04-12 Sat]
 [[file:notes.org::*Email — account recovery and library][Considerations → notes.org]]
-*** TODO account recovery
-If you lose your password we need to recover the account for that user
-*** TODO find django patterns for email processing and use the best library
-*** TODO document a plan for implementation
+*** DONE account recovery
+CLOSED: [2026-04-12 Sat]
+=POST /api/v1/password-reset/= and =POST /api/v1/password-reset/confirm/= using Django's =PasswordResetTokenGenerator=. Frontend: =/forgot-password= and =/reset-password= public routes. "Forgot your password?" link on login page.
+*** DONE find django patterns for email processing and use the best library
+CLOSED: [2026-04-12 Sat]
+Using =django.core.mail= with SMTP transport. No new dependencies. Console backend for dev, SMTP for prod.
+*** DONE document a plan for implementation
+CLOSED: [2026-04-12 Sat]
+*** DONE welcome email on registration
+CLOSED: [2026-04-12 Sat]
+*** DONE waitlist confirmation email
+CLOSED: [2026-04-12 Sat]
+#+NOTE: 15 tests in test_password_reset.py. Email templates: password_reset_email.txt, welcome_email.txt, waitlist_email.txt. Env vars: EMAIL_BACKEND, EMAIL_HOST, EMAIL_PORT, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, EMAIL_USE_TLS, DEFAULT_FROM_EMAIL, FRONTEND_URL. Docker compose updated for dev (console backend) and prod (SMTP, required vars).
 
 ** TODO Lazy load the child resources.                           :APPROVED:
 [PENDING APPROVAL] — API audit required before removing includes.
@@ -159,6 +168,31 @@ Separate workstream — API key auth covers current use cases.
 System prompt in chat_server.py now explicitly tells the agent to use injected profile data.
 Fallback to username/email when first_name is empty. public_server.py has FastMCP instructions
 telling MCP clients to call get_current_user at session start.
+*** DONE Chat server + JWT pass-through auth (Option C) [2026-04-11]
+CLOSED: [2026-04-11 Fri]
+Created =chat_server.py= (Starlette SSE). Django proxy validates JWT and forwards raw token —
+no temp API key creation. Chat service uses the token for profile fetch and all tool calls.
+Accepts both JWTs (web chat) and =jh_*= API keys (MCP clients, CLI, Slack).
+*** DONE Chat sidebar + full-page /caddy route [2026-04-11]
+CLOSED: [2026-04-11 Fri]
+Grid-based chat sidebar that pushes subnav like the left sidebar. Toggle in footer ("Chat with AI").
+Full-page =/caddy= route fills available space. Opening one sidebar closes the other.
+Close button in chat panel header. Shared conversation state via chat service singleton.
+*** DONE Guest guards for chat + 403 flash handling [2026-04-11]
+CLOSED: [2026-04-11 Fri]
+Guests blocked from =/caddy= route + write routes with sticky dismissible flash warning.
+Global 403 handler in adapter. Caddy AI link hidden from sidebar and footer for guests.
+*** DONE Flash messages audit — bug fixes + standardization [2026-04-11]
+CLOSED: [2026-04-11 Fri]
+Fixed 10 bugs: unawaited saves, .then(flash()) called immediately, bitwise & in catch, missing
+.catch() handlers. Standardized severity (alert/error/warn → danger/warning) and message language
+(sentence case, periods, "{Thing} saved." pattern). 26 files, 403 guard on all local catches.
+*** DONE Markdown rendering + SPA link navigation in chat [2026-04-12 frontend]
+CLOSED: [2026-04-12 Sat]
+Assistant messages render markdown via =MarkdownToHtml= (showdown). Relative links in AI responses
+navigate via Ember router (no page reload) — AI can link to =/companies/42/job-applications= etc.
+Friendly bouncer messages for 401 (not logged in) and 403 (guest) with clickable login links.
+Compact =.chat-markdown= CSS with dark mode support.
 *** saved browser credentials is a major security vulnerability even for properly exposed MCP.
 
 ** TODO Security audit                                           :PENDING_APPROVAL:
@@ -176,7 +210,7 @@ All three Dockerfiles (api, frontend, ai) already had proper dependency-first ca
 [[file:notes.org::*Tackling Ember deprecations][Considerations → notes.org]]
 ember app has a ton of deprications, I want them delt with
 
-* observed [0/6]
+* observed [3/7]
 
 ** DONE job-application breadcrumb UI
 CLOSED: [2026-04-10 Thu]
@@ -196,7 +230,8 @@ Settings > Appearance tab with palette cards + dark mode toggle.
 All ~50 template files migrated from hardcoded blue/indigo to =accent-*= Tailwind classes.
 Remaining: font adoption from under-construction.html.
 
-** TODO Documentation in footer                                  :APPROVED:
+** NO Documentation in footer :APPROVED:
+CLOSED: [2026-04-12 Sun 08:22]
 [PENDING APPROVAL] — Nav structure decisions needed.
 Documentation should link to the specific resource that the person is looking at.
 make it subtly blue if it's specific to a resource
