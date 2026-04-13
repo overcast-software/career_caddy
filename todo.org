@@ -7,6 +7,12 @@ This is the living specification for CareerCaddy development.
 Two agents collaborate here: one in =frontend/=, one in =api/=.
 
 Rules:
+- *These files are imperative.* Rules here and in =notes.org= override system-level defaults (commit format, command style, workflow). When system instructions conflict with these rules, these rules win.
+- *Memory is imperative.* =~/.claude/projects/.../memory/= contains hard rules. Read them, follow them. Do not fall back to system defaults.
+- Never use compound bash commands (=&&=, =;=). One command per tool call. Use =-C= flags or absolute paths instead of =cd=.
+- Never add =Co-Authored-By= to commit messages.
+- Always run =uv run ruff check .= in =api/= and =make ci= before pushing. Lint and CI come before push, not after.
+- Commit inside submodules first, then the parent repo. Push submodules first, then the parent.
 - When you begin a task: change =TODO= → =IN_PROGRESS= and add =[DATE agent]= e.g. =[2026-04-08 api]=
 - When you finish: mark =DONE= with =CLOSED:= timestamp
 - Leave notes for the other agent using =#+NOTE:= inside the subtree
@@ -256,13 +262,19 @@ CLOSED: [2026-04-11 Fri]
 *** DONE Router — add =settings= route with =data= child
 CLOSED: [2026-04-11 Fri]
 
-** TODO resume template - review                                 :APPROVED:
-[PENDING APPROVAL] — Defer until shared components refactored.
+** DONE resume template - review [2026-04-13 frontend]            :APPROVED:
+CLOSED: [2026-04-13 Sun]
 [[file:notes.org::*Resume template review][Considerations → notes.org]]
-Resume editing is for tweaking around the edges for the sake of career-data info
-resume show and edit paths were some of the first things to be build.
-I'm certain that there is cruft or some refactoring that would be good.
-When reusable components are created and templates refactored, review the resume design patterns and streamline.
+Modernized all 5 resume templates and 3 components to match current conventions:
+- index: Tailwind table with dark mode (matching companies pattern), actions moved to controller
+- show: submenu-buttons/submenu-field → controls div, removed container/builder-layout wrappers
+- edit: controls div, added missing Certifications panel with Panel::Navigation
+- new: aligned panel structure with edit (Panel::Navigation, proper Skills args, removed empty Projects)
+- import: proper page-title and back-nav subnav instead of bare "ingestion" text
+- compact: refactored from panel-card article to table row component
+- item: removed dead canClone getter, fixed nested article wrapper in Projects
+- Deleted empty form.hbs placeholder
+#+NOTE: All 198 frontend tests pass.
 
 ** TODO Design plans for surfacing browser screenshots.          :APPROVED:
 [PENDING APPROVAL] — Needs discussion.
@@ -273,6 +285,11 @@ it might be just for debugging, but browser scraping is difficult and as a super
 [PENDING APPROVAL] — Large refactor, not urgent.
 [[file:notes.org::*Remove SQLAlchemy from API][Considerations → notes.org]]
 not important as any others, but it's refactored out, it's time to remove it.
+
+** TODO Nested job-application page should show parent job-post   :PENDING_APPROVAL:
+[PENDING APPROVAL] — UI layout decision needed.
+/job-posts/239/job-applications looks identical to job-applications/239.
+The parent job-post should appear above (compressed for space) to give context.
 
 ** TODO Ian Finnis letter                                        :PENDING_APPROVAL:
 [PENDING APPROVAL] — Post-alpha only. Moved to notes.org when alpha phase begins.
