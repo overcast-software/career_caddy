@@ -41,7 +41,7 @@ services:
       DEBUG: "False"
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@db:5432/${DB_NAME:-job_hunting}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-api.careercaddy.online,localhost,127.0.0.1}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-api.careercaddy.online,localhost,127.0.0.1,api}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://careercaddy.online}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://careercaddy.online}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
