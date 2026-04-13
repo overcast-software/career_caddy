@@ -495,6 +495,11 @@ Archived to [[file:notes_archive.org::*SPA analytics with Plausible][notes_archi
 Approve for superuser-gated debug use, or defer until post-alpha?
 APPROVED There may be many screenshots, not just the final one.  Puting in an image path is my choice with `/api/v1/scrapes/{id}/screenshots` (plural)
 
+** Agent logfire
+https://pydantic.dev/docs/logfire/integrations/llms/pydanticai/
+https://pydantic.dev/docs/logfire/integrations/web-frameworks/django/
+
+
 ** Remove SQLAlchemy from API
 [[file:todo.org::*Completely remove SQLAlchemy from api][↑ todo.org]]
 
