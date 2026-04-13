@@ -294,10 +294,10 @@ Modernized all 5 resume templates and 3 components to match current conventions:
 [[file:notes.org::*Browser screenshot visibility (scrape debugging)][Considerations → notes.org]]
 it might be just for debugging, but browser scraping is difficult and as a super user I want visibility
 
-** TODO Completely remove SQLAlchemy from api                    :PENDING_APPROVAL:
-[PENDING APPROVAL] — Large refactor, not urgent.
+** DONE Completely remove SQLAlchemy from api
+CLOSED: [2026-04-13 Sun]
 [[file:notes.org::*Remove SQLAlchemy from API][Considerations → notes.org]]
-not important as any others, but it's refactored out, it's time to remove it.
+Deleted 8 SA infrastructure files (lib/db.py, lib/models/base.py, lib/models/user.py, middleware/sqlalchemy_session.py, initsa.py, create_sa_tables.py, alembic migration, SA_REMOVAL_PLAN.md). Renamed BaseSAViewSet → BaseViewSet, BaseSASerializer → BaseSerializer. Removed SA branches from CRUD methods, gutted apps.py SA init, removed SA middleware from settings, removed SQLAlchemy from pyproject.toml. Updated docker-compose startup commands and CLAUDE.md. 197 tests pass.
 
 ** TODO Nested job-application page should show parent job-post   :PENDING_APPROVAL:
 [PENDING APPROVAL] — UI layout decision needed.

@@ -516,23 +516,12 @@ CLOSED: [2026-04-13 Sun]
 #+NOTE: Added created_at to Score model (migration 0036). Rebuilt scores/index as standard table with job-post, resume, status, created date columns. Infinity scroll pagination. API orders by -created_at, -id.
 
 
-** Remove SQLAlchemy from API
+** Remove SQLAlchemy from API [DONE 2026-04-13]
 [[file:todo.org::*Completely remove SQLAlchemy from api][↑ todo.org]]
 
-- The API uses SQLAlchemy for all 33 domain models; Django ORM only handles auth tables.
-- Removing it means rewriting all 33 model classes, replacing SQLAlchemy sessions with Django ORM, and re-running migrations.
-- Estimated effort: large (multi-week API branch). No user-facing impact. Reduces stack complexity significantly.
-- Low urgency; the current dual-ORM setup works, it's just technical debt.
-
-*** API notes [api]
-- A migration plan already exists at =api/job_hunting/SA_REMOVAL_PLAN.md= — read it before starting.
-- Current state: all 33 domain models are already Django ORM models (the SA removal is largely done at the model layer). The remaining SA usage is in =lib/db.py= (session management), =lib/models/base.py= (BaseModel mixin), and a handful of =get_session()= calls in ViewSets.
-- Concrete remaining work: delete =lib/db.py=, remove =BaseModel.get_session()= calls, remove =get_session= overrides from ViewSets, drop =sqlalchemy= from =pyproject.toml=.
-- Risk: low — if the model layer is already Django ORM, the session removal is mechanical.
-- Benefit: removes ~5 MB from the Docker image, eliminates the two-step startup (=manage.py migrate= + =manage.py initsa=), simplifies =settings.py=.
-
-*** Waiting on
-Approve the branch (API agent owns; smaller than originally feared given current state).
+Completed. All SQLAlchemy infrastructure removed. The API now uses Django ORM exclusively.
+Startup simplified to =manage.py migrate= only (no more =initsa=).
+BaseSAViewSet → BaseViewSet, BaseSASerializer → BaseSerializer.
 
 ** Ian Finnis letter
 [[file:todo.org::*Ian Finnis letter][↑ todo.org]]

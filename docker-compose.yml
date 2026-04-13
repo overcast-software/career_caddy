@@ -45,7 +45,6 @@ services:
     entrypoint: ""
     command: >
       sh -c "python manage.py migrate --noinput &&
-             python manage.py initsa &&
              python manage.py runserver 0.0.0.0:8000"
     volumes:
       - ./api:/app

@@ -97,7 +97,7 @@ ai (Pydantic-AI agents + MCP servers)
 
 The **frontend** is a JSON:API client. The `application` adapter injects JWT auth headers and handles 401 → token refresh → retry automatically.
 
-The **API** uses a dual ORM: Django ORM for auth tables only; SQLAlchemy for all 33 domain models. Two-step startup is required: `manage.py migrate` (Django) then `manage.py initsa` (SQLAlchemy schema). The `initsa` step is safe to re-run — it uses a PostgreSQL advisory lock and is idempotent.
+The **API** uses Django ORM for all models. Startup requires only `manage.py migrate`.
 
 The **AI layer** runs locally. Agents chain MCP servers as tool providers. The main pipeline (`job_email_to_caddy.py`) orchestrates: email search → URL extraction → browser scrape → Career Caddy API POST. The AI layer authenticates to the API using a long-lived API key (`CC_API_TOKEN`), not a JWT.
 
