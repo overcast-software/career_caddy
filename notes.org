@@ -498,6 +498,22 @@ APPROVED There may be many screenshots, not just the final one.  Puting in an im
 ** Agent logfire
 https://pydantic.dev/docs/logfire/integrations/llms/pydanticai/
 https://pydantic.dev/docs/logfire/integrations/web-frameworks/django/
+** DONE companies/index delete doesn't remove the UI row.  similar fix done in other resources due to infinite scroll
+CLOSED: [2026-04-13 Sun]
+** DONE rename ollama_agent to agent_factory
+CLOSED: [2026-04-13 Sun]
+** make doctor
+It would be nice to audit the needs for running an appliaction for a user trying to set things up
+make a clear plan how to bring this feature about.
+** DONE job content in scrapes is too small to see if it actually scrapped content.  need an expand button
+CLOSED: [2026-04-13 Sun]
+#+NOTE: Added expand/collapse toggle. Also added source scrape and child scrapes relationship display.
+** DONE when the chat is too large (/caddy) the input field is hidden behind the footer
+CLOSED: [2026-04-13 Sun]
+#+NOTE: Added padding-bottom: 3rem to .caddy-fullpage to account for fixed footer.
+** DONE scores should use the standard table structure and be ordered by date created DESC
+CLOSED: [2026-04-13 Sun]
+#+NOTE: Added created_at to Score model (migration 0036). Rebuilt scores/index as standard table with job-post, resume, status, created date columns. Infinity scroll pagination. API orders by -created_at, -id.
 
 
 ** Remove SQLAlchemy from API
