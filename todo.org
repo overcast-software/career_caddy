@@ -18,19 +18,14 @@ Rules:
 - Leave notes for the other agent using =#+NOTE:= inside the subtree
 - Never mark DONE until =make test-api= or =make test-frontend= passes locally
 - API agent: always run =uv run ruff check .= in =api/= before every push
-- All branches cut from =develop=; PRs target =develop=
+- Feature branches cut from =main=; PRs target =main=
 - Do NOT touch items marked =[PENDING APPROVAL]=
 - *Max 2 CI attempts rule*: if tests/lint fail twice on the same problem, stop, document what failed and why in notes.org, and surface to the product owner. Do not loop indefinitely.
-- DONE tasks older than 30 days are archived to =todo_archive.org=. First prune: [2026-04-09].
+- DONE tasks older than 30 days are archived to =todo_archive.org=. Last prune: [2026-04-13].
 
-* Agentic Engineering — Curriculum Gaps [0/6]
+* Agentic Engineering — Curriculum Gaps [0/5]
 Items identified from the Agentic Engineering Curriculum (/home/oldbones/Downloads/agentic-engineering-curriculum.pdf) review on [2026-04-09].
 See [[file:notes.org::*Curriculum gap analysis][notes.org: Curriculum gap analysis]] for the full assessment.
-
-** DONE Prune stale decisions from notes.org and todo.org (institutional memory decay)
-CLOSED: [2026-04-09 Thu]
-[[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
-First quarterly prune complete. Archived 19 DONE subtrees to =todo_archive.org=. Trimmed CSS progress logs from notes.org. Updated stale "Waiting on" blocks.
 
 ** TODO Add self-review pass before pushing (Evaluator-Optimizer pattern)
 [[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
@@ -69,6 +64,7 @@ Actions:
 - Split notes.org into topic files (e.g., =notes-css.org=, =notes-api.org=) once it exceeds 600 lines
 - Add a note to CLAUDE.md: "Read only the sections of notes.org relevant to your current task"
 [PENDING APPROVAL] — Approve splitting strategy before implementing.
+#+NOTE: [2026-04-13] Archival is now active — 3 prunes completed. Splitting deferred until notes.org exceeds 600 lines.
 
 ** TODO Add handover documentation convention for stuck agents
 [[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
@@ -80,88 +76,10 @@ Action: add to CLAUDE.md — if a problem cannot be resolved after 2 attempts, w
 - Recommendation: what to investigate next
 Then surface to product owner rather than continuing to loop.
 
-* Tasks [0/10]
-
-** DONE Favorite answers bug + career-data dirty tracking [2026-04-10 api+frontend]
-CLOSED: [2026-04-10 Thu]
-#+NOTE: Favorited answers didn't appear in career-data. Fixed: all queries now derive "favorite questions" from favorited answers. question.favorite is read-only (synced on answer save/delete). Career-data model has isDirty tracking — toggling any favorite marks it dirty; career-data route re-fetches on next visit.
-[[file:notes.org::*Favorite answers not appearing in career-data][Analysis → notes.org]]
-
-** DONE Backups: [2/2]
-CLOSED: [2026-04-11 Fri]
-[APPROVED 2026-04-09] — xlsx export via API, merge import with skip-duplicates, superuser-only import.
-[[file:notes.org::*Backups (export / import)][Decisions → notes.org]]
-*** DONE export
-CLOSED: [2026-04-11 Fri]
-GET /api/v1/career-data/export/ → .xlsx with sheets: job-posts, job-applications, questions, answers. Library: openpyxl.
-*** DONE import
-CLOSED: [2026-04-11 Fri]
-POST /api/v1/career-data/import/ → multipart .xlsx upload. Merge with skip-duplicates. Superuser-only (IsAdminUser).
-#+NOTE: 8 tests in test_career_data_export_import.py covering export format, auth, import creation, skip-duplicates, superuser-only, bad file, and full round-trip.
-
-** TODO tool tips. where could it be useful.                     :PENDING_APPROVAL:
-[PENDING APPROVAL] — Defer until shared components are built.
-[[file:notes.org::*Tooltips][Considerations → notes.org]]
-Favorites could be explained with tool tip
-using hyperui component patterns write the tooltip as a argument into and ember component
-
-** TODO revamp scrapes/edit page                                 :PENDING_APPROVAL:
-[PENDING APPROVAL] — feature/scrapes-improvements merged; unblocked pending clarification.
-[[file:notes.org::*Revamp scrapes/edit page][Considerations → notes.org]]
-use more recent conventions
-the spacing for the inputs looks good.
-
-** TODO As a superuser I want to be able to manage user accounts. :PENDING_APPROVAL:
-[PENDING APPROVAL] — Multi-tenancy approval needed.
-[[file:notes.org::*Superuser account management][Considerations → notes.org]]
-
-** DONE I want users to be able to sign up for waiting list
-CLOSED: [2026-04-09 Thu]
-API: Waitlist model + POST /api/v1/waitlist/ (unauthenticated, unique email, Django admin). Frontend: /waitlist public route with login-card style form.
-
-** DONE We're going to introduce email [2026-04-12 api+frontend]
-CLOSED: [2026-04-12 Sat]
-[[file:notes.org::*Email — account recovery and library][Considerations → notes.org]]
-*** DONE account recovery
-CLOSED: [2026-04-12 Sat]
-=POST /api/v1/password-reset/= and =POST /api/v1/password-reset/confirm/= using Django's =PasswordResetTokenGenerator=. Frontend: =/forgot-password= and =/reset-password= public routes. "Forgot your password?" link on login page.
-*** DONE find django patterns for email processing and use the best library
-CLOSED: [2026-04-12 Sat]
-Using =django.core.mail= with SMTP transport. No new dependencies. Console backend for dev, SMTP for prod.
-*** DONE document a plan for implementation
-CLOSED: [2026-04-12 Sat]
-*** DONE welcome email on registration
-CLOSED: [2026-04-12 Sat]
-*** DONE waitlist confirmation email
-CLOSED: [2026-04-12 Sat]
-#+NOTE: 15 tests in test_password_reset.py. Email templates: password_reset_email.txt, welcome_email.txt, waitlist_email.txt. Env vars: EMAIL_BACKEND, EMAIL_HOST, EMAIL_PORT, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, EMAIL_USE_TLS, DEFAULT_FROM_EMAIL, FRONTEND_URL. Docker compose updated for dev (console backend) and prod (SMTP, required vars).
-
-** DONE Lazy load the child resources. [2026-04-12 frontend]      :APPROVED:
-CLOSED: [2026-04-12 Sat]
-[[file:notes.org::*Lazy load child resources][Considerations → notes.org]]
-Removed eager includes from 12 show/edit/new routes — async relationships resolve on demand. Refactored StatusLog component from =peekAll= to hasMany relationship access. Trimmed index route includes to only what rows display (company, job-post). Converted 3 sub-routes from parent re-fetch to =store.query= with filter params. Kept includes on paginated lists where every row needs the belongsTo data. Resume routes untouched (sub-resources are the page content).
-#+NOTE: Resumes use =query('resume', { slim: 1 })= for pre-warm, not =findAll=. Index routes keep includes for belongsTo data displayed in every row — removing those creates N+1 which is worse than a single sideloaded response.
-
-** DONE Disable runtime/prompts creation in production [2026-04-11 api]
-CLOSED: [2026-04-11 Fri]
-=write_prompt_to_file()= now returns =""= immediately when =DEBUG=False=. Added =runtime/= to =.gitignore=.
-
-** DONE AI spend tracking — full stack [2026-04-13 api+ai+frontend]
-CLOSED: [2026-04-13 Sun]
-API: AiUsage model + migration, pricing utility (per-model cost lookup), AiUsageSerializer,
-AiUsageViewSet with list/create/summary endpoints, staff access for cross-user views.
-AI: usage_reporter.py (fire-and-forget POST to API), agent_factory.py (renamed from ollama_agent,
-factory pattern with AgentConfig registry + get_agent()), all agents instrumented with usage
-reporting (chat, career_caddy, email_classifier, job_extractor, pipeline, browser_scraper).
-Frontend: settings/ai-spend route with summary cards, period/group-by controls, breakdown table.
-Chat: system prompt now includes frontend route map for resource linking.
-Tests: 20 API tests (pricing, CRUD, filters, staff access, summary aggregation),
-26 AI tests (agent_factory registry/model selection/get_agent, usage_reporter payload format).
-#+NOTE: Ollama imports are now optional (try/except) — Docker images without pydanticai_ollama work fine. ConcreteOllama* classes are a hack to be reviewed (task pending).
+* IN_PROGRESS [0/3]
 
 ** IN_PROGRESS We want to increase code coverage in testing [2026-04-08 api]
-#+NOTE: Branch = feature/test-coverage (cut from develop). API agent owns this.
-Added test_job_post.py, test_job_application.py, test_resume.py, test_answer.py — CRUD + model + auth tests for four previously uncovered resources. Ongoing; more coverage can be added incrementally.
+#+NOTE: API agent owns this. Added test_job_post.py, test_job_application.py, test_resume.py, test_answer.py — CRUD + model + auth tests for four previously uncovered resources. Ongoing; more coverage can be added incrementally.
 
 ** IN_PROGRESS MCP exposure at mcp.careercaddy.online [2026-04-10 ai+api]  :APPROVED:
 [[file:notes.org::*MCP deployment at mcp.careercaddy.online][Architecture → notes.org]]
@@ -181,66 +99,21 @@ Created =lib/toolsets.py=. Migrated =career_caddy_agent.py=. 44-test suite added
 *** TODO OAuth 2.0 support for in-app chat (Phase 2)
 Add =django-oauth-toolkit= to API; PKCE flow for Ember SPA; FastMCP =MultiAuth=.
 Separate workstream — API key auth covers current use cases.
-*** In app chat with AI is an idea
-*** external tools that can talk to the mcp sound awesome
-*** I want the agent to know who the user is. api-keys is one way, but I'd like the a chat app to know
 *** DONE Agent identity awareness — profile injection + MCP instructions [2026-04-11]
 System prompt in chat_server.py now explicitly tells the agent to use injected profile data.
 Fallback to username/email when first_name is empty. public_server.py has FastMCP instructions
 telling MCP clients to call get_current_user at session start.
 *** DONE Chat server + JWT pass-through auth (Option C) [2026-04-11]
 CLOSED: [2026-04-11 Fri]
-Created =chat_server.py= (Starlette SSE). Django proxy validates JWT and forwards raw token —
-no temp API key creation. Chat service uses the token for profile fetch and all tool calls.
-Accepts both JWTs (web chat) and =jh_*= API keys (MCP clients, CLI, Slack).
 *** DONE Chat sidebar + full-page /caddy route [2026-04-11]
 CLOSED: [2026-04-11 Fri]
-Grid-based chat sidebar that pushes subnav like the left sidebar. Toggle in footer ("Chat with AI").
-Full-page =/caddy= route fills available space. Opening one sidebar closes the other.
-Close button in chat panel header. Shared conversation state via chat service singleton.
 *** DONE Guest guards for chat + 403 flash handling [2026-04-11]
 CLOSED: [2026-04-11 Fri]
-Guests blocked from =/caddy= route + write routes with sticky dismissible flash warning.
-Global 403 handler in adapter. Caddy AI link hidden from sidebar and footer for guests.
 *** DONE Flash messages audit — bug fixes + standardization [2026-04-11]
 CLOSED: [2026-04-11 Fri]
-Fixed 10 bugs: unawaited saves, .then(flash()) called immediately, bitwise & in catch, missing
-.catch() handlers. Standardized severity (alert/error/warn → danger/warning) and message language
-(sentence case, periods, "{Thing} saved." pattern). 26 files, 403 guard on all local catches.
 *** DONE Markdown rendering + SPA link navigation in chat [2026-04-12 frontend]
 CLOSED: [2026-04-12 Sat]
-Assistant messages render markdown via =MarkdownToHtml= (showdown). Relative links in AI responses
-navigate via Ember router (no page reload) — AI can link to =/companies/42/job-applications= etc.
-Friendly bouncer messages for 401 (not logged in) and 403 (guest) with clickable login links.
-Compact =.chat-markdown= CSS with dark mode support.
 *** saved browser credentials is a major security vulnerability even for properly exposed MCP.
-
-** TODO Security audit                                           :PENDING_APPROVAL:
-[PENDING APPROVAL] — Requires explicit approval.
-[[file:notes.org::*Security audit — multi-tenancy data isolation][Considerations → notes.org]]
-Multi-tenancy is a new feature and I want to make the data is secure
-
-** DONE Caching deploy steps so it goes faster
-CLOSED: [2026-04-10 Thu]
-[[file:notes.org::*Dockerfile caching][Considerations → notes.org]]
-All three Dockerfiles (api, frontend, ai) already had proper dependency-first caching. Fixed the Dagger pipeline (dagger/src/career_caddy_pipeline.py): build_api, build_frontend, and build_ai now copy dependency manifests and install before copying source, so source-only changes no longer bust the dependency cache.
-
-** TODO Tackling deprications                                    :PENDING_APPROVAL:
-[PENDING APPROVAL] — Easy shims ready to go; full sweep needs approval.
-[[file:notes.org::*Tackling Ember deprecations][Considerations → notes.org]]
-ember app has a ton of deprications, I want them delt with
-
-* observed [3/7]
-
-** DONE job-application breadcrumb UI
-CLOSED: [2026-04-10 Thu]
-[[file:notes.org::*Job-application breadcrumb UI][Considerations → notes.org]]
-Replaced the SVG StatusFlow with a reusable StatusSteps breadcrumb component (Adobe-inspired, HyperUI Tailwind pattern). Numbered circles with connecting lines — checkmarks for done, highlighted active, X for failed/terminal states. Used on show and edit pages. Terminal states (Vetted Bad, Rejected, Declined, etc.) branch off the main flow at the correct point. Shared utility in utils/job-application-steps.js.
-
-** DONE SPA and plausible
-CLOSED: [2026-04-10 Thu]
-[[file:notes.org::*SPA analytics with Plausible][Considerations → notes.org]]
-No action needed. Plausible automatically tracks pushState-based SPA navigation. Script is already in application.hbs with hash extension included. Self-hosted at analytics.careercaddy.online.
 
 ** IN_PROGRESS fonts and buttons from "under construction" [2026-04-11 frontend] :APPROVED:
 [[file:notes.org::*Fonts and buttons from "under construction" page][Considerations → notes.org]]
@@ -250,69 +123,121 @@ Settings > Appearance tab with palette cards + dark mode toggle.
 All ~50 template files migrated from hardcoded blue/indigo to =accent-*= Tailwind classes.
 Remaining: font adoption from under-construction.html.
 
-** NO Documentation in footer :APPROVED:
-CLOSED: [2026-04-12 Sun 08:22]
-[PENDING APPROVAL] — Nav structure decisions needed.
-Documentation should link to the specific resource that the person is looking at.
-make it subtly blue if it's specific to a resource
-if on companies/id/job-posts the documentation should be to companies and not job-posts. A more specific link can be inserted later elsewhere.
+* Bugs — API
 
-** IN_PROGRESS user settings page [2026-04-11 frontend+api]       :APPROVED:
-[[file:notes.org::*User settings page][Considerations → notes.org]]
-Route: =/settings= with three subnav tabs: Profile | Data | Appearance.
-Profile tab: view/edit user profile (name, email, phone, linkedin, github, address).
-Data tab: import/export xlsx actions (moved here since they're actions, not nav).
-Career Data remains its own top-level sidebar link (it's a resource view).
-*** DONE Profile tab — view/edit profile fields
-CLOSED: [2026-04-11 Fri]
-API: exposed linkedin, github, address, links in DjangoUserSerializer; persist in =_upsert=.
-Frontend: settings/index route + controller + template with @tracked intermediaries, edit/save/cancel.
-*** DONE Data tab — export/import xlsx
-CLOSED: [2026-04-11 Fri]
-Frontend: settings/data route + controller + template. Raw fetch for blob download + multipart upload.
-*** DONE Sidebar — add "Settings" cog link (bottom section near dark mode toggle)
-CLOSED: [2026-04-11 Fri]
-*** DONE Router — add =settings= route with =data= child
-CLOSED: [2026-04-11 Fri]
-
-** DONE resume template - review [2026-04-13 frontend]            :APPROVED:
+** DONE creating user in admin/users gives "Password is required" despite having password
 CLOSED: [2026-04-13 Sun]
-[[file:notes.org::*Resume template review][Considerations → notes.org]]
-Modernized all 5 resume templates and 3 components to match current conventions:
-- index: Tailwind table with dark mode (matching companies pattern), actions moved to controller
-- show: submenu-buttons/submenu-field → controls div, removed container/builder-layout wrappers
-- edit: controls div, added missing Certifications panel with Panel::Navigation
-- new: aligned panel structure with edit (Panel::Navigation, proper Skills args, removed empty Projects)
-- import: proper page-title and back-nav subnav instead of bare "ingestion" text
-- compact: refactored from panel-card article to table row component
-- item: removed dead canClone getter, fixed nested article wrapper in Projects
-- Deleted empty form.hbs placeholder
-#+NOTE: All 198 frontend tests pass.
+Frontend user model was missing =@attr('string') password= — field never serialized to API.
+** DONE AI usage: scored a job-post but it didn't show up as score — all records show "chat"
+CLOSED: [2026-04-13 Sun]
+=job_scorer.py= now attaches =_usage= and =_model_name= to result; =_score()= creates =AiUsage= with =trigger="score"=.
+** TODO import is not idempotent (skip-duplicates not working?)
+** DONE revoke API key returns 200 but doesn't actually delete. Same on Admin/ index.
+CLOSED: [2026-04-13 Sun]
+=destroy()= now calls =obj.delete()= instead of =obj.revoke()= (was soft-delete only).
+** TODO AI spend appears broken in prod                           :PENDING_APPROVAL:
+Checking the DB in prod first before making changes.
+** TODO scrape failure — MCP ConnectTimeout in Docker
+#+BEGIN_SRC
+api ERROR scraper MCP dispatch failed
+ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+httpx.ConnectTimeout
+#+END_SRC
 
-** TODO Design plans for surfacing browser screenshots.          :APPROVED:
-[PENDING APPROVAL] — Needs discussion.
+* Bugs — Frontend
+
+** DONE score screen is off center
+CLOSED: [2026-04-13 Sun]
+Replaced bare =<div class="container">= with =<RouteLayout>= in =scores/show.hbs=.
+** DONE I don't see "successfully deleted" when cleaning up (deleting) a job-post
+CLOSED: [2026-04-13 Sun]
+Added =flashMessages.success('Job post deleted.')= to =job-posts/item.js= (index list delete path).
+** DONE dark mode: non-indigo palettes have bright highlights instead of grey. Fairway in dark for any color should be #0f172a, not same as light mode.
+CLOSED: [2026-04-13 Sun]
+Added dark-mode CSS override for all non-indigo palettes: =--page-bg: #0f172a; --tee-bg: #334155=.
+** DONE favorite button for resumes is bigger than other buttons
+CLOSED: [2026-04-13 Sun]
+Reduced =.btn.favorite= padding to =4px 8px= with =font-size: 0.75rem= to match row siblings.
+** DONE scores/index status pill label breaks when "completed" separates from left side of pill
+CLOSED: [2026-04-13 Sun]
+Added =inline-block whitespace-nowrap= to status pill span.
+** DONE admin path =/admin/1= goes to first API key — should be namespaced =/admin/api-keys/1=
+CLOSED: [2026-04-13 Sun]
+Changed router paths to =/api-keys/new= and =/api-keys/:api_key_id=.
+** DONE when making a new API key I didn't get a chance to copy it
+CLOSED: [2026-04-13 Sun]
+After creation, stays on page showing full key with Copy button; user clicks Done to navigate away.
+** TODO as a guest I should be able to post or patch a cover letter — reevaluate security auth
+
+* Bugs — AI Chat
+
+** DONE chat can't follow up after initial response
+CLOSED: [2026-04-13 Sun]
+Root cause: =api= Docker hostname missing from =ALLOWED_HOSTS=. Every tool call from chat service → API returned 400 =DisallowedHost=. Fixed in =api/settings.py=. Also added =history_processors= to chat agent for robustness.
+*** note: no job posts existed in prod where testing happened
+*** no "thinking" shown after "One moment, please."
+** TODO AI willing to make a job post without a company — should infer from recruiter company, email domain, or job posting hostname
+** TODO AI counted only 2/5 resumes — apparently only counted favorites
+** TODO can we give the AI chat reference to your current page?
+** TODO can the AI bot navigate the user to the correct page?
+** TODO can the AI bot help a person get started by accessing the same data as the screen the user is on?
+
+* Features — APPROVED (ready to work)
+
+** TODO revamp scrapes/edit page                                   :APPROVED:
+[[file:notes.org::*Revamp scrapes/edit page][Considerations → notes.org]]
+Use more recent conventions. The spacing for the inputs looks good.
+
+** TODO As a superuser I want to be able to manage user accounts   :APPROVED:
+Check if this is complete.
+[[file:notes.org::*Superuser account management][Considerations → notes.org]]
+*** TODO decide on user roles and be able to manage them as admin
+
+** TODO Security audit — multi-tenancy data isolation              :APPROVED:
+[[file:notes.org::*Security audit — multi-tenancy data isolation][Considerations → notes.org]]
+Multi-tenancy is a new feature and I want to make the data is secure.
+
+** TODO Design plans for surfacing browser screenshots             :APPROVED:
 [[file:notes.org::*Browser screenshot visibility (scrape debugging)][Considerations → notes.org]]
-it might be just for debugging, but browser scraping is difficult and as a super user I want visibility
+It might be just for debugging, but browser scraping is difficult and as a super user I want visibility.
 
-** DONE Completely remove SQLAlchemy from api
-CLOSED: [2026-04-13 Sun]
-[[file:notes.org::*Remove SQLAlchemy from API][Considerations → notes.org]]
-Deleted 8 SA infrastructure files (lib/db.py, lib/models/base.py, lib/models/user.py, middleware/sqlalchemy_session.py, initsa.py, create_sa_tables.py, alembic migration, SA_REMOVAL_PLAN.md). Renamed BaseSAViewSet → BaseViewSet, BaseSASerializer → BaseSerializer. Removed SA branches from CRUD methods, gutted apps.py SA init, removed SA middleware from settings, removed SQLAlchemy from pyproject.toml. Updated docker-compose startup commands and CLAUDE.md. 197 tests pass.
+* Features — PENDING APPROVAL
 
-** TODO Nested job-application page should show parent job-post   :PENDING_APPROVAL:
-[PENDING APPROVAL] — UI layout decision needed.
-/job-posts/239/job-applications looks identical to job-applications/239.
-The parent job-post should appear above (compressed for space) to give context.
+** TODO tool tips — where could they be useful?                    :PENDING_APPROVAL:
+[PENDING APPROVAL] — Defer until shared components are built.
+[[file:notes.org::*Tooltips][Considerations → notes.org]]
+Favorites could be explained with tool tip.
+Using HyperUI component patterns, write the tooltip as an argument into an Ember component.
 
-** TODO Ian Finnis letter                                        :PENDING_APPROVAL:
-[PENDING APPROVAL] — Post-alpha only. Moved to notes.org when alpha phase begins.
+** TODO Tackling deprecations                                      :PENDING_APPROVAL:
+[PENDING APPROVAL] — Easy shims ready to go; full sweep needs approval.
+[[file:notes.org::*Tackling Ember deprecations][Considerations → notes.org]]
+Ember deprecations are numerous. Dagger is out of date. FastMCP may have an update.
+
+** TODO Ian Finnis letter                                          :PENDING_APPROVAL:
+[PENDING APPROVAL] — Post-alpha only.
 [[file:notes.org::*Ian Finnis letter][Considerations → notes.org]]
-write a message to ian finnis asking permission to use his likeness for the webpage
-point out that it's a free service and use lamans terms to explain the virtues of open source in this context
-point out that I was watching him and tommy fleetwood win the fedex cup in September when I began writing
-I want to be able to link to his specific social media or anything else that he requests.
-reenforce that I don't make any money off of this site. in fact I loose money on server costs
-My technical blog at dougheadley.com I can be reached at doug@overcastsoftware.com
-I am a new golfer that started maybe 4 years ago.
-I won't send this message out until after going into official alpha phase so add it to notes.org
-he is here on social media https://www.instagram.com/finoEFC/
+Write a message to Ian Finnis asking permission to use his likeness for the webpage.
+Point out it's a free service, explain open source in layman's terms.
+Started writing while watching him and Tommy Fleetwood win the FedEx Cup in September.
+Link to his social media or anything else he requests.
+No money made — server costs are a loss. Blog at dougheadley.com, reach at doug@overcastsoftware.com.
+New golfer, ~4 years. Social: https://www.instagram.com/finoEFC/
+
+* Features — New / Unspecified
+
+** TODO invited to create account
+** TODO test email
+** TODO invite to create account from waitlist
+** TODO omarchy theme integration
+We had looked at this before and found it feasible. Turn it into a feature.
+[[file:notes.org::*Color Palette System][Omarchy integration roadmap → notes.org]]
+** TODO scores: need an edit page to help with relationships that need to be manually set
+** TODO =make up= should include AI — it's integral
+** TODO Docker network error on =make up-ai=
+#+BEGIN_SRC
+Error response from daemon: failed to set up container networking: network ... not found
+make: *** [Makefile:11: up-ai] Error 1
+#+END_SRC
+** TODO Claude for glint
+** TODO /omarchy reinstall ollama
