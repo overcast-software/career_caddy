@@ -211,3 +211,32 @@ Our implementation plan:
 
 *** Waiting on
 Confirm design direction: checkmark vs. filled-number for completed steps. CSS for the number bubbles if previously drafted.
+
+* Archived [2026-04-13] — Third prune
+
+** Email — account recovery and library [DONE 2026-04-12]
+Transport: django.core.mail + SMTP. Password reset via PasswordResetTokenGenerator. Frontend: /forgot-password and /reset-password public routes. Three email templates. 15 tests. Console backend for dev, SMTP for prod.
+
+** Lazy load child resources [DONE 2026-04-12]
+12 show/edit/new routes: includes removed, async relationships auto-fetch. StatusLog refactored from peekAll to hasMany. Index routes kept includes for belongsTo data. Resume routes untouched.
+
+** Remove SQLAlchemy from API [DONE 2026-04-13]
+All SA infrastructure removed. API uses Django ORM exclusively. Startup: manage.py migrate only. BaseSAViewSet → BaseViewSet, BaseSASerializer → BaseSerializer.
+
+** Resume template review [DONE 2026-04-13]
+Modernized all 5 resume templates and 3 components to match current conventions. 198 tests pass.
+
+** companies/index delete row fix [DONE 2026-04-13]
+Similar to other resources with infinite scroll.
+
+** rename ollama_agent to agent_factory [DONE 2026-04-13]
+Factory pattern with AgentConfig registry + get_agent().
+
+** job content expand button for scrapes [DONE 2026-04-13]
+Added expand/collapse toggle. Also added source scrape and child scrapes relationship display.
+
+** chat /caddy input hidden behind footer [DONE 2026-04-13]
+Added padding-bottom: 3rem to .caddy-fullpage.
+
+** scores standard table + ordering [DONE 2026-04-13]
+Added created_at to Score model (migration 0036). Standard table with infinity scroll. API orders by -created_at, -id.

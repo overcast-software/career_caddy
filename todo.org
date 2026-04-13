@@ -180,6 +180,9 @@ Root cause: =api= Docker hostname missing from =ALLOWED_HOSTS=. Every tool call 
 ** TODO AI counted only 2/5 resumes — apparently only counted favorites
 ** TODO can we give the AI chat reference to your current page?
 ** TODO can the AI bot navigate the user to the correct page?
+** TODO I want elicitation like in https://gofastmcp.com/servers/elicitation for the chat.  and explicit button.
+
+
 ** TODO can the AI bot help a person get started by accessing the same data as the screen the user is on?
 
 * Features — APPROVED (ready to work)
@@ -226,9 +229,24 @@ New golfer, ~4 years. Social: https://www.instagram.com/finoEFC/
 
 * Features — New / Unspecified
 
-** TODO invited to create account
-** TODO test email
-** TODO invite to create account from waitlist
+** DONE invited to create account
+CLOSED: [2026-04-13 Sun]
+Invitation model with one-time tokens. =POST /api/v1/accept-invite/= public endpoint.
+Frontend =/accept-invite?token=...= route. Admin =/admin/invitations= page.
+** DONE test email
+CLOSED: [2026-04-13 Sun]
+=POST /api/v1/test-email/= admin-only endpoint verifies SMTP config.
+** DONE invite to create account from waitlist
+CLOSED: [2026-04-13 Sun]
+"Invite" button on admin waitlist page. Creates invitation, sends email, auto-removes waitlist entry.
+** DONE signup page with dual mode (registration / waitlist)
+CLOSED: [2026-04-13 Sun]
+=/signup= shows full registration form when =REGISTRATION_OPEN=true=, waitlist form when closed.
+Backend enforces — cookie manipulation cannot bypass.
+** DONE password validation
+CLOSED: [2026-04-13 Sun]
+=AUTH_PASSWORD_VALIDATORS= added to Django settings. Min 8 chars, no common passwords, no numeric-only.
+Validation on both =DjangoUserViewSet.create()= and =accept_invite=.
 ** TODO omarchy theme integration
 We had looked at this before and found it feasible. Turn it into a feature.
 [[file:notes.org::*Color Palette System][Omarchy integration roadmap → notes.org]]

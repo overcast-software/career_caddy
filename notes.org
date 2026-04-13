@@ -24,6 +24,8 @@ Approve the shared-component pattern and confirm scope (favorites-only to start,
 [[file:todo.org::*revamp scrapes/edit page][↑ todo.org]]
 - =feature/scrapes-improvements= is merged; this is now unblocked.
 - "More recent conventions" — does this mean matching the existing =panel-card= / =field-label= / =field-input= patterns used on job-posts/edit and companies/edit?
+  It actually looks pretty good.  the buttons should be below on show and not in subnav on scrape/show
+  the scrapes/index page show full job posts and it's way to big for the table sometimes.
 - Or is there a specific layout change in mind (e.g. side-by-side fields, inline status)?
 
 *** Waiting on
@@ -89,60 +91,11 @@ No model migrations. No new columns.
 ** Waiting list sign-up [ARCHIVED 2026-04-11]
 Archived to [[file:notes_archive.org::*Waiting list sign-up][notes_archive.org]]. DONE — standalone POST /api/v1/waitlist/, AllowAny, Django admin review.
 
-** Email — account recovery and library
-[[file:todo.org::*We're going to introduce email][↑ todo.org]]
+** Email — account recovery and library [ARCHIVED 2026-04-13]
+Archived to [[file:notes_archive.org::*Email][notes_archive.org]]. DONE — django.core.mail + SMTP, password reset, welcome/waitlist emails, 15 tests.
 
-- Django has =django.core.mail= built in; the library question is which transport to use.
-- Recommended options:
-  - =django-anymail= — single package, swappable backends (Mailgun, Postmark, AWS SES). Best for production.
-  - =django.core.mail= + SMTP — fine for self-hosted (e.g. pointing at a local Postfix or a Gmail relay).
-- Account recovery flow:
-  1. Unauthenticated =POST /api/v1/password-reset/= — accepts email, generates signed token, sends link.
-  2. Unauthenticated =POST /api/v1/password-reset/confirm/= — accepts token + new password.
-  3. New frontend routes: =/forgot-password= and =/reset-password?token=...= (both public, no auth guard).
-- Django has =django.contrib.auth.tokens.PasswordResetTokenGenerator= ready to use.
-
-*** API notes [api]
-- Zero new models: =PasswordResetTokenGenerator= stores state in a HMAC signed by the user's password hash + last login timestamp — tokens auto-expire when the password changes.
-- Email content: Jinja2 template at =api/templates/password_reset_email.txt= (plain text first; HTML later).
-- New env vars needed: =EMAIL_BACKEND=, =EMAIL_HOST=, =EMAIL_PORT=, =EMAIL_HOST_USER=, =EMAIL_HOST_PASSWORD=, =DEFAULT_FROM_EMAIL=. These slot into settings.py cleanly.
-- =django-anymail= adds just two env vars: =ANYMAIL_ESP_NAME= and =ANYMAIL_API_KEY= — simplest production path.
-- Both new endpoints are =AllowAny= + =csrf_exempt= (same pattern as =guest_session=).
-
-*** Implementation [2026-04-12]
-- Transport: =django.core.mail= + SMTP (user-provided credentials in =.env=)
-- No new dependencies — Django's built-in email + =PasswordResetTokenGenerator=
-- API endpoints: =POST /api/v1/password-reset/= and =POST /api/v1/password-reset/confirm/=
-- Frontend routes: =/forgot-password= and =/reset-password= (public, no auth guard)
-- Three email templates: =password_reset_email.txt=, =welcome_email.txt=, =waitlist_email.txt=
-- Welcome email sent on user registration; waitlist confirmation on signup
-- 15 tests in =test_password_reset.py=
-- Docker: console backend in dev, SMTP in prod (=EMAIL_HOST= etc. required)
-
-** Lazy load child resources [DONE 2026-04-12]
-[[file:todo.org::*Lazy load the child resources][↑ todo.org]]
-
-*** Outcome
-- 12 show/edit/new routes: all includes removed. Ember async relationships auto-fetch on demand.
-- StatusLog component: refactored from =store.peekAll= to =applicationStatuses= hasMany relationship.
-- 3 sub-routes (questions under job-posts/job-applications, answers under questions): converted from parent re-fetch with includes to =store.query= with =filter[job_post_id]=, =filter[application_id]=, =filter[question_id]= params.
-- Index/list routes: kept includes for belongsTo data every row displays (company, job-post). Removing these creates N+1 which is worse than a single sideloaded response.
-- Resume routes: untouched — sub-resources ARE the page content.
-- Where resumes appear in non-resume routes (cover-letters/index, summaries/index): pre-warmed with =query('resume', { slim: 1 })= instead of full =findAll=.
-
-*** What was removed vs kept
-| Route type | Before | After |
-|---|---|---|
-| show/edit/new | 1–7 includes per route | 0 (async resolves) |
-| job-posts/index | =scores,cover-letters,company,scores.resume= | =company= only |
-| cover-letters/index | =job-post,resume= | =job-post= + slim resume pre-warm |
-| summaries/index | =job-post,resume= | =job-post= + slim resume pre-warm |
-| Other index routes | unchanged | unchanged (rows need the data) |
-
-*** API notes [api]
-- No API changes needed — all resources individually retrievable.
-- =_build_included= ownership gap (only checks 4 of 10+ types) is now less exploitable since show/edit routes no longer request includes. Security audit should still address this for the index routes that keep includes.
-- Sub-route =store.query= calls use API filter params that already existed: =filter[job_post_id]=, =filter[application_id]=, =filter[question_id]=.
+** Lazy load child resources [ARCHIVED 2026-04-13]
+Archived to [[file:notes_archive.org::*Lazy load child resources][notes_archive.org]]. DONE — 12 routes trimmed, async relationships, kept index includes to avoid N+1.
 
 ** Pydantic-AI toolsets — dynamic tool scoping [2026-04-10]
 [[file:todo.org::*MCP exposure][↑ todo.org]]
@@ -498,38 +451,14 @@ APPROVED There may be many screenshots, not just the final one.  Puting in an im
 ** Agent logfire
 https://pydantic.dev/docs/logfire/integrations/llms/pydanticai/
 https://pydantic.dev/docs/logfire/integrations/web-frameworks/django/
-** DONE companies/index delete doesn't remove the UI row.  similar fix done in other resources due to infinite scroll
-CLOSED: [2026-04-13 Sun]
-** DONE rename ollama_agent to agent_factory
-CLOSED: [2026-04-13 Sun]
 ** make doctor
-It would be nice to audit the needs for running an appliaction for a user trying to set things up
-make a clear plan how to bring this feature about.
-** DONE job content in scrapes is too small to see if it actually scrapped content.  need an expand button
-CLOSED: [2026-04-13 Sun]
-#+NOTE: Added expand/collapse toggle. Also added source scrape and child scrapes relationship display.
-** DONE when the chat is too large (/caddy) the input field is hidden behind the footer
-CLOSED: [2026-04-13 Sun]
-#+NOTE: Added padding-bottom: 3rem to .caddy-fullpage to account for fixed footer.
-** DONE scores should use the standard table structure and be ordered by date created DESC
-CLOSED: [2026-04-13 Sun]
-#+NOTE: Added created_at to Score model (migration 0036). Rebuilt scores/index as standard table with job-post, resume, status, created date columns. Infinity scroll pagination. API orders by -created_at, -id.
-
-
-** Remove SQLAlchemy from API [DONE 2026-04-13]
-[[file:todo.org::*Completely remove SQLAlchemy from api][↑ todo.org]]
-
-Completed. All SQLAlchemy infrastructure removed. The API now uses Django ORM exclusively.
-Startup simplified to =manage.py migrate= only (no more =initsa=).
-BaseSAViewSet → BaseViewSet, BaseSASerializer → BaseSerializer.
+It would be nice to audit the needs for running an application for a user trying to set things up.
+Make a clear plan how to bring this feature about.
 
 ** Ian Finnis letter
 [[file:todo.org::*Ian Finnis letter][↑ todo.org]]
 Deferred until official alpha phase. Draft is captured in todo.org.
 Move this entry to notes.org when alpha begins and send then.
-
-** Favorite answers not appearing in career-data [ARCHIVED 2026-04-11]
-Archived to [[file:notes_archive.org::*Favorite answers not appearing in career-data][notes_archive.org]]. FIXED — query answers directly; question.favorite is denormalized cache synced on answer save/delete.
 
 * Linting techniques [2026-04-11]
 
@@ -626,6 +555,41 @@ curl -sf -X PATCH "${CC_API_URL:-http://localhost:8000}/api/v1/users/me/preferen
 - API: store accent preference in user profile JSON
 - Frontend: ThemeService reads user preference on login, applies as custom palette
 - Frontend: derive 50-900 scale from single hex (color math or lookup table)
+
+* Email features — invitations, signup, test email [2026-04-13]
+
+** Invitation system
+- =Invitation= model: email, token (=secrets.token_urlsafe(32)=), created_by FK, created_at, accepted_at, expires_at (7 days)
+- Properties: =is_valid=, =is_expired=, =is_accepted=
+- =InvitationViewSet= (admin-only): list, create (sends email, auto-removes waitlist entry), destroy (revoke)
+- =POST /api/v1/accept-invite/= (public): validates one-time token → creates user + profile → marks accepted → sends welcome email
+- Frontend: =/accept-invite?token=...= public route, =/admin/invitations= table with status pills + revoke
+
+** Signup dual-mode page
+- =/signup= route checks =health.registrationOpen= (from healthcheck API response)
+- Registration open: full form (first name, last name, email, username, password, confirm) → =POST /api/v1/auth/register/=
+- Registration closed: email-only waitlist form → =POST /api/v1/waitlist/=
+- Security: =DjangoUserViewSet.create()= checks =settings.REGISTRATION_OPEN= server-side; staff users bypass the gate
+- Cookie/sessionStorage manipulation cannot bypass — backend is the authority
+
+** Registration control
+- =REGISTRATION_OPEN= env var (default =false=)
+- Exposed in healthcheck response: ={"healthy": true, "bootstrap_open": ..., "registration_open": ...}=
+- Frontend =HealthService= caches in =sessionStorage('cc:registration-open')=
+
+** Password validation
+- =AUTH_PASSWORD_VALIDATORS= in settings.py: UserAttributeSimilarity, MinimumLength (8), CommonPassword, NumericOnly
+- Enforced in: =DjangoUserViewSet.create()=, =_create_user_from_data()= (used by =accept_invite=)
+- =REGISTRATION_OPEN = True= in =TESTING= block so tests can register
+
+** Test email
+- =POST /api/v1/test-email/= — admin-only, DRF =@api_view= + =@permission_classes=
+- Defaults to admin's own email if none provided
+- Template: =test_email.txt= with timestamp
+
+** Test coverage
+- =test_invitation.py=: 27 tests (model, create, accept, list, destroy)
+- =test_test_email.py=: 4 tests (admin sends, default email, non-admin 403, unauth 401)
 
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
