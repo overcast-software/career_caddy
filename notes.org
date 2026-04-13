@@ -591,7 +591,238 @@ curl -sf -X PATCH "${CC_API_URL:-http://localhost:8000}/api/v1/users/me/preferen
 - =test_invitation.py=: 27 tests (model, create, accept, list, destroy)
 - =test_test_email.py=: 4 tests (admin sends, default email, non-admin 403, unauth 401)
 
+* AI Chat — Architecture Reference [2026-04-13]
+New agents: read this section to understand how AI chat works end-to-end.
+
+** Overview
+Chat is a three-layer streaming system: Ember frontend → Django API proxy → Pydantic-AI chat server.
+The user types a message, it flows through all three layers, and the response streams back as SSE events.
+The AI agent has access to 27 tools that CRUD the user's career data via the same API.
+
+** Message flow (end-to-end)
+#+begin_src
+User types in frontend (Chat::Panel textarea)
+  ↓
+ChatService.sendMessage(text)                    [frontend/app/services/chat.js]
+  - adds user message + empty assistant placeholder to @tracked messages array
+  - calls session.ensureFreshToken(90) to ensure valid JWT
+  - POST ${baseUrl}chat/ with JSON body:
+    {message, history, conversation_id, page_context}
+    Authorization: Bearer <jwt>
+  ↓
+chat_proxy(request)                              [api/job_hunting/api/chat.py]
+  - validates JWT via DRF JWTAuthentication
+  - extracts raw token string from Authorization header
+  - builds payload: {message, token, history, conversation_id, page_context}
+  - streams POST to http://localhost:8031/chat via httpx.Client.stream()
+  - returns StreamingHttpResponse (text/event-stream)
+  ↓
+chat(request)                                    [ai/mcp_servers/chat_server.py]
+  - _fetch_user_profile(token): GET /api/v1/me/ → name, email, linkedin, github
+  - _build_agent(user_profile, page_context): creates pydantic-ai Agent
+    with dynamic system prompt (profile + page context injected)
+  - CareerCaddyDeps(api_token=token, base_url) passed to agent.run_stream()
+  - agent streams text chunks + makes tool calls as needed
+  - each tool uses the same JWT for API calls → data is scoped to the user
+  ↓
+SSE event stream yields back through all layers:
+  data: {"type": "text", "content": "chunk..."}       ← partial text
+  data: {"type": "navigate", "url": "/resumes"}       ← programmatic navigation
+  data: {"type": "done", "content": "full text",      ← final response
+         "conversation_id": "uuid", "usage": {...}}
+  data: {"type": "error", "content": "error msg"}     ← on failure
+  ↓
+Frontend SSE reader accumulates text chunks, updates last message,
+handles navigate events, stores conversation_id for multi-turn.
+#+end_src
+
+** Key files
+| File | Layer | Purpose |
+|------|-------|---------|
+| =frontend/app/services/chat.js= | Frontend | Message state, SSE reader, page context tracking |
+| =frontend/app/components/chat/panel.js= + =.hbs= | Frontend | Chat UI: input, send, message list, streaming indicator |
+| =frontend/app/components/chat/message.js= + =.hbs= | Frontend | Message rendering, markdown, SPA links, elicitation buttons |
+| =frontend/app/components/chat/sidebar.js= + =.hbs= | Frontend | Grid-based sidebar wrapper (=course-chat= CSS area) |
+| =frontend/app/components/main-application.js= | Frontend | Route change tracking → =chat.currentPage= |
+| =api/job_hunting/api/chat.py= | API | Django proxy: JWT validation, payload forwarding, SSE streaming |
+| =ai/mcp_servers/chat_server.py= | AI | Starlette server: agent creation, system prompt, SSE generation |
+| =ai/agents/agent_factory.py= | AI | Agent registry: =get_agent("chat")= returns configured Agent |
+| =ai/lib/toolsets.py= | AI | =CareerCaddyToolset= + =TOOL_REGISTRY= + =SCOPES= |
+| =ai/lib/api_tools.py= | AI | 27 tool functions (all return JSON strings via =ApiClient=) |
+| =ai/lib/history.py= | AI | =truncate_message_history=, =sanitize_orphaned_tool_calls= |
+| =ai/lib/usage_reporter.py= | AI | Fire-and-forget POST to =/api/v1/ai-usages/= |
+
+** Authentication
+- Frontend → API: JWT (=Authorization: Bearer <token>=, 60-min lifetime, auto-refresh)
+- API proxy → Chat server: same JWT forwarded in JSON body as =token= field
+- Chat server → API (profile fetch): =Bearer <token>= header on =GET /api/v1/me/=
+- Chat server → API (tool calls): same token via =CareerCaddyDeps.api_token=
+- All data is scoped to the authenticated user through the JWT — the chat server never stores tokens
+
+** System prompt structure
+The system prompt in =chat_server.py= is built dynamically per request. Sections:
+1. *Role & rules* — identity, tool usage rules, company blocklist, resume counting
+2. *Frontend URLs* — route map for all resources + markdown link requirements
+3. *Navigation* — =<!-- navigate:/path -->= marker format
+4. *Elicitation* — JSON action button format
+5. *Onboarding* — proactive data checks on greetings
+6. *User Profile* — injected via ={user_profile}= placeholder
+7. *Current Page* — appended dynamically when =page_context= is present
+
+** Agent configuration
+Registered in =agent_factory.py= as ="chat"= role:
+- Model: =openai:gpt-4o-mini= (override via =CHAT_MODEL= env var)
+- Deps: =CareerCaddyDeps= (=api_token= + =base_url=)
+- Toolset: =CareerCaddyToolset(scope="all")= — all 27 tools
+- History processors: =truncate_message_history= (20k token budget) + =sanitize_orphaned_tool_calls=
+- System prompt: empty at registration — =chat_server.py= injects the full prompt at runtime
+
+** Tools available to chat (27 total, =scope="all"=)
+| Category | Tools |
+|----------|-------|
+| Companies (4) | =create_company=, =find_company_by_name=, =search_companies=, =get_companies= |
+| Job posts (5) | =create_job_post_with_company_check=, =find_job_post_by_link=, =search_job_posts=, =get_job_posts=, =update_job_post= |
+| Applications (4) | =create_job_application=, =get_job_applications=, =get_applications_for_job_post=, =update_job_application= |
+| Career data (1) | =get_career_data= |
+| Resumes (1) | =get_resumes= |
+| Scrapes (3) | =create_scrape=, =get_scrapes=, =update_scrape= |
+| Scores (2) | =score_job_post=, =get_scores= |
+All tools live in =ai/lib/api_tools.py=. Each takes =api: ApiClient= as first arg plus typed parameters.
+Returns: JSON string (=APIResponse= format: ={success, data, error, status_code}=).
+Tool responses include =_frontend_url= on each resource — the agent MUST use these in markdown links.
+
+** Toolset scopes (for non-chat agents)
+| Scope | Tools | Use case |
+|-------|-------|----------|
+| =all= | 27 | Chat (full access) |
+| =career_caddy= | 16 | General CRUD + career data + resumes |
+| =job_discovery= | 7 | Email pipeline: find/create companies + job posts |
+| =scoring= | 4 | Scoring: job posts + career data + scores |
+| =application_tracking= | 6 | Application CRUD + job post updates |
+| =scrape_management= | 3 | Scrape CRUD |
+
+** History management
+- Frontend sends last 20 messages (excluding current turn) as =history= array
+- Chat server converts to pydantic-ai =ModelRequest=/=ModelResponse= objects
+- =truncate_message_history=: drops old messages when history exceeds ~20k tokens (estimated at 3 chars/token)
+- =sanitize_orphaned_tool_calls=: removes tool call/return pairs where not all parallel calls were answered (handles MCP crashes and partial failures)
+- Tool response cap: 300k chars max per individual tool response (prevents context blowout)
+
+** Frontend chat features
+*** Sidebar vs full-page
+- Sidebar: =<Chat::Sidebar>= wraps =<Chat::Panel>=, appears as CSS grid area =course-chat= (24rem wide)
+- Full-page: =/caddy= route renders =<Chat::Panel>= in =<RouteLayout>= main area
+- Both share the singleton =chat= service — messages persist across route transitions
+- Sidebar and nav sidebar are mutually exclusive (opening one closes the other)
+
+*** Markdown rendering
+- Assistant messages render through =<MarkdownToHtml>= (ember-cli-showdown)
+- User messages render as plain =whitespace-pre-wrap= text
+- CSS class =.chat-markdown= provides compact styling (tighter than =.markdown-content=)
+
+*** SPA link navigation
+=chat/message.js= intercepts clicks on =<a href>= inside assistant messages.
+Relative paths route through =router.transitionTo()= — no page reload.
+External links (=http=, =mailto:=) pass through normally.
+
+*** Programmatic navigation
+Two mechanisms:
+1. AI includes =<!-- navigate:/path -->= in text. Frontend regex strips it and calls =router.transitionTo()=.
+2. Server emits ={type: "navigate", url: "/path"}= SSE event. Frontend handles it in the SSE reader.
+Both navigate only on clear user intent ("take me to", "show me").
+
+*** Elicitation buttons (Phase 1)
+AI emits a =```json= code block at end of response: ={elicitation: true, actions: [{label, message}]}=.
+=chat/message.js= detects via regex, renders accent-colored buttons below markdown.
+Clicking sends =action.message= as a new user chat message. Max 3 actions.
+
+*** Page context
+=main-application.js= sets =chat.currentPage = {route, url, params}= on every route change.
+Sent in the chat POST body. Chat server injects "Current Page" section into system prompt.
+Enables the AI to understand "this job post" or check data on the current page.
+
+*** Auth boundary messages
+- 401 (not logged in): friendly markdown message with [login](/login) link
+- 403 (guest account): markdown message suggesting signup with [login](/login) link
+- Both use SPA link navigation (no page reload)
+
+*** Streaming UX
+- "Thinking..." pulse animation while =isStreaming= is true
+- Text accumulates chunk by chunk, message updates in place
+- Auto-scroll to bottom after each chunk
+
+** Usage tracking
+- =report_usage()= fires async after each chat response (fire-and-forget)
+- POST to =/api/v1/ai-usages/= with: agent_name="career_caddy_chat", model_name, trigger="chat", token counts
+- =AiUsage= model: user FK, agent_name, model_name, trigger, request/response/total tokens, estimated_cost_usd
+- =AiUsageViewSet=: non-staff sees own records only, staff can filter by =?user_id==
+- Summary endpoint: =/ai-usages/summary/?period=daily&group_by=agent_name&days=30=
+- Frontend: Settings > AI Spend page with staff-only user dropdown
+
+** Security invariants
+- =chat_server.py= MUST NOT import =email_server=, =browser_server=, or =lib/browser/*=
+- No =CC_API_TOKEN= env var on the chat service — auth comes from the calling proxy
+- No =secrets.yml= or mail directory access
+- =api_tools.py= imports only =httpx=, =json=, =pydantic= — zero knowledge of browser/email automation
+- =CareerCaddyDeps= holds only =api_token= + =base_url= — no credential paths
+
+** Docker deployment
+- Chat server: separate container, port 8031, =CHAT_SERVICE_URL= env var in API container
+- =CC_API_BASE_URL= in chat container points to the API (e.g. =http://api:8000=)
+- =ALLOWED_HOSTS= in API settings must include the Docker hostname (=api=) for tool calls to work
+- Chat container does not need =INSTALL_CAMOUFOX= or browser dependencies
+
+* AI Chat Improvements [2026-04-13]
+
+** Implementation strategy
+8 items from todo.org grouped into clusters. Full plan at =~/.claude/plans/generic-gathering-quill.md=.
+- Cluster A (page context + navigation + onboarding): items 3, 4, 6
+- Cluster B (AI data bugs): items 1, 2
+- Cluster C (infrastructure): items 5, 7, 8
+Priority order: 8 → 2 → 1 → 3 → 4 → 6 → 5; item 7 (websockets) deferred.
+
+** Item 8: AI usage scoping — DONE (frontend only)
+Backend =AiUsageViewSet= already scopes non-staff to own records and accepts =?user_id== for staff.
+Changes: =settings/ai-spend.js= controller gets =@tracked selectedUserId=, =@tracked users[]=,
+=loadUsers()= fetches user list for staff, =setUser()= re-queries. Template adds user dropdown
+visible only to =isStaff= users. "All users" default.
+
+** Item 2: Resume counting — DONE (AI layer)
+Root cause: =TOOL_REGISTRY= had zero resume tools. AI used =get_career_data()= which only surfaces favorites.
+Added =get_resumes()= to =api_tools.py= (pattern matches =get_job_posts=). Registered in
+=toolsets.py= under =all= and =career_caddy= scopes. System prompt note: "Use get_resumes, not career data."
+
+** Item 1: Company inference — DONE (AI layer)
+Blocklist in =create_job_post_with_company_check=: rejects ={unknown, n/a, na, none, tbd, not specified, ""}=
+(case-insensitive). Returns error with inference instructions. System prompt: "NEVER use placeholder
+company names. Infer from recruiter, email domain, or URL domain. Ask user if stuck."
+
+** Item 3: Page context — DONE (all layers)
+Frontend =chat.js= tracks =@tracked currentPage= updated on every route change in =main-application.js=.
+Payload includes =page_context: {route, url, params}=. Django proxy forwards. Chat server's
+=_build_agent()= accepts =page_context= and appends a "Current Page" section to the system prompt.
+
+** Item 4: Navigation — DONE (frontend + AI)
+Two mechanisms: (1) AI includes =<!-- navigate:/path -->= in text — frontend regex =NAVIGATE_RE=
+detects, strips from displayed text, and calls =router.transitionTo()=. (2) Chat server can emit
+={type: "navigate", url: "/path"}= SSE event — frontend handles alongside =text/done/error= events.
+System prompt "Navigation" section instructs when to use it.
+
+** Item 6: Onboarding — DONE (system prompt)
+New "Onboarding Help" section in system prompt. On greetings, AI checks current page context,
+queries the relevant tool, and suggests creating items if the list is empty. Depends on items 2+3.
+
+** Item 5: Elicitation — DONE Phase 1 (frontend + AI)
+AI emits a =```json= code block with ={elicitation: true, actions: [{label, message}]}= at end
+of response. Frontend =chat/message.js= detects via regex, extracts actions, renders buttons
+below the markdown content. Clicking sends the action's =message= as a new chat message via
+=chat.sendMessage()=. Max 3 actions per elicitation. No new backend model.
+Phase 2 (dedicated =ChatAction= model with persistence) deferred until Phase 1 is validated.
+
+** Item 7: WebSockets — DEFERRED
+SSE handles streaming + elicitation POST-back. WebSockets would need django-channels + ASGI +
+Redis + Docker changes. Marginal benefit. Revisit only if bidirectional becomes a hard requirement.
+
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
 * personal notes
-docker compose -f docker-compose.prod.yml exec api python manage.py createsuperuser

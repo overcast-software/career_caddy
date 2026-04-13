@@ -176,14 +176,27 @@ CLOSED: [2026-04-13 Sun]
 Root cause: =api= Docker hostname missing from =ALLOWED_HOSTS=. Every tool call from chat service → API returned 400 =DisallowedHost=. Fixed in =api/settings.py=. Also added =history_processors= to chat agent for robustness.
 *** note: no job posts existed in prod where testing happened
 *** no "thinking" shown after "One moment, please."
-** TODO AI willing to make a job post without a company — should infer from recruiter company, email domain, or job posting hostname
-** TODO AI counted only 2/5 resumes — apparently only counted favorites
-** TODO can we give the AI chat reference to your current page?
-** TODO can the AI bot navigate the user to the correct page?
-** TODO I want elicitation like in https://gofastmcp.com/servers/elicitation for the chat.  and explicit button.
+** IN_PROGRESS AI was willing to make a job post without a company — should infer from recruiter company, email domain, or job posting hostname (like ziprecruiter) if it has to.  unknown isn't acceptible [2026-04-13 ai+frontend]
+#+NOTE: [2026-04-13] Blocklist added to =create_job_post_with_company_check= in =api_tools.py= — rejects "unknown", "n/a", "tbd", etc. with error message instructing AI to infer company. System prompt updated with inference instructions. Needs testing.
+** IN_PROGRESS AI counted only 2/5 resumes — apparently only counted favorites [2026-04-13 ai]
+#+NOTE: [2026-04-13] Root cause: no =get_resumes= tool existed in =TOOL_REGISTRY=. Added =get_resumes()= to =api_tools.py= and registered in toolsets (=all= + =career_caddy= scopes). System prompt note added. Needs testing.
+** IN_PROGRESS can we give the AI chat reference to your current page? paydantic context that evolves when page changes by sending it as part of the package to the api then updating the chat. [2026-04-13 frontend+api+ai]
+#+NOTE: [2026-04-13] Done. Frontend tracks =currentPage= (route, url, params) on every route change via =main-application.js=. Sent in chat POST body as =page_context=. Django proxy forwards it. Chat server injects into system prompt dynamically. Needs testing.
+** IN_PROGRESS can the AI bot navigate the user to the correct page? [2026-04-13 frontend+ai]
+#+NOTE: [2026-04-13] Done. Two mechanisms: (1) AI includes =<!-- navigate:/path -->= marker in text — frontend detects, strips, and calls =router.transitionTo()=. (2) Server can emit =navigate= SSE event. System prompt instructs when to navigate. Needs testing.
+** IN_PROGRESS I want elicitation like in https://gofastmcp.com/servers/elicitation for the chat.  and explicit buttons. [2026-04-13 frontend+ai]
+and example might be, can I score that for you?  then it POST score and navigates to the pending status score page.
+elicitation pattern could be a new table with records that the log in user can modify via api.
+#+NOTE: [2026-04-13] Phase 1 done. AI emits JSON code block with =elicitation: true= and actions array. Frontend =chat/message.js= detects it, renders accent-colored buttons below the message. Clicking sends the action's =message= as a regular chat message. No new backend model — Phase 2 (dedicated model) deferred. Needs testing.
+** IN_PROGRESS can the AI bot help a person get started by accessing the same data as the screen the user is on? [2026-04-13 ai]
+for instance, they navigate the user to resumes, behind the scenes they access resumes API and see that they dont' have any.  then the AI suggests adding one.
+#+NOTE: [2026-04-13] Done. System prompt "Onboarding Help" section instructs AI to check current page context on greetings, query the corresponding tool, and suggest creating items if list is empty. Depends on page context (item 3) and =get_resumes= tool (item 2). Needs testing.
+** DONE explore the cost benefit of using websockets for chat.
+CLOSED: [2026-04-13 Sun]
+Decision: deferred. SSE handles all current and planned features including elicitation via POST-back. WebSockets would require django-channels, ASGI deployment, Redis, Docker changes — significant infrastructure for marginal benefit.
+** IN_PROGRESS AI usage for non-admin is scoped to the logged in user.  admin can see per user usage. [2026-04-13 frontend]
+#+NOTE: [2026-04-13] Backend already scoped correctly. Added staff-only user dropdown to =settings/ai-spend= page — fetches user list, passes =user_id= param to API. "All users" default for admins. Non-admin sees own data only. Needs testing.
 
-
-** TODO can the AI bot help a person get started by accessing the same data as the screen the user is on?
 
 * Features — APPROVED (ready to work)
 
