@@ -146,6 +146,19 @@ Removed eager includes from 12 show/edit/new routes — async relationships reso
 CLOSED: [2026-04-11 Fri]
 =write_prompt_to_file()= now returns =""= immediately when =DEBUG=False=. Added =runtime/= to =.gitignore=.
 
+** DONE AI spend tracking — full stack [2026-04-13 api+ai+frontend]
+CLOSED: [2026-04-13 Sun]
+API: AiUsage model + migration, pricing utility (per-model cost lookup), AiUsageSerializer,
+AiUsageViewSet with list/create/summary endpoints, staff access for cross-user views.
+AI: usage_reporter.py (fire-and-forget POST to API), agent_factory.py (renamed from ollama_agent,
+factory pattern with AgentConfig registry + get_agent()), all agents instrumented with usage
+reporting (chat, career_caddy, email_classifier, job_extractor, pipeline, browser_scraper).
+Frontend: settings/ai-spend route with summary cards, period/group-by controls, breakdown table.
+Chat: system prompt now includes frontend route map for resource linking.
+Tests: 20 API tests (pricing, CRUD, filters, staff access, summary aggregation),
+26 AI tests (agent_factory registry/model selection/get_agent, usage_reporter payload format).
+#+NOTE: Ollama imports are now optional (try/except) — Docker images without pydanticai_ollama work fine. ConcreteOllama* classes are a hack to be reviewed (task pending).
+
 ** IN_PROGRESS We want to increase code coverage in testing [2026-04-08 api]
 #+NOTE: Branch = feature/test-coverage (cut from develop). API agent owns this.
 Added test_job_post.py, test_job_application.py, test_resume.py, test_answer.py — CRUD + model + auth tests for four previously uncovered resources. Ongoing; more coverage can be added incrementally.
