@@ -2,19 +2,12 @@
 # Unified local development environment
 #
 # Profiles:
-#   (default)               Core stack: db + api + frontend
-#   --profile browser       + browser-mcp service (Camoufox/Firefox, ~700 MB image)
+#   (default)               Core stack: db + api + frontend + chat + browser-mcp
 #   --profile mcp-gateway   + MCP gateway aggregator (3002) — caddy + email + browser on one endpoint
 #
 # Usage:
-#   docker compose up                                        # core stack only
-#   docker compose --profile browser up                     # core + browser MCP
-#   docker compose --profile browser --profile mcp-gateway up  # core + all MCP tools
-#
-# The caddy-pipeline (job_email_to_caddy.py) spawns browser_server.py as a
-# subprocess via stdio — it does NOT require browser-mcp to be running.
-# browser-mcp is only needed when an external client (e.g. Claude Desktop)
-# wants to connect to the browser via SSE.
+#   docker compose up                                        # full dev stack
+#   docker compose --profile mcp-gateway up                  # + all MCP tools on one endpoint
 #
 # Copy .env.example to .env and fill in values before first run.
 
@@ -116,13 +109,11 @@ services:
     depends_on:
       - api
 
-  # ── Browser MCP Server (--profile browser) ──────────────────────────────
-  # Exposes browser automation via SSE for Claude Desktop and browser_agent.py.
+  # ── Browser MCP Server ───────────────────────────────────────────────────
+  # Exposes browser automation via SSE for scraping and Claude Desktop.
   # Requires INSTALL_CAMOUFOX=true (default) to include the Firefox binary in the image.
-  # Not required for caddy-pipeline — the pipeline uses browser_server.py via stdio.
 
   browser-mcp:
-    profiles: [browser]
     build:
       context: ./ai
       args:

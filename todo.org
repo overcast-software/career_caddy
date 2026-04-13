@@ -131,7 +131,10 @@ Frontend user model was missing =@attr('string') password= — field never seria
 ** DONE AI usage: scored a job-post but it didn't show up as score — all records show "chat"
 CLOSED: [2026-04-13 Sun]
 =job_scorer.py= now attaches =_usage= and =_model_name= to result; =_score()= creates =AiUsage= with =trigger="score"=.
-** TODO import is not idempotent (skip-duplicates not working?)
+** DONE import is not idempotent (skip-duplicates not working?)
+CLOSED: [2026-04-13 Sun]
+Linkless job posts had no dedup check — fell through and created duplicates every import.
+Added fallback dedup on =title + company + created_by=. Downstream (applications, questions, answers) now correctly cascade-skip via ID mapping.
 ** DONE revoke API key returns 200 but doesn't actually delete. Same on Admin/ index.
 CLOSED: [2026-04-13 Sun]
 =destroy()= now calls =obj.delete()= instead of =obj.revoke()= (was soft-delete only).
@@ -264,7 +267,9 @@ Validation on both =DjangoUserViewSet.create()= and =accept_invite=.
 We had looked at this before and found it feasible. Turn it into a feature.
 [[file:notes.org::*Color Palette System][Omarchy integration roadmap → notes.org]]
 ** TODO scores: need an edit page to help with relationships that need to be manually set
-** TODO =make up= should include AI — it's integral
+** DONE =make up= should include AI — it's integral
+CLOSED: [2026-04-13 Sun]
+Removed =profiles: [browser]= from =browser-mcp= service. Now starts with default =make up=. Removed =up-ai= Makefile target.
 ** TODO Docker network error on =make up-ai=
 #+BEGIN_SRC
 Error response from daemon: failed to set up container networking: network ... not found

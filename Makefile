@@ -1,18 +1,14 @@
-.PHONY: up up-ai up-mcp-gateway down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai pipeline pipeline-url help
+.PHONY: up up-mcp-gateway down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai pipeline pipeline-url help
 
 # ── Dev stack ──────────────────────────────────────────────────────────────
 
-up: ## Start core stack (db + api + frontend)
+up: ## Start full dev stack (db + api + frontend + chat + browser-mcp)
 	docker compose down --remove-orphans 2>/dev/null || true
 	docker compose up
 
-up-ai: ## Start core stack + browser-mcp service (requires INSTALL_CAMOUFOX=true)
+up-mcp-gateway: ## Start full stack + MCP gateway aggregator (port 3002)
 	docker compose down --remove-orphans 2>/dev/null || true
-	docker compose --profile browser up
-
-up-mcp-gateway: ## Start core + browser MCP + full MCP gateway aggregator (port 3002)
-	docker compose down --remove-orphans 2>/dev/null || true
-	docker compose --profile browser --profile mcp-gateway up
+	docker compose --profile mcp-gateway up
 
 down: ## Stop all services and remove orphan containers
 	docker compose down --remove-orphans
