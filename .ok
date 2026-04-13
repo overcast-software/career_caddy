@@ -47,3 +47,5 @@ gh run view --web
 # ── Misc ───────────────────────────────────────────────────────────────────
 make help
 curl -s http://localhost:8000/api/v1/healthcheck/ | python3 -m json.tool
+
+curl -s -X POST http://localhost:8000/api/v1/test-email/ -H "Authorization: Bearer $CC_API_TOKEN" -H "Content-Type: application/json" -d '{"email":"doug@overcastsoftware.com"}'
