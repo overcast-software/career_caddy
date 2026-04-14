@@ -128,10 +128,10 @@ class CareerCaddy:
         self,
         src: Annotated[dagger.Directory, DefaultPath("../ai")],
     ) -> dagger.Container:
-        """Build the AI agent image (Python 3.13, no Camoufox — CI validation only).
+        """Build the AI agent image (Python 3.13, no Camoufox).
 
-        The publish function builds with INSTALL_CAMOUFOX=true for production.
-        This function builds without Camoufox for faster CI checks.
+        Camoufox (~700 MB) is excluded. Browser scraping runs on a separate
+        device (Pi) via the hold-poller, not on the VPS.
         """
         src = (
             src
@@ -233,10 +233,10 @@ class CareerCaddy:
             .publish(frontend_ref)
         )
 
-        # AI image: build with Camoufox for browser-mcp in prod
+        # AI image: build without Camoufox (browser runs on Pi, not VPS)
         pushed_ai = await (
             ai_src
-            .docker_build(build_args=[dagger.BuildArg("INSTALL_CAMOUFOX", "true")])
+            .docker_build(build_args=[dagger.BuildArg("INSTALL_CAMOUFOX", "false")])
             .with_registry_auth(REGISTRY, username, registry_token)
             .publish(ai_ref)
         )

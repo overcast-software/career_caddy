@@ -353,24 +353,22 @@ try {
 - DNS: A record for =mcp.careercaddy.online= → VPS IP
 - CI: build =ai/Dockerfile= with =INSTALL_CAMOUFOX=false= and push to GHCR
 
-*** Prod scraping — browser-mcp in Docker [2026-04-14]
-Scraping in prod requires the browser MCP server running in Docker alongside the API.
+*** Prod scraping — browser-mcp removed from VPS [2026-04-14]
+Browser scraping is too heavy for the VPS (4 CPU, shared with other apps). Camoufox caused
+sluggishness and Toptal timed out after 60s.
 
-*History of the fix (3 iterations):*
-1. Prod had =BROWSER_SERVICE_URL=http://host.docker.internal:3012= (legacy REST scraper on port 3012). The legacy endpoint hasn't existed since the MCP migration. Every scrape timed out after 300s.
-2. Added =USE_MCP_BROWSER_AGENT=True= + =BROWSER_MCP_SSE_URL=http://host.docker.internal:3004/sse= — but no =browser-mcp= service existed in =docker-compose.prod.yml=, so the MCP SSE client got =ConnectTimeout=.
-3. Added =browser-mcp= service to =docker-compose.prod.yml= using the same GHCR AI image. API connects via Docker network: =http://browser-mcp:3004/sse=. Shared =screenshots= volume between API and browser-mcp. Removed =extra_hosts= (=host.docker.internal= no longer needed).
+*Decision:* browser-mcp removed from =docker-compose.prod.yml=. =USE_MCP_BROWSER_AGENT=False=.
+Scrapes created with =status: "hold"= sit in the DB until picked up by the hold-poller running
+on a local device (Raspberry Pi or desktop). GHCR AI image built without Camoufox (slim).
 
-*Prod compose services:* db, api, frontend, mcp (public), chat, browser-mcp.
+*Standalone Pi project:* =~/Sandbox/caddy-browser-pi/= — self-contained copy of hold-poller
+source files, own Dockerfile with Camoufox + GTK libs, docker-compose pulls no GHCR image.
+Builds locally on the Pi.
 
-*Key env vars for scraping:*
-- =SCRAPING_ENABLED=True= — in =.env= on VPS
-- =USE_MCP_BROWSER_AGENT=True= — hardcoded in compose
-- =BROWSER_MCP_SSE_URL=http://browser-mcp:3004/sse= — Docker network
-- =BROWSER_HEADLESS=true= — no display in prod
+*Prod compose services:* db, api, frontend, mcp (public), chat.
 
-*Resource concern:* 6 services on a small VPS is heavy. The AI image includes Camoufox
-(~200MB+ browser binary). Three services use the same AI image (mcp, chat, browser-mcp).
+*History:* browser-mcp was added, tested, confirmed working (libgtk-3.so.0 fixed by
+adding =INSTALL_CAMOUFOX=true= to Dagger publish), then removed same day due to VPS perf.
 
 *Optimization strategies (future):*
 1. *On-demand browser-mcp* — don't run it 24/7. Use =docker compose up browser-mcp= only when scraping, or set =restart: "no"= and have the API start it via Docker API before dispatching. Scraping is infrequent; the browser idles 99% of the time.

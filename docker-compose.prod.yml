@@ -52,8 +52,7 @@ services:
       GUNICORN_PORT: "8000"
       GUNICORN_WORKERS: "2"
       SA_SCHEMA_ON_POST_MIGRATE: "True"
-      USE_MCP_BROWSER_AGENT: "True"
-      BROWSER_MCP_SSE_URL: "http://browser-mcp:3004/sse"
+      USE_MCP_BROWSER_AGENT: "False"
       CHAT_SERVICE_URL: "http://chat:8000"
       EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
       EMAIL_HOST: ${EMAIL_HOST:?EMAIL_HOST is required}
@@ -111,30 +110,6 @@ services:
       start_period: 15s
       retries: 3
     mem_limit: 256m
-
-  # ── Browser MCP Server (internal) ──────────────────────────────────────
-  # Browser automation via Camoufox. Used by the API to scrape job URLs.
-  # Not exposed to the internet; only reachable via the Docker network.
-
-  browser-mcp:
-    image: ghcr.io/overcast-software/career_caddy_ai:${IMAGE_TAG:-latest}
-    restart: unless-stopped
-    environment:
-      FASTMCP_HOST: "0.0.0.0"
-      FASTMCP_PORT: "3004"
-      CAMOUFOX_DATA_DIR: /opt/camoufox
-      SCREENSHOT_DIR: /app/screenshots
-      BROWSER_HEADLESS: "true"
-    command: ["uv", "run", "python", "mcp_servers/browser_server.py"]
-    volumes:
-      - screenshots:/app/screenshots
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3004/sse || exit 1"]
-      interval: 30s
-      timeout: 5s
-      start_period: 30s
-      retries: 3
-    mem_limit: 1g
 
   # ── Chat Server (internal) ─────────────────────────────────────────────
   # SSE streaming chat endpoint — API proxies to this service.
