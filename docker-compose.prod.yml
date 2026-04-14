@@ -52,7 +52,8 @@ services:
       GUNICORN_PORT: "8000"
       GUNICORN_WORKERS: "2"
       SA_SCHEMA_ON_POST_MIGRATE: "True"
-      BROWSER_SERVICE_URL: "http://host.docker.internal:3012"
+      USE_MCP_BROWSER_AGENT: "True"
+      BROWSER_MCP_SSE_URL: "http://host.docker.internal:3004/sse"
       CHAT_SERVICE_URL: "http://chat:8000"
       EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
       EMAIL_HOST: ${EMAIL_HOST:?EMAIL_HOST is required}

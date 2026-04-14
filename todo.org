@@ -150,12 +150,12 @@ Fix: added =_record_usage()= callback to =GenericParser= that creates =AiUsage= 
 =trigger="scrape"=, =agent_name="generic_parser"=, computed cost via =estimate_cost()=.
 Note: browser automation (=scrape_page= in =browser_server.py=) has no LLM — it's pure
 Playwright/Camoufox. Only the parser extraction step uses an LLM (GPT-4o).
-** TODO scrape failure — MCP ConnectTimeout in Docker
-#+BEGIN_SRC
-api ERROR scraper MCP dispatch failed
-ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
-httpx.ConnectTimeout
-#+END_SRC
+** DONE scrape failure — MCP ConnectTimeout in Docker
+CLOSED: [2026-04-14 Mon]
+=docker-compose.prod.yml= had =BROWSER_SERVICE_URL=http://host.docker.internal:3012= (legacy REST)
+but no =USE_MCP_BROWSER_AGENT=True=, so dispatch fell through to =_dispatch_legacy()= hitting
+port 3012 which doesn't exist. Replaced with =USE_MCP_BROWSER_AGENT=True= and
+=BROWSER_MCP_SSE_URL=http://host.docker.internal:3004/sse=.
 
 * Bugs — Frontend
 
