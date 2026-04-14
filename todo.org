@@ -141,8 +141,15 @@ Added fallback dedup on =title + company + created_by=. Downstream (applications
 ** DONE revoke API key returns 200 but doesn't actually delete. Same on Admin/ index.
 CLOSED: [2026-04-13 Sun]
 =destroy()= now calls =obj.delete()= instead of =obj.revoke()= (was soft-delete only).
-** TODO AI spend appears broken in prod                           :PENDING_APPROVAL:
-Checking the DB in prod first before making changes.
+** DONE AI spend appears broken in prod — scrape/parse costs missing
+CLOSED: [2026-04-14 Mon]
+Root cause: =GenericParser.analyze_with_ai()= called =agent.run_sync()= but discarded
+=result.usage()= — no =AiUsage= record was created. Scoring and chat worked because they
+had explicit usage tracking; the parser never did.
+Fix: added =_record_usage()= callback to =GenericParser= that creates =AiUsage= with
+=trigger="scrape"=, =agent_name="generic_parser"=, computed cost via =estimate_cost()=.
+Note: browser automation (=scrape_page= in =browser_server.py=) has no LLM — it's pure
+Playwright/Camoufox. Only the parser extraction step uses an LLM (GPT-4o).
 ** TODO scrape failure — MCP ConnectTimeout in Docker
 #+BEGIN_SRC
 api ERROR scraper MCP dispatch failed
