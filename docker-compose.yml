@@ -43,6 +43,7 @@ services:
       - ./api:/app
       # Preserve the container's uv venv — the bind mount above would shadow it otherwise
       - api_venv:/app/.venv
+      - screenshots:/app/screenshots
     ports:
       - "8000:8000"
     env_file: .env
@@ -56,6 +57,7 @@ services:
       USE_MCP_BROWSER_AGENT: "True"
       BROWSER_MCP_SSE_URL: "http://browser-mcp:3004/sse"
       CHAT_SERVICE_URL: "http://chat:8000"
+      SCREENSHOT_DIR: /app/screenshots
       EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
       EMAIL_HOST: ${EMAIL_HOST:-}
       EMAIL_PORT: ${EMAIL_PORT:-587}
@@ -95,7 +97,7 @@ services:
       args:
         INSTALL_CAMOUFOX: "false"
     working_dir: /app
-    command: uv run caddy-chat
+    command: sh -c "uv sync && uv run caddy-chat"
     volumes:
       - ./ai:/app
       - chat_venv:/app/.venv
@@ -127,8 +129,10 @@ services:
       FASTMCP_HOST: "0.0.0.0"
       FASTMCP_PORT: "3004"
       CAMOUFOX_DATA_DIR: /opt/camoufox
+      SCREENSHOT_DIR: /app/screenshots
     volumes:
       - ./ai/secrets.yml:/app/secrets.yml:ro
+      - screenshots:/app/screenshots
 
   # ── MCP Gateway (--profile mcp-gateway) ──────────────────────────────────
   # Aggregates email + caddy + browser tools under namespaced prefixes on port 3002.
@@ -156,3 +160,4 @@ volumes:
   frontend_node_modules:
   api_venv:
   chat_venv:
+  screenshots:

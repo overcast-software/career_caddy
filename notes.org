@@ -946,6 +946,63 @@ Full plan at =~/.claude/plans/linked-finding-crayon.md=.
 - System prompt editing from admin UI
 - Ollama model discovery (query Ollama API)
 
+* Hold Poller, Screenshots, Multi-Model Pipeline [2026-04-14]
+[[file:todo.org::*MCP exposure at mcp.careercaddy.online][↑ todo.org (MCP exposure)]]
+[[file:todo.org::*Design plans for surfacing browser screenshots][↑ todo.org (screenshots)]]
+
+Full plan: =~/.claude/plans/fluffy-discovering-jellyfish.md=
+
+** Motivation
+The browser scraper agent is a pass-through that wastes LLM tokens — the LLM just calls =scrape_page(url)= and echoes the result. By calling =scrape_page()= directly as a Python function and only using LLMs for the intelligent steps (job extraction via Sonnet, CRUD via gpt-4o-mini), we save ~56% per scrape.
+
+Browser scraping on credentialed sites fails silently in prod Docker (no sessions/cookies). The hold-scrape pattern lets admin queue URLs from the prod UI, then a local poller processes them with a headed browser and saved sessions.
+
+** Architecture
+
+*** Multi-model pipeline (cost-optimized)
+| Step                  | Model              | Cost     |
+|-----------------------+--------------------+----------|
+| =scrape_page()=       | None (direct call) | $0.00    |
+| =extract_job_from_content()= | Claude Sonnet      | ~$0.10   |
+| =add_job_post()=      | gpt-4o-mini        | ~$0.002  |
+| *Total per scrape*    |                    | *~$0.10* |
+
+*** Hold poller flow
+#+BEGIN_SRC
+poll loop (30s interval)
+  GET /api/v1/scrapes/?filter[status]=hold
+  For each hold scrape:
+    PATCH status → running (+ ScrapeStatus record)
+    scrape_page(url) — direct Python, headed browser
+      login wall? → status=login_failed + screenshot
+      success? → continue
+    PATCH job_content + status=completed
+    extract_job_from_content → Sonnet
+    add_job_post → gpt-4o-mini
+#+END_SRC
+
+*** ScrapeStatus (polymorphic Status pattern)
+Mirrors =JobApplicationStatus=. Uses =Status= table with =status_type="scrape"=.
+Statuses: hold, pending, running, authenticating, login_failed, scraping, extracting, completed, failed.
+Each transition logged with timestamp and note (error details, content length, screenshot path).
+
+*** Screenshot serving
+- Shared Docker volume: =screenshots:/app/screenshots= (browser-mcp + api)
+- =ScreenshotStore= abstraction in API — local disk now, S3 later
+- Naming: =scrape_{id}_{timestamp}.png=
+- Staff-only endpoints: =GET /api/v1/scrapes/{id}/screenshots/= (list), =GET .../screenshots/{filename}= (serve PNG)
+- Frontend: staff sees screenshot gallery on scrape show page
+
+*** Browser headless mode
+=BROWSER_HEADLESS=false= env var makes Camoufox visible. Defaults to =true= (no change to prod).
+The =screenshot= MCP tool was listed in the docstring but never implemented — now implemented.
+Terminology: =snapshot= = text extraction (=page.inner_text=), =screenshot= = PNG image (=page.screenshot=).
+
+** .env model config (defers DB-based admin UI)
+Per-agent model overrides already work via env vars in =agent_factory.py:get_model()=.
+=BROWSER_SCRAPER_MODEL= gets its own env var (was sharing =PIPELINE_MODEL=).
+The DB-based admin model config (Option A in notes above) stays PENDING_APPROVAL.
+
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
 * personal notes
