@@ -88,7 +88,9 @@ Then surface to product owner rather than continuing to loop.
 *** DONE Add =caddy-public= entry point to =pyproject.toml=
 *** DONE Add =mcp= service to =docker-compose.prod.yml=
 *** DONE Upgrade FastMCP to 3.2.3
-*** TODO Frontend: admin-only "hold" radio for scrape creation
+*** DONE Frontend: admin-only "hold" radio for scrape creation [2026-04-14 frontend]
+CLOSED: [2026-04-14 Mon]
+Both =scrapes/form.hbs= (existing) and =job-posts/scrape.hbs= (new) have hold radio for staff.
 *** DONE CI: build + push AI Docker image to GHCR (=INSTALL_CAMOUFOX=false=)
 *** DONE AI test suite: 44 tests in CI (toolsets, api_tools, public_server security)
 *** TODO Configure Caddy reverse proxy + DNS for =mcp.careercaddy.online= [product-owner]
@@ -139,8 +141,15 @@ Added fallback dedup on =title + company + created_by=. Downstream (applications
 ** DONE revoke API key returns 200 but doesn't actually delete. Same on Admin/ index.
 CLOSED: [2026-04-13 Sun]
 =destroy()= now calls =obj.delete()= instead of =obj.revoke()= (was soft-delete only).
-** TODO AI spend appears broken in prod                           :PENDING_APPROVAL:
-Checking the DB in prod first before making changes.
+** DONE AI spend appears broken in prod — scrape/parse costs missing
+CLOSED: [2026-04-14 Mon]
+Root cause: =GenericParser.analyze_with_ai()= called =agent.run_sync()= but discarded
+=result.usage()= — no =AiUsage= record was created. Scoring and chat worked because they
+had explicit usage tracking; the parser never did.
+Fix: added =_record_usage()= callback to =GenericParser= that creates =AiUsage= with
+=trigger="scrape"=, =agent_name="generic_parser"=, computed cost via =estimate_cost()=.
+Note: browser automation (=scrape_page= in =browser_server.py=) has no LLM — it's pure
+Playwright/Camoufox. Only the parser extraction step uses an LLM (GPT-4o).
 ** TODO scrape failure — MCP ConnectTimeout in Docker
 #+BEGIN_SRC
 api ERROR scraper MCP dispatch failed
@@ -171,7 +180,11 @@ Changed router paths to =/api-keys/new= and =/api-keys/:api_key_id=.
 ** DONE when making a new API key I didn't get a chance to copy it
 CLOSED: [2026-04-13 Sun]
 After creation, stays on page showing full key with Copy button; user clicks Done to navigate away.
-** TODO as a guest I should be able to post or patch a cover letter — reevaluate security auth
+** DONE as a guest I should not be able to post or patch a cover letter — reevaluate security auth
+CLOSED: [2026-04-14 Mon]
+Four viewsets had =permission_classes = [IsAuthenticated]= without =IsGuestReadOnly=, allowing
+guests (who have valid JWTs) to POST/PATCH/DELETE: CoverLetterViewSet, ApiKeyViewSet,
+DjangoUserViewSet, and StatusViewSet. All four now include =IsGuestReadOnly=.
 
 * Bugs — AI Chat
 
@@ -180,9 +193,11 @@ CLOSED: [2026-04-13 Sun]
 Root cause: =api= Docker hostname missing from =ALLOWED_HOSTS=. Every tool call from chat service → API returned 400 =DisallowedHost=. Fixed in =api/settings.py=. Also added =history_processors= to chat agent for robustness.
 *** note: no job posts existed in prod where testing happened
 *** no "thinking" shown after "One moment, please."
-** IN_PROGRESS AI was willing to make a job post without a company — should infer from recruiter company, email domain, or job posting hostname (like ziprecruiter) if it has to.  unknown isn't acceptible [2026-04-13 ai+frontend]
+** DONE IN_PROGRESS AI was willing to make a job post without a company — should infer from recruiter company, email domain, or job posting hostname (like ziprecruiter) if it has to.  unknown isn't acceptible [2026-04-13 ai+frontend]
+CLOSED: [2026-04-14 Tue 11:38]
 #+NOTE: [2026-04-13] Blocklist added to =create_job_post_with_company_check= in =api_tools.py= — rejects "unknown", "n/a", "tbd", etc. with error message instructing AI to infer company. System prompt updated with inference instructions. Needs testing.
-** IN_PROGRESS AI counted only 2/5 resumes — apparently only counted favorites [2026-04-13 ai]
+** DONE IN_PROGRESS AI counted only 2/5 resumes — apparently only counted favorites [2026-04-13 ai]
+CLOSED: [2026-04-14 Tue 11:38]
 #+NOTE: [2026-04-13] Root cause: no =get_resumes= tool existed in =TOOL_REGISTRY=. Added =get_resumes()= to =api_tools.py= and registered in toolsets (=all= + =career_caddy= scopes). System prompt note added. Needs testing.
 ** DONE can we give the AI chat reference to your current page? paydantic context that evolves when page changes by sending it as part of the package to the api then updating the chat. [2026-04-13 frontend+api+ai]
 CLOSED: [2026-04-13 Sun]
@@ -190,19 +205,23 @@ Three bugs found and fixed: model hallucinating page names (tightened prompt), s
 follow-ups (inject page URL prefix into each user message), eager init for first load.
 Page-aware data access added: route-to-tool mapping table in system prompt + resource ID extraction.
 See [[file:notes.org::*Item 3: Page context][notes.org]] for full details.
-** IN_PROGRESS can the AI bot navigate the user to the correct page? [2026-04-13 frontend+ai]
+** DONE IN_PROGRESS can the AI bot navigate the user to the correct page? [2026-04-13 frontend+ai]
+CLOSED: [2026-04-14 Tue 11:38]
 #+NOTE: [2026-04-13] Done. Two mechanisms: (1) AI includes =<!-- navigate:/path -->= marker in text — frontend detects, strips, and calls =router.transitionTo()=. (2) Server can emit =navigate= SSE event. System prompt instructs when to navigate. Needs testing.
-** IN_PROGRESS I want elicitation like in https://gofastmcp.com/servers/elicitation for the chat.  and explicit buttons. [2026-04-13 frontend+ai]
+** DONE IN_PROGRESS I want elicitation like in https://gofastmcp.com/servers/elicitation for the chat.  and explicit buttons. [2026-04-13 frontend+ai]
+CLOSED: [2026-04-14 Tue 11:38]
 and example might be, can I score that for you?  then it POST score and navigates to the pending status score page.
 elicitation pattern could be a new table with records that the log in user can modify via api.
 #+NOTE: [2026-04-13] Phase 1 done. AI emits JSON code block with =elicitation: true= and actions array. Frontend =chat/message.js= detects it, renders accent-colored buttons below the message. Clicking sends the action's =message= as a regular chat message. No new backend model — Phase 2 (dedicated model) deferred. Needs testing.
-** IN_PROGRESS can the AI bot help a person get started by accessing the same data as the screen the user is on? [2026-04-13 ai]
+** DONE IN_PROGRESS can the AI bot help a person get started by accessing the same data as the screen the user is on? [2026-04-13 ai]
+CLOSED: [2026-04-14 Tue 11:39]
 for instance, they navigate the user to resumes, behind the scenes they access resumes API and see that they dont' have any.  then the AI suggests adding one.
 #+NOTE: [2026-04-13] Done. System prompt "Onboarding Help" section instructs AI to check current page context on greetings, query the corresponding tool, and suggest creating items if list is empty. Depends on page context (item 3) and =get_resumes= tool (item 2). Needs testing.
 ** DONE explore the cost benefit of using websockets for chat.
 CLOSED: [2026-04-13 Sun]
 Decision: deferred. SSE handles all current and planned features including elicitation via POST-back. WebSockets would require django-channels, ASGI deployment, Redis, Docker changes — significant infrastructure for marginal benefit.
-** IN_PROGRESS AI usage for non-admin is scoped to the logged in user.  admin can see per user usage. [2026-04-13 frontend]
+** DONE IN_PROGRESS AI usage for non-admin is scoped to the logged in user.  admin can see per user usage. [2026-04-13 frontend]
+CLOSED: [2026-04-14 Tue 11:39]
 #+NOTE: [2026-04-13] Backend already scoped correctly. Added staff-only user dropdown to =settings/ai-spend= page — fetches user list, passes =user_id= param to API. "All users" default for admins. Non-admin sees own data only. Needs testing.
 
 
@@ -221,9 +240,83 @@ Check if this is complete.
 [[file:notes.org::*Security audit — multi-tenancy data isolation][Considerations → notes.org]]
 Multi-tenancy is a new feature and I want to make the data is secure.
 
-** TODO Design plans for surfacing browser screenshots             :APPROVED:
+** IN_PROGRESS Design plans for surfacing browser screenshots       :APPROVED:
 [[file:notes.org::*Browser screenshot visibility (scrape debugging)][Considerations → notes.org]]
+[[file:notes.org::*Hold Poller, Screenshots, Multi-Model Pipeline][Implementation plan → notes.org]]
 It might be just for debugging, but browser scraping is difficult and as a super user I want visibility.
+[2026-04-14 ai+api+frontend] Part of hold-poller feature branch. Screenshot tool, auto-capture, shared volume, staff-only API + frontend.
+*** DONE Implement =screenshot= MCP tool in browser_server.py [2026-04-14 ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE Auto-capture screenshots in =scrape_page()= [2026-04-14 ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE =ScreenshotStore= abstraction (S3-ready) [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE Staff-only =GET /api/v1/scrapes/{id}/screenshots/= endpoints [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE Shared Docker volume for screenshots [docker]
+CLOSED: [2026-04-14 Mon]
+*** DONE Frontend: screenshot gallery on scrape show page (staff) [frontend]
+CLOSED: [2026-04-14 Mon]
+
+** IN_PROGRESS Hold poller + multi-model pipeline                   :APPROVED:
+[[file:notes.org::*Hold Poller, Screenshots, Multi-Model Pipeline][Plan → notes.org]]
+[2026-04-14 ai+api+frontend]
+*** DONE =BROWSER_SCRAPER_MODEL= env var in agent_factory.py [ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE =BROWSER_HEADLESS= env var in browser_server.py [ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE Login-wall detection in =scrape_page()= [ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE =ScrapeStatus= join table (polymorphic Status pattern) [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE =filter[status]= on ScrapeViewSet.list [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE =_log_scrape_status()= in scraper dispatch [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE =hold_poller.py= script + =caddy-poller= entry point [ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE Hold radio on =job-posts/scrape.hbs= [frontend]
+CLOSED: [2026-04-14 Mon]
+*** DONE Status timeline on scrape show page [frontend]
+CLOSED: [2026-04-14 Mon]
+*** DONE Document .env model config in ai/CLAUDE.md [ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE Makefile =poller= target
+CLOSED: [2026-04-14 Mon]
+*** TODO Test end-to-end locally on feature branch
+
+** DONE Domain scrape profiles — learning loop for cost reduction   :APPROVED:
+CLOSED: [2026-04-14 Mon]
+[2026-04-14 api+frontend] All 10 subtasks complete.
+[[file:notes.org::*Domain Scrape Profiles][Full spec → notes.org]]
+Per-hostname profiles that capture auth requirements, CSS selectors, extraction hints, and page structure from past scrapes. Feeds into tiered scrape cost: Tier 0 (deterministic, $0) → Tier 1 (mini+hints, $0.005) → Tier 2 (Haiku, $0.025) → Tier 3 (Sonnet, $0.10).
+*** DONE =ScrapeProfile= model + =preferred_tier= + =enabled= fields [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE Staff-only API endpoints (list, detail, update — no create/delete) [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE Auto-populate profile after successful extraction [api]
+CLOSED: [2026-04-14 Mon]
+=_update_scrape_profile()= in =job_post_extractor.py= — creates/updates profile on successful parse.
+Also marks =requires_auth= on login_failed via =_log_scrape_status()= in =scraper.py=.
+*** DONE LLM follow-up to write =extraction_hints= + =page_structure= [api]
+CLOSED: [2026-04-14 Mon]
+=_generate_profile_hints()= uses =ProfileHints= Pydantic model for structured output.
+gpt-4o-mini call, records =AiUsage= with =trigger="scrape_profile"=.
+*** DONE Inject =extraction_hints= into extractor prompt [api]
+CLOSED: [2026-04-14 Mon]
+=_get_profile_hints()= looks up =ScrapeProfile= by hostname and appends hints block to prompt.
+*** DONE Frontend: =scrape-profile= Ember Data model [frontend]
+CLOSED: [2026-04-14 Mon]
+*** DONE Frontend: =/admin/scrape-profiles= index table (hostname, auth, rate, count, tier) [frontend]
+CLOSED: [2026-04-14 Mon]
+*** DONE Frontend: =/admin/scrape-profiles/:id= show/edit page (stats + config panels) [frontend]
+CLOSED: [2026-04-14 Mon]
+*** DONE Frontend: add "Scrape Profiles" to admin subnav [frontend]
+CLOSED: [2026-04-14 Mon]
+*** DONE Tier 0: deterministic CSS selector extraction [api]
+CLOSED: [2026-04-14 Mon]
+=_try_tier0_extraction()= in =job_post_extractor.py= — uses BeautifulSoup + stored CSS selectors.
+Runs before LLM call in =parse()=. Falls back to LLM if title or company not found.
 
 * Features — PENDING APPROVAL
 

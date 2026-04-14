@@ -1,6 +1,13 @@
 #+title: CareerCaddy — Notes & Decision Records
 #+date: 2026-04-08
 
+* Agent Mistakes — Tally: 1
+Track repeated agent errors so patterns are visible and accountable.
+
+| # | Date | Agent | Mistake | Rule violated |
+|---+------+-------+---------+---------------|
+| 1 | 2026-04-14 | frontend | Compound bash: =cd ... && git diff= | One command per Bash call, use =-C= or absolute paths |
+
 * Curriculum gap analysis [ARCHIVED 2026-04-11]
 Archived to [[file:notes_archive.org::*Curriculum gap analysis][notes_archive.org]]. Phase 2 maturity assessment; 6 gaps added to todo.org.
 
@@ -945,6 +952,327 @@ Full plan at =~/.claude/plans/linked-finding-crayon.md=.
 - A/B testing or gradual rollout
 - System prompt editing from admin UI
 - Ollama model discovery (query Ollama API)
+
+* Hold Poller, Screenshots, Multi-Model Pipeline [2026-04-14]
+[[file:todo.org::*MCP exposure at mcp.careercaddy.online][↑ todo.org (MCP exposure)]]
+[[file:todo.org::*Design plans for surfacing browser screenshots][↑ todo.org (screenshots)]]
+
+Full plan: =~/.claude/plans/fluffy-discovering-jellyfish.md=
+
+** Motivation
+The browser scraper agent is a pass-through that wastes LLM tokens — the LLM just calls =scrape_page(url)= and echoes the result. By calling =scrape_page()= directly as a Python function and only using LLMs for the intelligent steps (job extraction via Sonnet, CRUD via gpt-4o-mini), we save ~56% per scrape.
+
+Browser scraping on credentialed sites fails silently in prod Docker (no sessions/cookies). The hold-scrape pattern lets admin queue URLs from the prod UI, then a local poller processes them with a headed browser and saved sessions.
+
+** Architecture
+
+*** Multi-model pipeline (cost-optimized)
+| Step                  | Model              | Cost     |
+|-----------------------+--------------------+----------|
+| =scrape_page()=       | None (direct call) | $0.00    |
+| =extract_job_from_content()= | Claude Sonnet      | ~$0.10   |
+| =add_job_post()=      | gpt-4o-mini        | ~$0.002  |
+| *Total per scrape*    |                    | *~$0.10* |
+
+*** Hold poller flow
+#+BEGIN_SRC
+poll loop (30s interval)
+  GET /api/v1/scrapes/?filter[status]=hold
+  For each hold scrape:
+    PATCH status → running (+ ScrapeStatus record)
+    scrape_page(url) — direct Python, headed browser
+      login wall? → status=login_failed + screenshot
+      success? → continue
+    PATCH job_content + status=completed
+    extract_job_from_content → Sonnet
+    add_job_post → gpt-4o-mini
+#+END_SRC
+
+*** ScrapeStatus (polymorphic Status pattern)
+Mirrors =JobApplicationStatus=. Uses =Status= table with =status_type="scrape"=.
+Statuses: hold, pending, running, authenticating, login_failed, scraping, extracting, completed, failed.
+Each transition logged with timestamp and note (error details, content length, screenshot path).
+
+*** Screenshot serving
+- Shared Docker volume: =screenshots:/app/screenshots= (browser-mcp + api)
+- =ScreenshotStore= abstraction in API — local disk now, S3 later
+- Naming: =scrape_{id}_{timestamp}.png=
+- Staff-only endpoints: =GET /api/v1/scrapes/{id}/screenshots/= (list), =GET .../screenshots/{filename}= (serve PNG)
+- Frontend: staff sees screenshot gallery on scrape show page
+
+*** Browser headless mode
+=BROWSER_HEADLESS=false= env var makes Camoufox visible. Defaults to =true= (no change to prod).
+The =screenshot= MCP tool was listed in the docstring but never implemented — now implemented.
+Terminology: =snapshot= = text extraction (=page.inner_text=), =screenshot= = PNG image (=page.screenshot=).
+
+** .env model config (defers DB-based admin UI)
+Per-agent model overrides already work via env vars in =agent_factory.py:get_model()=.
+=BROWSER_SCRAPER_MODEL= gets its own env var (was sharing =PIPELINE_MODEL=).
+The DB-based admin model config (Option A in notes above) stays PENDING_APPROVAL.
+
+* Domain Scrape Profiles — learning loop for scrape cost reduction [2026-04-14]
+[[file:todo.org::*Domain scrape profiles][↑ todo.org]]
+
+** Motivation
+The job extractor LLM call (~$0.025/scrape with Haiku) is the main per-scrape cost. For domains scraped frequently (LinkedIn, Indeed, Glassdoor), the LLM re-discovers the same page structure every time. A domain-level profile that captures what worked before could eliminate or reduce the LLM cost on repeat scrapes.
+
+** Model: =ScrapeProfile= (per hostname)
+| Field                | Type     | Purpose                                              |
+|----------------------+----------+------------------------------------------------------|
+| =hostname=           | str (PK) | Normalized domain (e.g. =linkedin.com=)              |
+| =requires_auth=      | bool     | Learned from =login_wall_detected= failures          |
+| =avg_content_length= | int      | Baseline to detect anomalies (too short = blocked)   |
+| =success_rate=       | float    | Track reliability over time                          |
+| =css_selectors=      | json     | Selectors that work for this domain's job pages      |
+| =extraction_hints=   | text     | Free-text LLM context: "salary in EUR", etc.         |
+| =page_structure=     | text     | LLM-generated description of the page layout         |
+| =last_success_at=    | datetime | Stale profile detection                              |
+| =scrape_count=       | int      | Usage tracking                                       |
+| =created_by=         | FK       | Multi-tenancy                                        |
+
+** How the learning loop works
+1. First scrape of =linkedin.com= → no profile → full LLM extraction ($0.025)
+2. Extraction succeeds → auto-populate profile from the result
+   - LLM writes =extraction_hints=: "title in =.top-card-layout__title=, company in =.topcard__org-name-link=, salary format USD annual"
+   - =avg_content_length= set from this scrape
+   - =requires_auth= set from ScrapeStatus history
+3. Next =linkedin.com= scrape → profile hints injected into extractor prompt → cheaper/faster
+4. If extraction fails or quality degrades → fall back to full LLM, flag profile as stale
+5. Staff can review/edit profiles in admin UI
+
+** Tiered scrape cost structure
+| Tier | When                          | Model          | Cost/scrape |
+|------+-------------------------------+----------------+-------------|
+|    0 | Known domain + CSS selectors  | None (determ.) | $0.00       |
+|    1 | Known domain + hints          | gpt-4o-mini    | ~$0.005     |
+|    2 | Unknown domain                | Haiku          | ~$0.025     |
+|    3 | Complex / high-value page     | Sonnet         | ~$0.10      |
+
+Tier selection can be automatic (profile exists? use it) or manual (admin chooses tier per scrape).
+
+** How extraction_hints get written
+After a successful extraction, ask the LLM one follow-up question:
+#+begin_src
+"You just extracted a job posting from {hostname}. Describe the page structure
+in 2-3 sentences so a cheaper model can extract from similar pages next time.
+Include: where the title, company, salary, and description appear on the page."
+#+end_src
+This is a one-time ~$0.01 cost that pays off over many future scrapes.
+
+** Integration points
+- =scrape_page()= → check =ScrapeProfile.requires_auth= before scraping, skip if no session
+- =extract_job_from_content()= → inject =extraction_hints= + =page_structure= into system prompt
+- =hold_poller.py= → after successful extraction, update or create profile
+- =GenericParser= (API-side) → same hint injection for server-side extraction
+- Frontend admin → CRUD for =ScrapeProfile= records (review, edit hints, toggle tiers)
+
+** Deterministic extraction (Tier 0)
+For well-known domains, CSS selectors stored in the profile can extract data without any LLM:
+#+begin_src python
+profile = ScrapeProfile.objects.get(hostname="linkedin.com")
+if profile.css_selectors:
+    title = page.query_selector(profile.css_selectors["title"]).inner_text()
+    company = page.query_selector(profile.css_selectors["company"]).inner_text()
+    # ... build JobPostData directly
+#+end_src
+Falls back to LLM if any selector fails. This brings repeat-domain cost to $0.00.
+
+** Frontend: staff admin page for scrape profiles
+Lives under =/admin/scrape-profiles= as a new subnav item alongside API Keys, Users, Waitlist, Invitations.
+
+*** Routes
+- =admin.scrape-profiles.index= → table of all profiles
+- =admin.scrape-profiles.show= → detail view + edit form
+
+*** Router
+#+begin_src js
+// in admin route group:
+this.route('scrape-profiles', function () {
+  this.route('show', { path: '/:scrape_profile_id' });
+});
+#+end_src
+
+*** Index page (table)
+| Column           | Source                       |
+|------------------+------------------------------|
+| Hostname         | =hostname= (link to show)    |
+| Auth Required    | =requires_auth= (badge)     |
+| Success Rate     | =success_rate= (% + color)  |
+| Scrape Count     | =scrape_count=               |
+| Last Success     | =last_success_at= (relative)|
+| Tier             | =preferred_tier= (pill)     |
+
+Sorted by =scrape_count= descending (most-scraped domains first).
+No "create" button — profiles are auto-created by the learning loop. Staff can only view and edit.
+
+*** Show/edit page
+Split into two panels:
+
+**** Stats panel (read-only)
+- Hostname, requires_auth, success_rate, scrape_count, last_success_at, avg_content_length
+- Link to scrapes list filtered by this hostname: =/scrapes?filter[hostname]=linkedin.com=
+
+**** Configuration panel (editable by staff)
+- =extraction_hints= — textarea, LLM-generated but staff-editable. Staff can refine hints the LLM wrote, add domain-specific notes ("this site puts salary in the sidebar, not the description").
+- =page_structure= — textarea, LLM-generated description. Staff can correct.
+- =css_selectors= — JSON editor or key-value pairs (title, company, salary, location, description). For Tier 0 deterministic extraction.
+- =preferred_tier= — dropdown: Auto, Tier 0, Tier 1, Tier 2, Tier 3. "Auto" lets the system decide based on profile completeness.
+- =enabled= — toggle. Disable a profile if it's producing bad results without deleting it.
+
+Save → =PATCH /api/v1/scrape-profiles/{id}/=
+
+*** Subnav update
+Add to every admin template's =<:subnav>= block:
+#+begin_src handlebars
+<LinkTo @route="admin.scrape-profiles.index" class="nav-link">Scrape Profiles</LinkTo>
+#+end_src
+
+*** API endpoint
+=GET /api/v1/scrape-profiles/= — staff-only list (=IsAdminUser= permission)
+=GET /api/v1/scrape-profiles/{id}/= — staff-only detail
+=PATCH /api/v1/scrape-profiles/{id}/= — staff-only update (no create/delete; auto-managed)
+
+*** Ember Data model
+#+begin_src js
+// app/models/scrape-profile.js
+export default class ScrapeProfileModel extends Model {
+  @attr('string') hostname;
+  @attr('boolean') requiresAuth;
+  @attr('number') avgContentLength;
+  @attr('number') successRate;
+  @attr() cssSelectors;           // raw JSON
+  @attr('string') extractionHints;
+  @attr('string') pageStructure;
+  @attr('date') lastSuccessAt;
+  @attr('number') scrapeCount;
+  @attr('string') preferredTier;
+  @attr('boolean') enabled;
+}
+#+end_src
+
+** Model updates (from frontend spec)
+Add to =ScrapeProfile= model:
+| =preferred_tier= | str    | "auto", "0", "1", "2", "3" — staff override for tier selection |
+| =enabled=        | bool   | Disable without deleting; system skips disabled profiles       |
+
+** Risks
+- Page structure changes (LinkedIn redesigns) → stale profiles give wrong data. Mitigated by =last_success_at= staleness check and fallback to full LLM.
+- Over-fitting hints to one page layout → different job post types on same domain may differ. Mitigated by tracking =success_rate= and invalidating below threshold.
+- CSS selectors break silently → need a "confidence score" on selector-based extraction (e.g., all expected fields present? content length reasonable?).
+
+** Implementation log
+*** [2026-04-14] ScrapeProfile model created (migration 0040)
+=api/job_hunting/models/scrape_profile.py= — fields match spec above plus =preferred_tier= and =enabled=.
+Uses =GetMixin=, =auto_now_add= on =created_at=, =auto_now= on =updated_at=.
+=hostname= is unique + indexed. =created_by= FK for multi-tenancy.
+*** [2026-04-14] Hold poller E2E test — bugs found and fixed
+Three bugs discovered during E2E testing of hold poller + screenshots:
+1. =hold_poller.py:149= — Auth header used =Api-Key= format but API expects =Bearer jh_...=. Removed override.
+2. =browser_server.py:685= — =logfire.info("msg %s", arg)= crashed (logfire doesn't support printf-style). Changed to f-string.
+3. =career_caddy_agent.py:18= — =logfire.configure()= at module level prompts for interactive setup when =LOGFIRE_TOKEN= absent. Guarded with env check.
+Core flow validated: poll → find hold → scrape with Camoufox → screenshot capture + rename → content save → status transitions.
+Extraction step deferred (needs =OPENAI_API_KEY= in env).
+*** [2026-04-14] Staff-only API endpoints
+=ScrapeProfileSerializer= + =ScrapeProfileViewSet= (list, retrieve, partial_update).
+- =permission_classes = [IsAuthenticated, IsAdminUser]=
+- =filter[hostname]= query param on list
+- Editable fields: =extraction_hints=, =page_structure=, =css_selectors=, =preferred_tier=, =enabled=
+- Registered at =/api/v1/scrape-profiles/=
+*** [2026-04-14] Frontend admin pages
+- Ember model: =scrape-profile.js= with computed =tierLabel=, =successRatePercent=, =successRateClass=
+- Routes: =admin.scrape-profiles.index= (list table) + =admin.scrape-profiles.show= (stats + edit form)
+- Controller uses =@tracked= intermediary fields for inputs
+- CSS selectors field validates JSON before save
+- Subnav link added to all 9 admin templates
+*** [2026-04-14] AI integration — auto-populate, hints, Tier 0
+- =_update_scrape_profile()= auto-creates/updates =ScrapeProfile= after every successful parse.
+  Rolling average for =avg_content_length=, cumulative =success_rate=.
+- =_log_scrape_status()= sets =requires_auth=True= on login_failed via =ScrapeProfile.update_or_create=.
+- =_get_profile_hints()= injects =extraction_hints= + =page_structure= into the extractor prompt.
+- =_generate_profile_hints()= makes a gpt-4o-mini call with =ProfileHints= Pydantic model (structured output).
+  Records =AiUsage= with =trigger="scrape_profile"=, =agent_name="scrape_profile_hints"=.
+- =_try_tier0_extraction()= attempts deterministic CSS extraction via BeautifulSoup before LLM.
+  Requires =css_selectors= JSON + =preferred_tier= in ("auto", "0"). Falls back to LLM if title/company missing.
+- =_get_genesis_user()= fallback: AI costs always attributed (first staff user if no user on scrape).
+
+* Scrape → Parse → JobPost flow (documented for refactor) [2026-04-14]
+
+** Current entry points (3 paths, should be 1)
+
+*** Path 1: MCP dispatch (automatic — scrape created via API)
+#+begin_src
+ScrapeViewSet.create (views.py:4358)
+  → Scraper(url, scrape_id).dispatch() (scraper.py:30)
+    → _dispatch_mcp._send() runs in daemon thread
+      → MCP client calls browser-mcp scrape_page
+      → Stores job_content on Scrape, sets status="completed"
+      → _maybe_caddy_extract(scrape) (scraper.py:140)
+        → extract_job_from_scrape(scrape) (generic_parser.py:189)
+          → Guard: job_content AND status=="completed" AND no job_post_id
+          → Spawns ANOTHER daemon thread
+            → GenericParser().parse(scrape, user=scrape.created_by)
+              → analyze_with_ai() — LLM extracts ParsedJobData
+              → process_evaluation() — creates Company + JobPost + links scrape
+#+end_src
+Problems:
+- Two nested daemon threads (dispatch thread spawns extract thread)
+- user= was None until just fixed — created orphan job posts (404)
+- No status logging on the extract step (added _log_scrape_status now)
+- No error surfacing to frontend — exceptions swallowed silently
+
+*** Path 2: Manual parse button (frontend → POST scrape/{id}/parse/)
+#+begin_src
+ScrapeViewSet.parse (views.py:4494)
+  → Sets status="extracting" via _log_scrape_status
+  → Spawns daemon thread
+    → GenericParser().parse(scrape, user=request.user)
+    → On success: _log_scrape_status("completed")
+    → On failure: _log_scrape_status("failed")
+#+end_src
+This is the cleanest path. Returns 200 immediately, frontend polls.
+
+*** Path 3: Hold poller (local script — ai/scripts/hold_poller.py)
+#+begin_src
+hold_poller.poll_once()
+  → GET /api/v1/scrapes/?filter[status]=hold
+  → For each: scrape_page(url) directly (no LLM)
+  → PATCH scrape with job_content + status
+  → extract_job_from_content() — AI layer LLM
+  → add_job_post() — AI layer API call
+#+end_src
+This path bypasses GenericParser entirely — uses the AI layer's own agents.
+
+** What's wrong
+
+1. *Three different parse paths* with different user handling, error handling, and status logging
+2. *Two nested threads* in Path 1 — dispatch thread spawns extract thread. Hard to reason about.
+3. *GenericParser.get_agent()* (line 72) hardcodes =gpt-4o= / =qwen3-coder= — doesn't use =agent_factory.get_model()=. Disconnected from the env var model config.
+4. *No status logging in Path 1* extract step — goes straight from "completed" (content saved) to either silently creating a job post or silently failing.
+5. *extract_job_from_scrape guard* (line 195) checks =status=="completed"= — but Path 2 sets status to "extracting" before calling parse. So if Path 2 is used, the guard in =extract_job_from_scrape= would reject it. They're separate flows that happen to call the same parser.
+6. *Company created without created_by* — =Company.objects.get_or_create(name=...)= has no user scoping. Multi-tenancy gap.
+
+** DONE Refactor completed [2026-04-14]
+Renamed =GenericParser= → =JobPostExtractor= (file: =job_post_extractor.py=).
+Single =parse_scrape(scrape_id, user_id, sync)= entry point replaces both =extract_job_from_scrape()= and inline thread in =ScrapeViewSet.parse=.
+- Env-var model selection: =JOB_PARSER_MODEL= → =CADDY_DEFAULT_MODEL= → =gpt-4o= default. Supports =ollama:model-name= prefix.
+- =sync=True= eliminates nested threads (dispatch already backgrounded).
+- Status transitions: =extracting → completed/failed= with notes — consistent across all paths.
+- 13 new tests in =test_job_post_extractor.py=. All tests pass.
+
+*** Company is a shared resource — no =created_by= :DECISION:
+Company must NOT have a =created_by= field. Companies are shared across all users in a multi-tenant setup — "Google" is the same Company regardless of who scraped it first. Adding =created_by= would imply ownership where there is none, and would break the pattern where multiple users assign their own job posts to the same company. No migrations needed. Decided [2026-04-14].
+
+** Polling refactor: poll ScrapeStatus, not Scrape [TODO]
+Currently the frontend polls the scrape record AND the scrape-statuses endpoint — two requests per tick. The =ScrapeStatus= join table is the source of truth; =Scrape.status= (CharField) is a denormalized cache updated by =_log_scrape_status()=.
+
+The correct approach: poll =GET /api/v1/scrapes/{id}/scrape-statuses/= only. Derive current state from the latest =ScrapeStatus= record. On terminal state, fetch the full scrape with =?include=company,job-post= once.
+
+This requires:
+- A custom poll loop in the controller (the =poller= service expects an Ember Data record with =.reload()=)
+- Or extend the poller service to accept a custom fetch function instead of relying on =record.reload()=
+- The scrape-statuses endpoint already returns =included= status records with the status label
+
+Current state works (two requests per tick) but is wasteful. Consolidate when the poller service is refactored.
 
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)

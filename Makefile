@@ -63,6 +63,9 @@ pipeline: ## Run the full job email → Career Caddy pipeline
 pipeline-url: ## Scrape a single job URL  (usage: make pipeline-url URL=https://...)
 	cd ai && uv run caddy-pipeline --url $(URL)
 
+poller: ## Poll for hold scrapes and process locally (headed browser)
+	cd ai && uv run caddy-poller
+
 # ── Bootstrap ──────────────────────────────────────────────────────────────
 
 bootstrap: ## Check if app needs initialization (prints status)
