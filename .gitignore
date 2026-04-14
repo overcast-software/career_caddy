@@ -2,3 +2,4 @@
 __pycache__/
 .claude/
 todo_archive.org
+.envrc
