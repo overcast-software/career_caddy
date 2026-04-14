@@ -88,7 +88,9 @@ Then surface to product owner rather than continuing to loop.
 *** DONE Add =caddy-public= entry point to =pyproject.toml=
 *** DONE Add =mcp= service to =docker-compose.prod.yml=
 *** DONE Upgrade FastMCP to 3.2.3
-*** IN_PROGRESS Frontend: admin-only "hold" radio for scrape creation [2026-04-14 frontend]
+*** DONE Frontend: admin-only "hold" radio for scrape creation [2026-04-14 frontend]
+CLOSED: [2026-04-14 Mon]
+Both =scrapes/form.hbs= (existing) and =job-posts/scrape.hbs= (new) have hold radio for staff.
 *** DONE CI: build + push AI Docker image to GHCR (=INSTALL_CAMOUFOX=false=)
 *** DONE AI test suite: 44 tests in CI (toolsets, api_tools, public_server security)
 *** TODO Configure Caddy reverse proxy + DNS for =mcp.careercaddy.online= [product-owner]
@@ -226,27 +228,59 @@ Multi-tenancy is a new feature and I want to make the data is secure.
 [[file:notes.org::*Hold Poller, Screenshots, Multi-Model Pipeline][Implementation plan → notes.org]]
 It might be just for debugging, but browser scraping is difficult and as a super user I want visibility.
 [2026-04-14 ai+api+frontend] Part of hold-poller feature branch. Screenshot tool, auto-capture, shared volume, staff-only API + frontend.
-*** IN_PROGRESS Implement =screenshot= MCP tool in browser_server.py [2026-04-14 ai]
-*** IN_PROGRESS Auto-capture screenshots in =scrape_page()= [2026-04-14 ai]
-*** TODO =ScreenshotStore= abstraction (S3-ready) [api]
-*** TODO Staff-only =GET /api/v1/scrapes/{id}/screenshots/= endpoints [api]
-*** TODO Shared Docker volume for screenshots [docker]
-*** TODO Frontend: screenshot gallery on scrape show page (staff) [frontend]
+*** DONE Implement =screenshot= MCP tool in browser_server.py [2026-04-14 ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE Auto-capture screenshots in =scrape_page()= [2026-04-14 ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE =ScreenshotStore= abstraction (S3-ready) [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE Staff-only =GET /api/v1/scrapes/{id}/screenshots/= endpoints [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE Shared Docker volume for screenshots [docker]
+CLOSED: [2026-04-14 Mon]
+*** DONE Frontend: screenshot gallery on scrape show page (staff) [frontend]
+CLOSED: [2026-04-14 Mon]
 
 ** IN_PROGRESS Hold poller + multi-model pipeline                   :APPROVED:
 [[file:notes.org::*Hold Poller, Screenshots, Multi-Model Pipeline][Plan → notes.org]]
 [2026-04-14 ai+api+frontend]
-*** TODO =BROWSER_SCRAPER_MODEL= env var in agent_factory.py [ai]
-*** TODO =BROWSER_HEADLESS= env var in browser_server.py [ai]
-*** TODO Login-wall detection in =scrape_page()= [ai]
-*** TODO =ScrapeStatus= join table (polymorphic Status pattern) [api]
-*** TODO =filter[status]= on ScrapeViewSet.list [api]
-*** TODO =_log_scrape_status()= in scraper dispatch [api]
-*** TODO =hold_poller.py= script + =caddy-poller= entry point [ai]
-*** TODO Hold radio on =job-posts/scrape.hbs= [frontend]
-*** TODO Status timeline on scrape show page [frontend]
-*** TODO Document .env model config in ai/CLAUDE.md [ai]
-*** TODO Makefile =poller= target
+*** DONE =BROWSER_SCRAPER_MODEL= env var in agent_factory.py [ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE =BROWSER_HEADLESS= env var in browser_server.py [ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE Login-wall detection in =scrape_page()= [ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE =ScrapeStatus= join table (polymorphic Status pattern) [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE =filter[status]= on ScrapeViewSet.list [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE =_log_scrape_status()= in scraper dispatch [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE =hold_poller.py= script + =caddy-poller= entry point [ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE Hold radio on =job-posts/scrape.hbs= [frontend]
+CLOSED: [2026-04-14 Mon]
+*** DONE Status timeline on scrape show page [frontend]
+CLOSED: [2026-04-14 Mon]
+*** DONE Document .env model config in ai/CLAUDE.md [ai]
+CLOSED: [2026-04-14 Mon]
+*** DONE Makefile =poller= target
+CLOSED: [2026-04-14 Mon]
+*** TODO Test end-to-end locally on feature branch
+
+** TODO Domain scrape profiles — learning loop for cost reduction   :APPROVED:
+[[file:notes.org::*Domain Scrape Profiles][Full spec → notes.org]]
+Per-hostname profiles that capture auth requirements, CSS selectors, extraction hints, and page structure from past scrapes. Feeds into tiered scrape cost: Tier 0 (deterministic, $0) → Tier 1 (mini+hints, $0.005) → Tier 2 (Haiku, $0.025) → Tier 3 (Sonnet, $0.10).
+*** TODO =ScrapeProfile= model + =preferred_tier= + =enabled= fields [api]
+*** TODO Staff-only API endpoints (list, detail, update — no create/delete) [api]
+*** TODO Auto-populate profile after successful extraction [ai]
+*** TODO LLM follow-up to write =extraction_hints= + =page_structure= [ai]
+*** TODO Inject =extraction_hints= into extractor prompt [ai]
+*** TODO Frontend: =scrape-profile= Ember Data model [frontend]
+*** TODO Frontend: =/admin/scrape-profiles= index table (hostname, auth, rate, count, tier) [frontend]
+*** TODO Frontend: =/admin/scrape-profiles/:id= show/edit page (stats + config panels) [frontend]
+*** TODO Frontend: add "Scrape Profiles" to admin subnav [frontend]
+*** TODO Tier 0: deterministic CSS selector extraction [ai]
 
 * Features — PENDING APPROVAL
 
