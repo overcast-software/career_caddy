@@ -353,6 +353,22 @@ try {
 - DNS: A record for =mcp.careercaddy.online= → VPS IP
 - CI: build =ai/Dockerfile= with =INSTALL_CAMOUFOX=false= and push to GHCR
 
+*** Prod scraping — browser-mcp in Docker [2026-04-14]
+Scraping in prod requires the browser MCP server running in Docker alongside the API.
+
+*History of the fix (3 iterations):*
+1. Prod had =BROWSER_SERVICE_URL=http://host.docker.internal:3012= (legacy REST scraper on port 3012). The legacy endpoint hasn't existed since the MCP migration. Every scrape timed out after 300s.
+2. Added =USE_MCP_BROWSER_AGENT=True= + =BROWSER_MCP_SSE_URL=http://host.docker.internal:3004/sse= — but no =browser-mcp= service existed in =docker-compose.prod.yml=, so the MCP SSE client got =ConnectTimeout=.
+3. Added =browser-mcp= service to =docker-compose.prod.yml= using the same GHCR AI image. API connects via Docker network: =http://browser-mcp:3004/sse=. Shared =screenshots= volume between API and browser-mcp. Removed =extra_hosts= (=host.docker.internal= no longer needed).
+
+*Prod compose services:* db, api, frontend, mcp (public), chat, browser-mcp.
+
+*Key env vars for scraping:*
+- =SCRAPING_ENABLED=True= — in =.env= on VPS
+- =USE_MCP_BROWSER_AGENT=True= — hardcoded in compose
+- =BROWSER_MCP_SSE_URL=http://browser-mcp:3004/sse= — Docker network
+- =BROWSER_HEADLESS=true= — no display in prod
+
 ** Security audit — multi-tenancy data isolation
 [[file:todo.org::*Security audit][↑ todo.org]]
 
@@ -1004,6 +1020,21 @@ Each transition logged with timestamp and note (error details, content length, s
 =BROWSER_HEADLESS=false= env var makes Camoufox visible. Defaults to =true= (no change to prod).
 The =screenshot= MCP tool was listed in the docstring but never implemented — now implemented.
 Terminology: =snapshot= = text extraction (=page.inner_text=), =screenshot= = PNG image (=page.screenshot=).
+
+*** Chat-initiated scrapes [2026-04-14]
+Previously the AI chat tool =create_scrape()= hardcoded =status="hold"=, meaning scrapes
+created via chat sat idle until the hold poller picked them up. Changed to omit status
+(API defaults to ="pending"= and dispatches the browser scraper immediately).
+The MCP public server still passes =status="hold"= explicitly for the hold-poller workflow.
+
+System prompt updated: after creating a scrape, the AI offers elicitation buttons
+("View scrape" → navigates user to =/scrapes/{id}=).
+
+*** ScrapeStatus logging gaps [2026-04-14]
+=ScrapeViewSet.create=, =.redo=, and hold creation never called =_log_scrape_status()=.
+Only the background scraper thread logged statuses (=running=, =scraping=, etc.).
+Result: scrape-status timeline was empty until the background thread ran.
+Fix: all three entry points now log the initial status (=pending=, =hold=, or =pending + "Redo requested"=).
 
 ** .env model config (defers DB-based admin UI)
 Per-agent model overrides already work via env vars in =agent_factory.py:get_model()=.
