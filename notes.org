@@ -1,6 +1,13 @@
 #+title: CareerCaddy — Notes & Decision Records
 #+date: 2026-04-08
 
+* Agent Mistakes — Tally: 1
+Track repeated agent errors so patterns are visible and accountable.
+
+| # | Date | Agent | Mistake | Rule violated |
+|---+------+-------+---------+---------------|
+| 1 | 2026-04-14 | frontend | Compound bash: =cd ... && git diff= | One command per Bash call, use =-C= or absolute paths |
+
 * Curriculum gap analysis [ARCHIVED 2026-04-11]
 Archived to [[file:notes_archive.org::*Curriculum gap analysis][notes_archive.org]]. Phase 2 maturity assessment; 6 gaps added to todo.org.
 
