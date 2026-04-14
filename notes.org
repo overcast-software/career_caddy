@@ -797,10 +797,27 @@ Blocklist in =create_job_post_with_company_check=: rejects ={unknown, n/a, na, n
 (case-insensitive). Returns error with inference instructions. System prompt: "NEVER use placeholder
 company names. Infer from recruiter, email domain, or URL domain. Ask user if stuck."
 
-** Item 3: Page context — DONE (all layers)
+** Item 3: Page context — FIXED (all layers)
 Frontend =chat.js= tracks =@tracked currentPage= updated on every route change in =main-application.js=.
 Payload includes =page_context: {route, url, params}=. Django proxy forwards. Chat server's
 =_build_agent()= accepts =page_context= and appends a "Current Page" section to the system prompt.
+
+#+NOTE: [2026-04-13] Three issues found and fixed:
+1. *Model hallucinated page names* — data was arriving correctly (confirmed via diagnostic logging)
+   but gpt-4o-mini ignored the route name in the system prompt. Fix: tightened prompt wording
+   to say "reply with the URL path, do NOT rephrase or invent a page name."
+2. *Stale context on follow-up messages* — agent was built with page context from message 1;
+   message 2 after navigation still showed the old page. Fix: inject =[Current page: /url]=
+   prefix into each user message so page changes are visible in the conversation history.
+3. *Eager init* — added =currentPage= initialization in =main-application.js= constructor
+   so page context is set before first =routeDidChange= fires.
+
+** Item 3b: Page-aware data access — DONE (AI layer)
+Route-to-tool mapping table added to chat system prompt. Agent now maps URL paths to tool calls:
+=/resumes= → =get_resumes()=, =/job-posts/42= → =get_job_posts(id=42)=, etc.
+Resource ID extracted from URL via regex in =_build_agent()= and injected into the Current Page
+section so the model doesn't need to parse it. Enables "what's on this page?" / "tell me about this"
+queries to fetch real data from the API matching the user's current screen.
 
 ** Item 4: Navigation — DONE (frontend + AI)
 Two mechanisms: (1) AI includes =<!-- navigate:/path -->= in text — frontend regex =NAVIGATE_RE=
@@ -822,6 +839,112 @@ Phase 2 (dedicated =ChatAction= model with persistence) deferred until Phase 1 i
 ** Item 7: WebSockets — DEFERRED
 SSE handles streaming + elicitation POST-back. WebSockets would need django-channels + ASGI +
 Redis + Docker changes. Marginal benefit. Revisit only if bidirectional becomes a hard requirement.
+
+* Admin AI Model Configuration [2026-04-13]
+Plan for an admin UI to change which AI model each agent uses at runtime.
+[[file:todo.org::*admin interface for AI model selection][↑ todo.org]]
+
+** Motivation
+=run_email_web.py= in the AI submodule lets you pick models on the fly via pydantic-ai's =agent.to_web(models=[...])= dropdown. We want the same flexibility inside Career Caddy's admin interface — no service restarts, no =.env= editing.
+
+** Current state
+All agents resolve models through =agent_factory.py:get_model(role)=:
+1. Role-specific env var (e.g. =CHAT_MODEL=, =CADDY_MODEL=)
+2. =CADDY_DEFAULT_MODEL= env var
+3. Hardcoded ="openai:gpt-4o-mini"=
+
+| Role              | Env Var                  | Purpose                               |
+|-------------------+--------------------------+---------------------------------------|
+| =chat=            | =CHAT_MODEL=             | In-app AI chat sidebar                |
+| =caddy=           | =CADDY_MODEL=            | Creates/manages job posts, apps       |
+| =email_classifier=| =EMAIL_CLASSIFIER_MODEL= | Classifies emails as job postings     |
+| =job_extractor=   | =JOB_EXTRACTOR_MODEL=    | Extracts structured data from job text|
+| =pipeline=        | =PIPELINE_MODEL=         | Searches emails, extracts URLs        |
+| =browser_scraper= | =PIPELINE_MODEL=         | Scrapes web pages for job data        |
+
+** Architecture options evaluated
+
+*** Option A — DB-stored configs with cached API fetch ⟵ RECOMMENDED
+Store model overrides in Django DB. AI service fetches from a lightweight API endpoint with 30s TTL cache.
+
+Fallback chain: DB config → role env var → =CADDY_DEFAULT_MODEL= → hardcoded default.
+
+*Pros:*
+- Instant model switching from admin UI — no restart
+- Configs persist across deployments (DB-backed)
+- Graceful degradation — API unreachable → cache → env vars → default
+- Consistent with existing patterns (DB + API)
+- Audit trail via =updated_by= field
+
+*Cons:*
+- Adds API dependency to =get_model()= hot path (mitigated by 30s TTL cache, 5s timeout)
+- New DB table for what's currently a simple env var
+- 0–30s propagation delay after changing model in UI
+- Stale cache if API goes down (acceptable — was valid when set)
+
+*** Option B — Shared config file (Docker volume mount)
+Write YAML/JSON from Django, mount into AI container.
+
+*Pros:* No network call, no cache.
+*Cons:* Requires shared volume, doesn't work in prod (separate hosts), filesystem race conditions, no audit trail.
+
+*** Option C — Docker API env var hot-reload
+Use Docker API to update env vars and trigger graceful restart.
+
+*Pros:* Zero code changes to =agent_factory.py=.
+*Cons:* Docker socket access = security risk, causes downtime, doesn't work outside Docker.
+
+*** Option D — Redis pub-sub
+Store in Redis, AI subscribes to changes.
+
+*Pros:* Near-instant propagation.
+*Cons:* Adds Redis as new dependency, overkill for 6 values that change rarely.
+
+** Cost considerations
+| Model                                | Input / Output per 1M tokens | vs. gpt-4o-mini |
+|--------------------------------------+------------------------------+-----------------|
+| =openai:gpt-4o-mini=                | $0.15 / $0.60                | 1x (baseline)   |
+| =anthropic:claude-haiku-4-5=        | $0.80 / $4.00                | ~5x             |
+| =openai:gpt-4o=                     | $2.50 / $10.00               | ~17x            |
+| =anthropic:claude-sonnet-4=         | $3.00 / $15.00               | ~20x            |
+| =ollama:*=                          | Free (local compute)         | 0x              |
+
+No guardrails in v1 — admin is trusted. AI Spend page already tracks per-model usage.
+
+** Implementation summary
+Full plan at =~/.claude/plans/linked-finding-crayon.md=.
+
+*** New files (6)
+- =api/job_hunting/models/agent_model_config.py= — Django model
+- =ai/lib/model_config_cache.py= — 30s TTL cache
+- =frontend/app/models/agent-model-config.js= — Ember Data model
+- =frontend/app/routes/admin/ai-models.js= — route
+- =frontend/app/controllers/admin/ai-models.js= — controller
+- =frontend/app/templates/admin/ai-models.hbs= — template
+
+*** Modified files (11)
+- =api/= — models/__init__.py, serializers.py, views.py, urls.py
+- =ai/= — agents/agent_factory.py (=get_model()= gains DB check before env vars)
+- =frontend/= — router.js + 7 admin templates (add "AI Models" subnav link)
+
+*** Key design decisions
+- =<datalist>= input: curated suggestions + free-text entry (not a locked dropdown)
+- =@action(detail=False, url_path="active")= returns plain JSON for machine consumption
+- Cache uses module-level globals (AI service is single-process)
+- Chat server needs =CC_API_TOKEN= added to its Docker env
+
+** Risks
+- *Invalid model string*: pydantic-ai fails at runtime → chat error. v1 accepts it; future "Test" button could validate.
+- *Cache staleness*: if API goes down, stale config persists. Acceptable — was valid when set, env-var fallback still works.
+- *Ollama models*: entered as strings, but =agent_factory.py= currently constructs =ConcreteOllamaModel= objects for Ollama. Free-text =ollama:model= may need factory-level parsing. Workaround: use =openai:= prefix with Ollama's OpenAI-compatible endpoint.
+
+** Out of scope
+- Per-user model selection
+- Model string validation / test button
+- Cost budgets or alerts
+- A/B testing or gradual rollout
+- System prompt editing from admin UI
+- Ollama model discovery (query Ollama API)
 
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)

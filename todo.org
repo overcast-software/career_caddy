@@ -103,6 +103,7 @@ Separate workstream — API key auth covers current use cases.
 System prompt in chat_server.py now explicitly tells the agent to use injected profile data.
 Fallback to username/email when first_name is empty. public_server.py has FastMCP instructions
 telling MCP clients to call get_current_user at session start.
+#+NOTE: [2026-04-13] Prod agent couldn't recite phone/address (name worked). Root cause: stale GHCR image — prod was running old code before profile field extraction. Resolved by rebuilding Docker images. Prompt reword (commit 1022736) was not the fix — the rebuild was.
 *** DONE Chat server + JWT pass-through auth (Option C) [2026-04-11]
 CLOSED: [2026-04-11 Fri]
 *** DONE Chat sidebar + full-page /caddy route [2026-04-11]
@@ -183,8 +184,12 @@ Root cause: =api= Docker hostname missing from =ALLOWED_HOSTS=. Every tool call 
 #+NOTE: [2026-04-13] Blocklist added to =create_job_post_with_company_check= in =api_tools.py= — rejects "unknown", "n/a", "tbd", etc. with error message instructing AI to infer company. System prompt updated with inference instructions. Needs testing.
 ** IN_PROGRESS AI counted only 2/5 resumes — apparently only counted favorites [2026-04-13 ai]
 #+NOTE: [2026-04-13] Root cause: no =get_resumes= tool existed in =TOOL_REGISTRY=. Added =get_resumes()= to =api_tools.py= and registered in toolsets (=all= + =career_caddy= scopes). System prompt note added. Needs testing.
-** IN_PROGRESS can we give the AI chat reference to your current page? paydantic context that evolves when page changes by sending it as part of the package to the api then updating the chat. [2026-04-13 frontend+api+ai]
-#+NOTE: [2026-04-13] Done. Frontend tracks =currentPage= (route, url, params) on every route change via =main-application.js=. Sent in chat POST body as =page_context=. Django proxy forwards it. Chat server injects into system prompt dynamically. Needs testing.
+** DONE can we give the AI chat reference to your current page? paydantic context that evolves when page changes by sending it as part of the package to the api then updating the chat. [2026-04-13 frontend+api+ai]
+CLOSED: [2026-04-13 Sun]
+Three bugs found and fixed: model hallucinating page names (tightened prompt), stale context on
+follow-ups (inject page URL prefix into each user message), eager init for first load.
+Page-aware data access added: route-to-tool mapping table in system prompt + resource ID extraction.
+See [[file:notes.org::*Item 3: Page context][notes.org]] for full details.
 ** IN_PROGRESS can the AI bot navigate the user to the correct page? [2026-04-13 frontend+ai]
 #+NOTE: [2026-04-13] Done. Two mechanisms: (1) AI includes =<!-- navigate:/path -->= marker in text — frontend detects, strips, and calls =router.transitionTo()=. (2) Server can emit =navigate= SSE event. System prompt instructs when to navigate. Needs testing.
 ** IN_PROGRESS I want elicitation like in https://gofastmcp.com/servers/elicitation for the chat.  and explicit buttons. [2026-04-13 frontend+ai]
@@ -263,6 +268,11 @@ Backend enforces — cookie manipulation cannot bypass.
 CLOSED: [2026-04-13 Sun]
 =AUTH_PASSWORD_VALIDATORS= added to Django settings. Min 8 chars, no common passwords, no numeric-only.
 Validation on both =DjangoUserViewSet.create()= and =accept_invite=.
+** TODO admin interface for AI model selection                     :PENDING_APPROVAL:
+[[file:notes.org::*Admin AI Model Configuration][Architecture + trade-offs → notes.org]]
+Admin page to change which AI model each agent role uses at runtime.
+DB-stored overrides with cached API fetch (Option A). 6 new files, 11 modified.
+Touches all 3 components: API (model + endpoint), AI (cache + =get_model()=), frontend (admin tab).
 ** TODO omarchy theme integration
 We had looked at this before and found it feasible. Turn it into a feature.
 [[file:notes.org::*Color Palette System][Omarchy integration roadmap → notes.org]]
