@@ -185,6 +185,10 @@ CLOSED: [2026-04-14 Mon]
 Four viewsets had =permission_classes = [IsAuthenticated]= without =IsGuestReadOnly=, allowing
 guests (who have valid JWTs) to POST/PATCH/DELETE: CoverLetterViewSet, ApiKeyViewSet,
 DjangoUserViewSet, and StatusViewSet. All four now include =IsGuestReadOnly=.
+** DONE job-application show: TypeError in status-log component
+CLOSED: [2026-04-14 Mon]
+=Array.from(rel)= on =applicationStatuses= relationship could yield =undefined= entries
+(unloaded/deleted records). Added =.filter(Boolean)= in =status-log.js= =_sortedRecords=.
 
 * Bugs — AI Chat
 
@@ -380,3 +384,7 @@ make: *** [Makefile:11: up-ai] Error 1
 #+END_SRC
 ** TODO Claude for glint
 ** TODO /omarchy reinstall ollama
+* Inbox
+** TODO AI should use the current page contextually in answer a question
+
+[[orgit:~/Network/syncthing/Projects/career_caddy/][~/Network/syncthing/Projects/career_caddy/ (magit-status)]]
