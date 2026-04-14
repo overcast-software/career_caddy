@@ -1160,6 +1160,41 @@ Add to =ScrapeProfile= model:
 - Over-fitting hints to one page layout → different job post types on same domain may differ. Mitigated by tracking =success_rate= and invalidating below threshold.
 - CSS selectors break silently → need a "confidence score" on selector-based extraction (e.g., all expected fields present? content length reasonable?).
 
+** Implementation log
+*** [2026-04-14] ScrapeProfile model created (migration 0040)
+=api/job_hunting/models/scrape_profile.py= — fields match spec above plus =preferred_tier= and =enabled=.
+Uses =GetMixin=, =auto_now_add= on =created_at=, =auto_now= on =updated_at=.
+=hostname= is unique + indexed. =created_by= FK for multi-tenancy.
+*** [2026-04-14] Hold poller E2E test — bugs found and fixed
+Three bugs discovered during E2E testing of hold poller + screenshots:
+1. =hold_poller.py:149= — Auth header used =Api-Key= format but API expects =Bearer jh_...=. Removed override.
+2. =browser_server.py:685= — =logfire.info("msg %s", arg)= crashed (logfire doesn't support printf-style). Changed to f-string.
+3. =career_caddy_agent.py:18= — =logfire.configure()= at module level prompts for interactive setup when =LOGFIRE_TOKEN= absent. Guarded with env check.
+Core flow validated: poll → find hold → scrape with Camoufox → screenshot capture + rename → content save → status transitions.
+Extraction step deferred (needs =OPENAI_API_KEY= in env).
+*** [2026-04-14] Staff-only API endpoints
+=ScrapeProfileSerializer= + =ScrapeProfileViewSet= (list, retrieve, partial_update).
+- =permission_classes = [IsAuthenticated, IsAdminUser]=
+- =filter[hostname]= query param on list
+- Editable fields: =extraction_hints=, =page_structure=, =css_selectors=, =preferred_tier=, =enabled=
+- Registered at =/api/v1/scrape-profiles/=
+*** [2026-04-14] Frontend admin pages
+- Ember model: =scrape-profile.js= with computed =tierLabel=, =successRatePercent=, =successRateClass=
+- Routes: =admin.scrape-profiles.index= (list table) + =admin.scrape-profiles.show= (stats + edit form)
+- Controller uses =@tracked= intermediary fields for inputs
+- CSS selectors field validates JSON before save
+- Subnav link added to all 9 admin templates
+*** [2026-04-14] AI integration — auto-populate, hints, Tier 0
+- =_update_scrape_profile()= auto-creates/updates =ScrapeProfile= after every successful parse.
+  Rolling average for =avg_content_length=, cumulative =success_rate=.
+- =_log_scrape_status()= sets =requires_auth=True= on login_failed via =ScrapeProfile.update_or_create=.
+- =_get_profile_hints()= injects =extraction_hints= + =page_structure= into the extractor prompt.
+- =_generate_profile_hints()= makes a gpt-4o-mini call with =ProfileHints= Pydantic model (structured output).
+  Records =AiUsage= with =trigger="scrape_profile"=, =agent_name="scrape_profile_hints"=.
+- =_try_tier0_extraction()= attempts deterministic CSS extraction via BeautifulSoup before LLM.
+  Requires =css_selectors= JSON + =preferred_tier= in ("auto", "0"). Falls back to LLM if title/company missing.
+- =_get_genesis_user()= fallback: AI costs always attributed (first staff user if no user on scrape).
+
 * Scrape → Parse → JobPost flow (documented for refactor) [2026-04-14]
 
 ** Current entry points (3 paths, should be 1)

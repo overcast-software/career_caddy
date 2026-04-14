@@ -285,19 +285,38 @@ CLOSED: [2026-04-14 Mon]
 CLOSED: [2026-04-14 Mon]
 *** TODO Test end-to-end locally on feature branch
 
-** TODO Domain scrape profiles — learning loop for cost reduction   :APPROVED:
+** DONE Domain scrape profiles — learning loop for cost reduction   :APPROVED:
+CLOSED: [2026-04-14 Mon]
+[2026-04-14 api+frontend] All 10 subtasks complete.
 [[file:notes.org::*Domain Scrape Profiles][Full spec → notes.org]]
 Per-hostname profiles that capture auth requirements, CSS selectors, extraction hints, and page structure from past scrapes. Feeds into tiered scrape cost: Tier 0 (deterministic, $0) → Tier 1 (mini+hints, $0.005) → Tier 2 (Haiku, $0.025) → Tier 3 (Sonnet, $0.10).
-*** TODO =ScrapeProfile= model + =preferred_tier= + =enabled= fields [api]
-*** TODO Staff-only API endpoints (list, detail, update — no create/delete) [api]
-*** TODO Auto-populate profile after successful extraction [ai]
-*** TODO LLM follow-up to write =extraction_hints= + =page_structure= [ai]
-*** TODO Inject =extraction_hints= into extractor prompt [ai]
-*** TODO Frontend: =scrape-profile= Ember Data model [frontend]
-*** TODO Frontend: =/admin/scrape-profiles= index table (hostname, auth, rate, count, tier) [frontend]
-*** TODO Frontend: =/admin/scrape-profiles/:id= show/edit page (stats + config panels) [frontend]
-*** TODO Frontend: add "Scrape Profiles" to admin subnav [frontend]
-*** TODO Tier 0: deterministic CSS selector extraction [ai]
+*** DONE =ScrapeProfile= model + =preferred_tier= + =enabled= fields [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE Staff-only API endpoints (list, detail, update — no create/delete) [api]
+CLOSED: [2026-04-14 Mon]
+*** DONE Auto-populate profile after successful extraction [api]
+CLOSED: [2026-04-14 Mon]
+=_update_scrape_profile()= in =job_post_extractor.py= — creates/updates profile on successful parse.
+Also marks =requires_auth= on login_failed via =_log_scrape_status()= in =scraper.py=.
+*** DONE LLM follow-up to write =extraction_hints= + =page_structure= [api]
+CLOSED: [2026-04-14 Mon]
+=_generate_profile_hints()= uses =ProfileHints= Pydantic model for structured output.
+gpt-4o-mini call, records =AiUsage= with =trigger="scrape_profile"=.
+*** DONE Inject =extraction_hints= into extractor prompt [api]
+CLOSED: [2026-04-14 Mon]
+=_get_profile_hints()= looks up =ScrapeProfile= by hostname and appends hints block to prompt.
+*** DONE Frontend: =scrape-profile= Ember Data model [frontend]
+CLOSED: [2026-04-14 Mon]
+*** DONE Frontend: =/admin/scrape-profiles= index table (hostname, auth, rate, count, tier) [frontend]
+CLOSED: [2026-04-14 Mon]
+*** DONE Frontend: =/admin/scrape-profiles/:id= show/edit page (stats + config panels) [frontend]
+CLOSED: [2026-04-14 Mon]
+*** DONE Frontend: add "Scrape Profiles" to admin subnav [frontend]
+CLOSED: [2026-04-14 Mon]
+*** DONE Tier 0: deterministic CSS selector extraction [api]
+CLOSED: [2026-04-14 Mon]
+=_try_tier0_extraction()= in =job_post_extractor.py= — uses BeautifulSoup + stored CSS selectors.
+Runs before LLM call in =parse()=. Falls back to LLM if title or company not found.
 
 * Features — PENDING APPROVAL
 
