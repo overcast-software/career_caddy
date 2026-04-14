@@ -1153,6 +1153,81 @@ Add to =ScrapeProfile= model:
 - Over-fitting hints to one page layout → different job post types on same domain may differ. Mitigated by tracking =success_rate= and invalidating below threshold.
 - CSS selectors break silently → need a "confidence score" on selector-based extraction (e.g., all expected fields present? content length reasonable?).
 
+* Scrape → Parse → JobPost flow (documented for refactor) [2026-04-14]
+
+** Current entry points (3 paths, should be 1)
+
+*** Path 1: MCP dispatch (automatic — scrape created via API)
+#+begin_src
+ScrapeViewSet.create (views.py:4358)
+  → Scraper(url, scrape_id).dispatch() (scraper.py:30)
+    → _dispatch_mcp._send() runs in daemon thread
+      → MCP client calls browser-mcp scrape_page
+      → Stores job_content on Scrape, sets status="completed"
+      → _maybe_caddy_extract(scrape) (scraper.py:140)
+        → extract_job_from_scrape(scrape) (generic_parser.py:189)
+          → Guard: job_content AND status=="completed" AND no job_post_id
+          → Spawns ANOTHER daemon thread
+            → GenericParser().parse(scrape, user=scrape.created_by)
+              → analyze_with_ai() — LLM extracts ParsedJobData
+              → process_evaluation() — creates Company + JobPost + links scrape
+#+end_src
+Problems:
+- Two nested daemon threads (dispatch thread spawns extract thread)
+- user= was None until just fixed — created orphan job posts (404)
+- No status logging on the extract step (added _log_scrape_status now)
+- No error surfacing to frontend — exceptions swallowed silently
+
+*** Path 2: Manual parse button (frontend → POST scrape/{id}/parse/)
+#+begin_src
+ScrapeViewSet.parse (views.py:4494)
+  → Sets status="extracting" via _log_scrape_status
+  → Spawns daemon thread
+    → GenericParser().parse(scrape, user=request.user)
+    → On success: _log_scrape_status("completed")
+    → On failure: _log_scrape_status("failed")
+#+end_src
+This is the cleanest path. Returns 200 immediately, frontend polls.
+
+*** Path 3: Hold poller (local script — ai/scripts/hold_poller.py)
+#+begin_src
+hold_poller.poll_once()
+  → GET /api/v1/scrapes/?filter[status]=hold
+  → For each: scrape_page(url) directly (no LLM)
+  → PATCH scrape with job_content + status
+  → extract_job_from_content() — AI layer LLM
+  → add_job_post() — AI layer API call
+#+end_src
+This path bypasses GenericParser entirely — uses the AI layer's own agents.
+
+** What's wrong
+
+1. *Three different parse paths* with different user handling, error handling, and status logging
+2. *Two nested threads* in Path 1 — dispatch thread spawns extract thread. Hard to reason about.
+3. *GenericParser.get_agent()* (line 72) hardcodes =gpt-4o= / =qwen3-coder= — doesn't use =agent_factory.get_model()=. Disconnected from the env var model config.
+4. *No status logging in Path 1* extract step — goes straight from "completed" (content saved) to either silently creating a job post or silently failing.
+5. *extract_job_from_scrape guard* (line 195) checks =status=="completed"= — but Path 2 sets status to "extracting" before calling parse. So if Path 2 is used, the guard in =extract_job_from_scrape= would reject it. They're separate flows that happen to call the same parser.
+6. *Company created without created_by* — =Company.objects.get_or_create(name=...)= has no user scoping. Multi-tenancy gap.
+
+** Proposed refactor direction
+- Single =parse_scrape(scrape_id, user_id)= function that handles status transitions, error logging, and user assignment
+- Called from: (a) scraper dispatch after content saved, (b) manual parse endpoint, (c) hold poller
+- GenericParser uses =agent_factory.get_model("job_extractor")= instead of hardcoded model
+- Status transitions: =extracting → completed/failed= with notes
+- Company creation scoped to user
+
+** Polling refactor: poll ScrapeStatus, not Scrape [TODO]
+Currently the frontend polls the scrape record AND the scrape-statuses endpoint — two requests per tick. The =ScrapeStatus= join table is the source of truth; =Scrape.status= (CharField) is a denormalized cache updated by =_log_scrape_status()=.
+
+The correct approach: poll =GET /api/v1/scrapes/{id}/scrape-statuses/= only. Derive current state from the latest =ScrapeStatus= record. On terminal state, fetch the full scrape with =?include=company,job-post= once.
+
+This requires:
+- A custom poll loop in the controller (the =poller= service expects an Ember Data record with =.reload()=)
+- Or extend the poller service to accept a custom fetch function instead of relying on =record.reload()=
+- The scrape-statuses endpoint already returns =included= status records with the status label
+
+Current state works (two requests per tick) but is wasteful. Consolidate when the poller service is refactored.
+
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
 * personal notes
