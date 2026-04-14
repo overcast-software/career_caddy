@@ -999,9 +999,9 @@ Browser scraping on credentialed sites fails silently in prod Docker (no session
 | =add_job_post()=      | gpt-4o-mini        | ~$0.002  |
 | *Total per scrape*    |                    | *~$0.10* |
 
-*** Hold poller flow
+*** Hold poller flow (scrape-only worker)
 #+BEGIN_SRC
-poll loop (30s interval)
+poll loop (300s interval, configurable via HOLD_POLL_INTERVAL)
   GET /api/v1/scrapes/?filter[status]=hold
   For each hold scrape:
     PATCH status → running (+ ScrapeStatus record)
@@ -1009,9 +1009,17 @@ poll loop (30s interval)
       login wall? → status=login_failed + screenshot
       success? → continue
     PATCH job_content + status=completed
-    extract_job_from_content → Sonnet
-    add_job_post → gpt-4o-mini
+    → API _maybe_trigger_extraction() fires automatically:
+      parse_scrape() → extract job data (gpt-4o-mini on VPS)
+      _update_scrape_profile() → update domain stats
+      _generate_profile_hints() → LLM hints (first scrape per domain)
 #+END_SRC
+
+Worker does NO LLM calls — only browser scraping. All extraction + profile
+updates happen API-side when job_content is PATCHed back.
+
+Run locally: =cd ai && uv run caddy-poller= (with prod .env)
+Run with stack: =make up-full= (Docker stack + poller in background)
 
 *** ScrapeStatus (polymorphic Status pattern)
 Mirrors =JobApplicationStatus=. Uses =Status= table with =status_type="scrape"=.

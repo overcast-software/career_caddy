@@ -1,9 +1,14 @@
-.PHONY: up up-mcp-gateway down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai pipeline pipeline-url help
+.PHONY: up up-full up-mcp-gateway down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai pipeline pipeline-url help
 
 # ── Dev stack ──────────────────────────────────────────────────────────────
 
 up: ## Start full dev stack (db + api + frontend + chat + browser-mcp)
 	docker compose down --remove-orphans 2>/dev/null || true
+	docker compose up
+
+up-full: ## Start dev stack + hold-poller (scrapes hold jobs locally)
+	docker compose down --remove-orphans 2>/dev/null || true
+	cd ai && uv run caddy-poller &
 	docker compose up
 
 up-mcp-gateway: ## Start full stack + MCP gateway aggregator (port 3002)
