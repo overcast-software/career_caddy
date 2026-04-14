@@ -128,11 +128,10 @@ class CareerCaddy:
         self,
         src: Annotated[dagger.Directory, DefaultPath("../ai")],
     ) -> dagger.Container:
-        """Build the slim AI agent image (Python 3.13, no Camoufox — production image).
+        """Build the AI agent image (Python 3.13, no Camoufox — CI validation only).
 
-        Camoufox (~700 MB) is excluded from the production image. The browser-mcp
-        service is only for local dev and is built separately via docker compose
-        with INSTALL_CAMOUFOX=true.
+        The publish function builds with INSTALL_CAMOUFOX=true for production.
+        This function builds without Camoufox for faster CI checks.
         """
         src = (
             src
@@ -234,10 +233,10 @@ class CareerCaddy:
             .publish(frontend_ref)
         )
 
-        # AI image: build without Camoufox for the public MCP server
+        # AI image: build with Camoufox for browser-mcp in prod
         pushed_ai = await (
             ai_src
-            .docker_build(build_args=[dagger.BuildArg("INSTALL_CAMOUFOX", "false")])
+            .docker_build(build_args=[dagger.BuildArg("INSTALL_CAMOUFOX", "true")])
             .with_registry_auth(REGISTRY, username, registry_token)
             .publish(ai_ref)
         )

@@ -369,6 +369,17 @@ Scraping in prod requires the browser MCP server running in Docker alongside the
 - =BROWSER_MCP_SSE_URL=http://browser-mcp:3004/sse= — Docker network
 - =BROWSER_HEADLESS=true= — no display in prod
 
+*Resource concern:* 6 services on a small VPS is heavy. The AI image includes Camoufox
+(~200MB+ browser binary). Three services use the same AI image (mcp, chat, browser-mcp).
+
+*Optimization strategies (future):*
+1. *On-demand browser-mcp* — don't run it 24/7. Use =docker compose up browser-mcp= only when scraping, or set =restart: "no"= and have the API start it via Docker API before dispatching. Scraping is infrequent; the browser idles 99% of the time.
+2. *Merge chat + browser-mcp into one process* — both are Python/FastMCP on the AI image. A single service could host both servers on different ports (or one port with path routing). Saves ~256MB+ RAM from the duplicate Python runtime and Camoufox memory.
+3. *Slim AI image variants* — build two images: =ai-lite= (no camoufox, for mcp + chat) and =ai-browser= (with camoufox, for browser-mcp only). The =INSTALL_CAMOUFOX= build arg already supports this.
+4. *Move browser-mcp off the VPS* — run it locally or on a beefier machine. The hold-poller pattern already supports this (queue on VPS, scrape locally). Only direct =/scrapes/new= would need the VPS browser.
+5. *Scale down replicas* — reduce =GUNICORN_WORKERS= from 2 to 1 if traffic is low. The chat and MCP services are single-worker already.
+6. *Swap Camoufox for lightweight scraping* — for sites that don't need JS rendering or anti-bot evasion, use =httpx= + BeautifulSoup directly in the API (Tier 0 in the scrape profile system). Reserve Camoufox for login-wall sites only.
+
 ** Security audit — multi-tenancy data isolation
 [[file:todo.org::*Security audit][↑ todo.org]]
 
