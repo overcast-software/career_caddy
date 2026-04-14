@@ -1209,12 +1209,16 @@ This path bypasses GenericParser entirely — uses the AI layer's own agents.
 5. *extract_job_from_scrape guard* (line 195) checks =status=="completed"= — but Path 2 sets status to "extracting" before calling parse. So if Path 2 is used, the guard in =extract_job_from_scrape= would reject it. They're separate flows that happen to call the same parser.
 6. *Company created without created_by* — =Company.objects.get_or_create(name=...)= has no user scoping. Multi-tenancy gap.
 
-** Proposed refactor direction
-- Single =parse_scrape(scrape_id, user_id)= function that handles status transitions, error logging, and user assignment
-- Called from: (a) scraper dispatch after content saved, (b) manual parse endpoint, (c) hold poller
-- GenericParser uses =agent_factory.get_model("job_extractor")= instead of hardcoded model
-- Status transitions: =extracting → completed/failed= with notes
-- Company creation scoped to user
+** DONE Refactor completed [2026-04-14]
+Renamed =GenericParser= → =JobPostExtractor= (file: =job_post_extractor.py=).
+Single =parse_scrape(scrape_id, user_id, sync)= entry point replaces both =extract_job_from_scrape()= and inline thread in =ScrapeViewSet.parse=.
+- Env-var model selection: =JOB_PARSER_MODEL= → =CADDY_DEFAULT_MODEL= → =gpt-4o= default. Supports =ollama:model-name= prefix.
+- =sync=True= eliminates nested threads (dispatch already backgrounded).
+- Status transitions: =extracting → completed/failed= with notes — consistent across all paths.
+- 13 new tests in =test_job_post_extractor.py=. All tests pass.
+
+*** Company is a shared resource — no =created_by= :DECISION:
+Company must NOT have a =created_by= field. Companies are shared across all users in a multi-tenant setup — "Google" is the same Company regardless of who scraped it first. Adding =created_by= would imply ownership where there is none, and would break the pattern where multiple users assign their own job posts to the same company. No migrations needed. Decided [2026-04-14].
 
 ** Polling refactor: poll ScrapeStatus, not Scrape [TODO]
 Currently the frontend polls the scrape record AND the scrape-statuses endpoint — two requests per tick. The =ScrapeStatus= join table is the source of truth; =Scrape.status= (CharField) is a denormalized cache updated by =_log_scrape_status()=.
