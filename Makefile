@@ -6,9 +6,7 @@ up: ## Start full dev stack (db + api + frontend + chat + browser-mcp)
 	docker compose down --remove-orphans 2>/dev/null || true
 	docker compose up
 
-up-full: ## Start dev stack + hold-poller (scrapes hold jobs locally)
-	docker compose down --remove-orphans 2>/dev/null || true
-	cd ai && uv run caddy-poller &
+up-full: ## Start dev stack (run 'make poller-local' in a separate terminal for hold scrapes)
 	docker compose up
 
 up-mcp-gateway: ## Start full stack + MCP gateway aggregator (port 3002)
@@ -68,8 +66,11 @@ pipeline: ## Run the full job email → Career Caddy pipeline
 pipeline-url: ## Scrape a single job URL  (usage: make pipeline-url URL=https://...)
 	cd ai && uv run caddy-pipeline --url $(URL)
 
-poller: ## Poll for hold scrapes and process locally (headed browser)
+poller: ## Poll for hold scrapes against prod
 	cd ai && uv run caddy-poller
+
+poller-local: ## Poll for hold scrapes against local dev (localhost:8000)
+	cd ai && CC_API_BASE_URL=http://localhost:8000 uv run caddy-poller
 
 # ── Bootstrap ──────────────────────────────────────────────────────────────
 

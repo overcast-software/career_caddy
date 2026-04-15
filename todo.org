@@ -373,6 +373,9 @@ Touches all 3 components: API (model + endpoint), AI (cache + =get_model()=), fr
 ** TODO omarchy theme integration
 We had looked at this before and found it feasible. Turn it into a feature.
 [[file:notes.org::*Color Palette System][Omarchy integration roadmap → notes.org]]
+** TODO Resume serializer: fix JSON:API relationship linkage + sideloading
+[[file:notes.org::*Resume serializer — malformed JSON:API relationships][Full analysis → notes.org]]
+Summaries, certifications, educations, experiences, skills, projects embedded in attributes but missing data linkage in relationships. Causes 404s on non-existent nested endpoints and empty carousels.
 ** TODO scores: need an edit page to help with relationships that need to be manually set
 ** DONE =make up= should include AI — it's integral
 CLOSED: [2026-04-13 Sun]
