@@ -466,6 +466,8 @@ FIX [2026-04-15]: =_reloadResource= now awaits the reload, then auto-polls any s
 ** DONE Score function usage not reflected in AI Spend [ai+api]
 CLOSED: [2026-04-15 Tue]
 The scoring thread's single try/except meant a usage recording failure could mark the score as failed. Split into separate try blocks — scoring failure and usage failure are independent. Added logging for both.
+** TODO Flash/highlight main content area on chat reload [frontend]
+Chat service sets =@tracked lastReloadAt= + resource type when =_reloadResource= fires. =RouteLayout= watches it and toggles a CSS animation class on =.fairway= (background pulse). Pure CSS animation, auto-cleans after transition. See notes from exploration in this conversation.
 ** TODO Adopt PollableController across all pollable show routes [frontend]
 =controllers/pollable.js= is a base controller that auto-polls =this.model= when status is non-terminal. Currently used by =questions/show/answers/show= and =job-posts/show/questions/show/answers/show=. Extend to:
 - =scores/show= (replace inline polling in =job-posts/show/scores= controller)
