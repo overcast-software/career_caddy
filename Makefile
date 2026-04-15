@@ -1,4 +1,4 @@
-.PHONY: up up-full up-mcp-gateway down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai pipeline pipeline-url help
+.PHONY: up up-full up-mcp-gateway down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai pipeline pipeline-url doctor doctor-poller help
 
 # ── Dev stack ──────────────────────────────────────────────────────────────
 
@@ -72,6 +72,12 @@ poller: ## Poll for hold scrapes and process locally (headed browser)
 	cd ai && uv run caddy-poller
 
 # ── Bootstrap ──────────────────────────────────────────────────────────────
+
+doctor: ## Check local environment is set up correctly
+	@bash scripts/doctor.sh
+
+doctor-poller: ## Check hold-poller environment
+	@bash scripts/doctor.sh --poller
 
 bootstrap: ## Check if app needs initialization (prints status)
 	@curl -s http://localhost:8000/api/v1/initialize/ | python3 -m json.tool
