@@ -466,6 +466,12 @@ FIX [2026-04-15]: =_reloadResource= now awaits the reload, then auto-polls any s
 ** DONE Score function usage not reflected in AI Spend [ai+api]
 CLOSED: [2026-04-15 Tue]
 The scoring thread's single try/except meant a usage recording failure could mark the score as failed. Split into separate try blocks — scoring failure and usage failure are independent. Added logging for both.
+** TODO Adopt PollableController across all pollable show routes [frontend]
+=controllers/pollable.js= is a base controller that auto-polls =this.model= when status is non-terminal. Currently used by =questions/show/answers/show= and =job-posts/show/questions/show/answers/show=. Extend to:
+- =scores/show= (replace inline polling in =job-posts/show/scores= controller)
+- =scrapes/show=
+- Any other show route where the model has a =status= field that progresses asynchronously.
+Pattern: controller extends =PollableController=, route calls =controller.startPollingIfPending()= in =setupController=.
 ** TODO Audit redundant parent columns in child route list components [frontend]
 Shared list components with =@showCompany=, =@showJobPost=, =@showResume= args should hide parent columns when rendered inside the parent's child route (e.g. =companies/:id/scores= should pass =@showJobPost={{false}}=). Need to verify all consumers pass the right flags.
 ** DONE PROJ plan integration of a job queue [2026-04-15]
