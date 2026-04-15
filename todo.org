@@ -388,6 +388,13 @@ make: *** [Makefile:11: up-ai] Error 1
 ** TODO 403 shows guest a failure instead of access denied for a save.  delete didn't show anything on 403
 
 [[file:~/Network/syncthing/Projects/career_caddy/CLAUDE.md::```]]
-** TODO AI should use the current page contextually in answer a question
-
+** DONE AI should use the current page contextually in answer a question [2026-04-14 frontend+ai]
+CLOSED: [2026-04-14 Mon]
+Added get_questions(), get_answers(), create_answer() tools. Chat page-aware table updated. Prompt instructs AI not to regurgitate data and to use elicitation buttons.
 [[orgit:~/Network/syncthing/Projects/career_caddy/][~/Network/syncthing/Projects/career_caddy/ (magit-status)]]
+** DONE saving a new answer transitions before question is finished creating [2026-04-14 frontend]
+CLOSED: [2026-04-14 Mon]
+Explicit IDs in transitions, save button shows "AI Generating…", LinkTo uses IDs to force model hooks, answers list hidden when viewing specific answer.
+** DONE when selecting new question after having answered one for a job-post, job-application and company, new question should assume those relationships. [2026-04-14 frontend]
+CLOSED: [2026-04-14 Mon]
+Context-aware Save & New (job-application > job-post > query params). Form reads all context from question relationships. Company dropdown hits API. Questions::Item resilient to async.
