@@ -388,7 +388,10 @@ CLOSED: [2026-04-14 Mon]
 Removed attribute embedding, added proper =data= linkage + auto-includes in viewset.
 Fixed =_build_included= ownership filter for =user_id=None= records.
 Summaries carousel now loads all user summaries and PATCHes to set active.
-** TODO scores: need an edit page to help with relationships that need to be manually set
+** DONE scores: need an edit page to help with relationships that need to be manually set
+CLOSED: [2026-04-15 Tue]
+Scores::Form component with cascading company → job post selects + resume picker.
+Scores::Item rewritten with HyperUI details-list pattern.
 ** DONE =make up= should include AI — it's integral
 CLOSED: [2026-04-13 Sun]
 Removed =profiles: [browser]= from =browser-mcp= service. Now starts with default =make up=. Removed =up-ai= Makefile target.
