@@ -1768,23 +1768,30 @@ Two options:
 
 Decision deferred — needs exploration of resume builder impact first.
 
-** Recommended refactor order
+** Completed [2026-04-15]
 
-Batch by parent route to minimize context switching. Each batch fixes route model + inline list + dead controllers together.
+1. +questions/show/answers/index+ — DONE. Swapped to =<Answers::List>=, fixed route model, deleted 2 dead edit controllers.
+2. +job-posts/show/scores+ — DONE. Fixed route model, swapped to =<Scores::List>= with =@showJobPost={{false}}=.
+3. +job-posts/show/summaries+ — DONE. Fixed route model, swapped to =<Summaries::List>=. Carousel renamed to =<Summaries::Carousel>=.
+4. +job-posts/show/cover-letters+ — DONE. Rewrote =<CoverLetters::List>= as table. Deleted dead =list.js=.
+5. +job-posts/show/scrapes+ — DONE. Swapped to =<Scrapes::List>= with =@showCompany={{false}} @showJobPost={{false}}=.
+6. +job-posts/show/job-applications/index+ — DONE. Fixed route model. Dead =jobPost= getter removed.
+7. +job-posts/show/questions/index+ — DONE. Fixed route model. Dead =jobPostId= getter removed.
+8. +companies/show/scores+ — DONE. Swapped to =<Scores::List>= with =@showResume={{false}}=.
+9. +companies/show/questions/new+ — DONE. Fixed route model.
+10. +job-applications/show/questions/index+ — DONE. Fixed route model.
+11. +job-applications/show/questions/new+ — DONE. Fixed route model.
+12. All controller =jobPost= getters using =currentRoute.parent.params= — DONE. Removed from scores, summaries, cover-letters, scrapes, questions/index.
 
-1. =questions/show/answers/index= — straightforward swap to =<Answers::List>=, fix route model, delete 2 dead edit controllers
-2. =job-posts/show/scores= — fix route model, swap to =<Scores::List>=
-3. =job-posts/show/summaries= — fix route model, swap to =<Summaries::List>=
-4. =job-posts/show/cover-letters= — fix route model, swap to =<CoverLetters::List>= (may need to create)
-5. =job-posts/show/scrapes= — fix route model, swap to =<Scrapes::List>=
-6. =job-posts/show/job-applications/index= — fix route model (list already uses =JobApplications::Compact=)
-7. =job-posts/show/questions/index= — fix route model, complex inline answer form needs extraction first
-8. =companies/show/answers= — swap to =<Questions::List>= or similar
-9. =companies/show/scores= — swap to =<Scores::List>=
-10. =companies/show/questions/new= — fix route model
-11. =job-applications/show/questions/index= — fix route model
-12. =job-applications/show/questions/new= — fix route model
-13. Top-level index pages (=answers/index=, =questions/index=, =summaries/index=) — extract inner loop, keep pagination in route template
+** Remaining
+
+1. =companies/show/answers= — inline question table, swap to shared component
+2. =job-posts/show/questions/index= — complex inline answer form needs extraction first
+3. Top-level index pages (=answers/index=, =questions/index=, =summaries/index=) — extract inner loop, keep pagination in route template
+
+** Future: Redundant columns in child contexts :TODO:
+
+Shared list components may show a parent column that's redundant when used in a child route. For example, =companies/:id/scores= shouldn't show a Company column. The =@showCompany={{false}}= / =@showJobPost={{false}}= pattern handles this, but needs an audit pass to ensure all child contexts hide their parent column.
 
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
