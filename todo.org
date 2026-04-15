@@ -451,7 +451,8 @@ All route model code smells fixed (9 routes returning single resources). All =jo
 =Answers::List= with optional columns, pending spinners, and =@emptyMessage=. Extracted
 =<Questions::InlineAnswer>= from 131-line controller. Renamed =Summaries::Carousel=. Deleted
 4 dead controllers and 2 dead JS files. Removed all controller =jobPost= getters.
-** TODO Redesign =/summaries= index with HyperUI details-list pattern [frontend]
+** DONE Redesign =/summaries= index with HyperUI details-list pattern [frontend]
+CLOSED: [2026-04-15 Tue]
 The top-level =/summaries= page should show full summary text rather than a truncated table row. Use the HyperUI details-list pattern (https://www.hyperui.dev/components/application/details-list/) to display each summary with its full content, resume, active status, and job post metadata in a readable layout. The current =Summaries::List= table works well for =job-posts/show/summaries= where summaries are secondary, but on the dedicated =/summaries= page the content is the point.
 ** TODO Audit redundant parent columns in child route list components [frontend]
 Shared list components with =@showCompany=, =@showJobPost=, =@showResume= args should hide parent columns when rendered inside the parent's child route (e.g. =companies/:id/scores= should pass =@showJobPost={{false}}=). Need to verify all consumers pass the right flags.
