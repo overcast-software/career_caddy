@@ -1,12 +1,13 @@
 #+title: CareerCaddy — Notes & Decision Records
 #+date: 2026-04-08
 
-* Agent Mistakes — Tally: 1
+* Agent Mistakes — Tally: 2
 Track repeated agent errors so patterns are visible and accountable.
 
 | # | Date | Agent | Mistake | Rule violated |
 |---+------+-------+---------+---------------|
 | 1 | 2026-04-14 | frontend | Compound bash: =cd ... && git diff= | One command per Bash call, use =-C= or absolute paths |
+| 2 | 2026-04-15 | frontend | Jumped to coding before fully reading notes.org | "read notes, internalize the lessons" — read the full file before acting |
 
 * Curriculum gap analysis [ARCHIVED 2026-04-11]
 Archived to [[file:notes_archive.org::*Curriculum gap analysis][notes_archive.org]]. Phase 2 maturity assessment; 6 gaps added to todo.org.
@@ -1450,6 +1451,340 @@ await Promise.all([resume.skills, resume.summaries, resume.projects]);
 #+END_SRC
 
 This await resolves instantly from the store (no extra fetch) when data is sideloaded.
+
+* Full-height page layout (caddy chat) [2026-04-15]
+
+** Problem
+The =/caddy= full-page chat didn't fill the viewport. Input sat in the middle of the page
+instead of at the bottom. The empty space below was unusable.
+
+** Root cause: =overflow-y: auto= breaks flex height constraint
+=.course-main= has =overflow-y: auto= by default (so normal pages scroll). When we add
+=display: flex; flex-direction: column= for the caddy-fullpage override, =overflow: auto=
+tells the browser the flex container can grow and scroll — so flex children don't get
+constrained to the available height. They render at their natural size and the container
+scrolls. Since the chat panel is smaller than the viewport, it just sits in the middle.
+
+** Fix
+=.course-main:has(.caddy-fullpage)= now sets =overflow: hidden=. This forces the flex
+children to fit within the grid cell's actual height. The chat panel's own messages div
+has =overflow-y: auto= so messages still scroll internally.
+
+** Height propagation chain (all must be flex/grid with constrained overflow)
+#+BEGIN_SRC
+.course          → height: 100vh; display: grid; overflow: hidden
+  .course-main   → grid-area: main; overflow: hidden (was auto — that broke it)
+    :has(.caddy-fullpage) → display: flex; flex-direction: column
+      #subnav-portal → auto height (breadcrumbs bar)
+      .fairway       → flex: 1; min-height: 0; display: flex; flex-direction: column
+        .caddy-fullpage → flex: 1; min-height: 0; display: flex; flex-direction: column
+          Chat::Panel   → flex flex-col h-full
+            header      → auto
+            #chat-messages → flex-1 overflow-y-auto (this scrolls)
+            input area  → auto (pinned to bottom)
+#+END_SRC
+
+** Safety check
+- Flash messages use =position: fixed= — not affected by =overflow: hidden= on =course-main=.
+- Subnav portal is small, takes =auto= height in the flex column. Not clipped.
+- Caddy template passes no =@flashMessages= to =<RouteLayout>=, so no =<BarCart>= in flow.
+- This override only fires when =.caddy-fullpage= is present (=:has()= selector). All other
+  pages keep =overflow-y: auto= and scroll normally.
+
+** Lesson for agents
+If a flex column child won't fill available height, check the parent's =overflow= property.
+=overflow: auto= or =overflow: scroll= on a flex container lets children overflow instead of
+being constrained. Use =overflow: hidden= when you need children to fit.
+
+* Job Queue Integration Plan [2026-04-15]
+[[file:todo.org::*plan integration of a job job queue][↑ todo.org]]
+Full plan: =~/.claude/plans/sequential-scribbling-wall.md=
+
+** Recommendation: django-q2 with PostgreSQL broker
+No new infrastructure. Uses existing PostgreSQL as broker. One pip dependency, one extra
+Docker container running =manage.py qcluster=.
+
+** Current daemon thread inventory (7 spawn points)
+| Location | Task | Line |
+|----------+------+------|
+| =views.py= | Score generation | ~3670 |
+| =views.py= | Cover letter generation | ~5095 |
+| =views.py= | Answer generation | ~6038 |
+| =scraper.py= | Legacy browser dispatch | ~122 |
+| =scraper.py= | MCP browser dispatch | ~171 |
+| =scraper.py= | A2A browser dispatch | ~214 |
+| =job_post_extractor.py= | parse_scrape | ~436 |
+
+** Implementation: 8 steps
+1. Add =django-q2= to =api/pyproject.toml=, =django_q= to INSTALLED_APPS
+2. =Q_CLUSTER= config: 2 workers, 5min timeout, PostgreSQL ORM, 4s poll
+3. New =api/job_hunting/lib/tasks.py= — 5 task functions
+4. Replace =threading.Thread= with =async_task()= in views.py (3 sites)
+5. Refactor =scraper.py= — expose sync dispatch, wrap in =async_task()=
+6. Refactor =job_post_extractor.py= — replace daemon thread
+7. Add =worker= service to docker-compose files (same image, different command)
+8. =manage.py migrate= creates django-q2 tables
+
+** Unchanged
+Frontend poller, hold_poller, status field pattern, API 202 responses, chat SSE.
+
+* ActivityPub Integration Plan [2026-04-15]
+[[file:todo.org::*plan the integration of activitypub][↑ todo.org]]
+Full plan: =~/.claude/plans/sequential-scribbling-wall.md=
+
+** Concept: federated job post sharing between Career Caddy instances
+
+** Data model additions
+- =JobPost.is_public= (bool) — opt-in sharing flag
+- =JobPost.ap_id= (url) — globally unique ActivityPub ID
+- =FederatedInstance= model — known remote instances (domain, inbox, public_key)
+- =FederatedJobPost= model — received remote posts (read-only)
+
+** New endpoints
+- =GET /.well-known/webfinger= — instance discovery
+- =GET /api/v1/ap/actor= — instance Actor profile
+- =POST /api/v1/ap/inbox= — receive federated activities
+- =GET /api/v1/ap/outbox= — public job posts as ActivityPub collection
+
+** Phased approach
+1. WebFinger + Actor + Outbox (read-only, discoverable)
+2. Inbox + HTTP Signatures (receive shared posts)
+3. Frontend "Shared Jobs" feed + import
+4. Instance admin (peers, blocking, activity log)
+
+** Key constraints
+- Company shared by name, not FK (already the case)
+- No user-to-user federation — instances share, not individuals
+- Federated posts are read-only (import to local copy for editing)
+
+* Shared Answer Components — Refactor Notes
+:PROPERTIES:
+:CREATED: [2026-04-15]
+:END:
+
+** Components created
+- =<Answers::Show>= — renders answer content with markdown, edit link, and yielded =<:actions>= block
+- =<Answers::List>= — iterates answers with view/edit/delete buttons, accepts =@showRoute=, =@editRoute=, =@onDelete=
+
+** Key pattern: =Answers::Form= route-aware navigation
+=afterSave()= in =answers/form.js= now derives the target route from =this.router.currentRouteName=:
+=current.replace(/\.answers\.(new|edit)$/, '.answers.show')=
+This eliminates =@onSave= callbacks from all nested answer routes.
+
+** Gotchas for future agents
+1. +*=modelFor= returns objects in some parent routes.*+ RESOLVED [2026-04-15]. All question show routes now return single question. Child routes use =modelFor= directly (parent IS the question).
+2. +*Top-level =answers/show.hbs= is completely different.*+ RESOLVED [2026-04-15]. Now uses =<Answers::Show>= with =<:actions>= for copy button. Renders markdown.
+3. +*Top-level =answers/edit.hbs= has a custom form.*+ RESOLVED [2026-04-15]. Now uses =<Answers::Form>= with =<:actions>= for delete button.
+4. *=@showQuestion= on =<Answers::Form>=.* Only used when the answer is created outside the
+   question context (e.g. from a "new question + answer" flow). In nested routes under a question
+   show page, omit it — the question is already visible above.
+5. *The =<:actions>= named block* on =<Answers::Show>= is optional. Use it for extra buttons
+   (copy to clipboard, "All Answers" link). If not provided, only the Edit link shows.
+6. *The =<:actions>= named block* on =<Answers::Form>= is optional. Use it for extra buttons
+   (delete). If not provided, only Favorite + Save show.
+
+** Files changed
+| File | Change |
+|------+--------|
+| =components/answers/show.hbs= | Created — shared answer display component |
+| =components/answers/list.hbs= | Created — shared answer list component |
+| =components/answers/form.js= | =afterSave()= derives route from =currentRouteName= |
+| =templates/job-posts/show/questions/show/answers/show.hbs= | → =<Answers::Show>= |
+| =templates/job-applications/show/questions/show/answers/show.hbs= | → =<Answers::Show>= |
+| =templates/questions/show/answers/show.hbs= | → =<Answers::Show>= with =<:actions>= |
+| =templates/companies/show/questions/show/answers/show.hbs= | → =<Answers::Show>= (new) |
+| =templates/*/answers/new.hbs= | Removed =@onSave=, =@showQuestion=; =this.model= not =this.model.answer= |
+| =templates/*/answers/edit.hbs= | Removed =@onSave= |
+| =routes/*/answers/new.js= | Returns single answer record, gets question from =modelFor= |
+
+* Shared Component Refactor — Round 2
+:PROPERTIES:
+:CREATED: [2026-04-15]
+:END:
+
+** What was done
+Completed migration of top-level answer routes and nested question show routes to shared components. Fixed route model code smell (multi-resource returns).
+
+*** Top-level answer routes migrated
+- =answers/show.hbs= → =<Answers::Show>= with =<:actions>= for copy button. Now renders markdown.
+- =answers/edit.hbs= → =<Answers::Form>= with =<:actions>= for delete button. Controller stripped to just =deleteAnswer=.
+
+*** Route model code smell fixed
+- =job-posts.show.questions.show= — was returning ={jobPost, question}=, now returns single question
+- =job-applications.show.questions.show= — was returning ={jobApplication, question, answers}=, now returns single question
+- Child =answers/new= routes updated: =parent.question= → =parent= (parent IS the question)
+- Dead =onSave= controllers deleted (2 files)
+
+*** Shared component updates
+- =Answers::List=: =@showRoute= is now optional (wrapped in ={{#if}}=). job-applications omits View button.
+- =Answers::Form=: Added =<:actions>= named block for context-specific buttons (e.g. delete). Removed unused ={{yield}}=.
+
+** Challenges and patterns for future refactors
+
+1. *Back links without =@model=.* When a child route is active, =<LinkTo>= to an ancestor route resolves parent dynamic segments from the current URL automatically. No =@model= needed. Verified in job-posts and job-applications contexts.
+
+2. *=<Panel::Card>= inconsistency.* job-applications =questions/show.hbs= wrapped content in =<Panel::Card>=, while job-posts and companies did not. Removed for consistency. Decision: question show templates use bare =<div class="space-y-4">= wrapper.
+
+3. *=showAnswersList= getter pattern.* Every question show controller needs this to hide the answer list when a child answer route is active (prevents duplicate display). The getter checks =router.currentRouteName= against the show and show.index variants. This is duplicated across all three controllers — candidate for a mixin if more resources adopt it.
+
+4. *Dead =@onSave= callbacks.* After =Answers::Form= gained =afterSave()= route derivation, =@onSave= props and their controllers became dead code but were never cleaned up. Pattern: always grep for dead callbacks after migrating to shared components.
+
+5. *=@showRoute= optionality.* job-applications answer list intentionally omits the View button (Edit + Delete only). Shared list components should always make route args optional with ={{#if}}= guards.
+
+6. *Controller convergence.* After refactoring, all three question show controllers (companies, job-posts, job-applications) are structurally identical: =showAnswersList= getter + =deleteAnswer= action with =.then()/.catch()=. Strong candidate for extraction if a fourth context appears.
+
+** Files changed
+| File | Change |
+|------+--------|
+| =components/answers/list.hbs= | =@showRoute= optional |
+| =components/answers/form.hbs= | Added =<:actions>= block, removed unused ={{yield}}= |
+| =templates/answers/show.hbs= | → =<Answers::Show>= with copy button in =<:actions>= |
+| =templates/answers/edit.hbs= | → =<Answers::Form>= with delete in =<:actions>= |
+| =controllers/answers/edit.js= | Stripped to =deleteAnswer= only |
+| =routes/job-posts/show/questions/show.js= | Returns single question (was ={jobPost, question}=) |
+| =controllers/job-posts/show/questions/show.js= | =this.model= is question, =.then()/.catch()=, removed =onAnswerSave= |
+| =templates/job-posts/show/questions/show.hbs= | =<Questions::Item>= + =<Answers::List>=, no =@model= on back link |
+| =routes/job-posts/show/questions/show/answers/new.js= | =parent= not =parent.question= |
+| =routes/job-applications/show/questions/show.js= | Returns single question (was ={jobApplication, question, answers}=) |
+| =controllers/job-applications/show/questions/show.js= | Added =showAnswersList=, =.then()/.catch()=, removed =onAnswerSave= |
+| =templates/job-applications/show/questions/show.hbs= | =<Questions::Item>= + =<Answers::List>=, removed =<Panel::Card>= |
+| =routes/job-applications/show/questions/show/answers/new.js= | =parent= not =parent.question= |
+| =controllers/job-posts/.../answers/new.js= | DELETED — dead =onSave= |
+| =controllers/job-applications/.../answers/new.js= | DELETED — dead =onSave= |
+
+* Shared Component Refactor — Full Audit
+:PROPERTIES:
+:CREATED: [2026-04-15]
+:END:
+
+The questions/answers refactor (Round 2) established the gold standard pattern. This audit identifies every remaining instance of the same code smells across all resources.
+
+** Code smell 1: Route models returning multiple resources
+
+9 routes return ={ x, y }= objects instead of a single resource. The parent should come from =modelFor=.
+
+*** job-posts.show child routes (5 violations)
+
+| Route file | Returns | Fix |
+|------------+---------+-----|
+| =routes/job-posts/show/questions/index.js= | ={ jobPost, questions }= | Return =questions= only |
+| =routes/job-posts/show/questions/new.js= | ={ question, jobPost }= | Return =question= only |
+| =routes/job-posts/show/scores.js= | ={ jobPost, scores }= | Return =scores= only |
+| =routes/job-posts/show/summaries.js= | ={ jobPost, summaries }= | Return =summaries= only |
+| =routes/job-posts/show/job-applications/index.js= | ={ jobPost, jobApplications }= | Return =jobApplications= only |
+
+All can get =jobPost= via =this.modelFor('job-posts.show')=.
+
+*** job-applications.show child routes (2 violations)
+
+| Route file | Returns | Fix |
+|------------+---------+-----|
+| =routes/job-applications/show/questions/index.js= | ={ jobApplication, questions }= | Return =questions= only |
+| =routes/job-applications/show/questions/new.js= | ={ question, jobApplication }= | Return =question= only |
+
+All can get =jobApplication= via =this.modelFor('job-applications.show')=.
+
+*** companies.show child routes (1 violation)
+
+| Route file | Returns | Fix |
+|------------+---------+-----|
+| =routes/companies/show/questions/new.js= | ={ question, company }= | Return =question= only |
+
+Can get =company= via =this.modelFor('companies.show')=.
+
+*** questions.show child routes (1 violation)
+
+| Route file | Returns | Fix |
+|------------+---------+-----|
+| =routes/questions/show/answers/index.js= | ={ question, answers }= | Return =answers= only |
+
+Can get =question= via =this.modelFor('questions.show')=.
+
+*** Cascade impact per route fix
+Each fix requires updating:
+1. The route model hook (remove parent fetch)
+2. Every template reading =this.model.parentName= (change to =this.model= or remove)
+3. Every controller reading =this.model.parentName= (change to =this.model= or remove)
+4. Any child routes calling =modelFor= on the fixed route that destructure the old object
+
+** Code smell 2: Inline lists duplicating shared components
+
+11 templates have inline ={{#each}}= loops with View/Edit/Delete buttons where a shared list component already exists.
+
+*** job-posts/show nested templates (5)
+
+| Template | Iterates | Shared component exists | Notes |
+|----------+----------+------------------------+-------|
+| =templates/job-posts/show/scores.hbs= | =this.model.scores= | =components/scores/list.hbs= | Inline table |
+| =templates/job-posts/show/cover-letters.hbs= | =this.model= | =components/cover-letters/list.hbs= | Inline table |
+| =templates/job-posts/show/scrapes.hbs= | =this.model= | =components/scrapes/list.hbs= | Inline table |
+| =templates/job-posts/show/summaries.hbs= | =this.model.summaries= | =components/summaries/list.hbs= | Inline table |
+| =templates/job-posts/show/questions/index.hbs= | =this.model.questions= | =components/questions/list.hbs= | Complex — has inline answer form with AI toggle |
+
+The questions/index is the hardest. The inline answer form with AI polling is deeply coupled to the table. Needs its own component or a strategy pattern on =Questions::List=.
+
+*** companies/show nested templates (2)
+
+| Template | Iterates | Shared component exists | Notes |
+|----------+----------+------------------------+-------|
+| =templates/companies/show/answers.hbs= | questions | =components/questions/list.hbs= | Inline table with answer counts |
+| =templates/companies/show/scores.hbs= | scores | =components/scores/list.hbs= | Inline table |
+
+*** questions/show nested templates (1)
+
+| Template | Iterates | Shared component exists | Notes |
+|----------+----------+------------------------+-------|
+| =templates/questions/show/answers/index.hbs= | answers | =components/answers/list.hbs= | Inline divs — straightforward swap |
+
+*** Top-level index pages (3)
+
+| Template | Iterates | Shared component exists | Notes |
+|----------+----------+------------------------+-------|
+| =templates/answers/index.hbs= | answers | =components/answers/list.hbs= | Panel::Card + infinity scroll |
+| =templates/questions/index.hbs= | questions | =components/questions/list.hbs= | Panel::Card + infinity scroll |
+| =templates/summaries/index.hbs= | summaries | =components/summaries/list.hbs= | Panel::Card + infinity scroll |
+
+Top-level index pages have =InfinityLoader= and search. The shared list component would need to be the inner loop only, with pagination/search staying in the route template.
+
+** Code smell 3: Dead callbacks
+
+2 controllers have dead =onSave= actions never referenced by any template.
+
+| Controller | Dead action | Safe to delete file |
+|------------+-------------+---------------------|
+| =controllers/job-posts/show/questions/show/answers/edit.js= | =onSave= | Yes — whole file is dead |
+| =controllers/job-applications/show/questions/show/answers/edit.js= | =onSave= | Yes — whole file is dead |
+
+** Open question: =<Panel::Card>= future :DECISION_NEEDED:
+
+=<Panel::Card>= is used heavily in:
+- Resume builder components (=experiences=, =educations=, =certifications=, =descriptions=)
+- Top-level index pages (=answers/index=, =questions/index=, etc.)
+- Some nested show templates
+
+Two options:
+1. *Deprecate* — replace all uses with Tailwind utility classes directly. Requires a large refactor of resume builder components.
+2. *Keep and standardize* — make =<Panel::Card>= a thin wrapper around a consistent set of Tailwind classes (e.g. =rounded-lg border border-gray-200 bg-white p-4=). All list components and templates use it consistently.
+
+Decision deferred — needs exploration of resume builder impact first.
+
+** Recommended refactor order
+
+Batch by parent route to minimize context switching. Each batch fixes route model + inline list + dead controllers together.
+
+1. =questions/show/answers/index= — straightforward swap to =<Answers::List>=, fix route model, delete 2 dead edit controllers
+2. =job-posts/show/scores= — fix route model, swap to =<Scores::List>=
+3. =job-posts/show/summaries= — fix route model, swap to =<Summaries::List>=
+4. =job-posts/show/cover-letters= — fix route model, swap to =<CoverLetters::List>= (may need to create)
+5. =job-posts/show/scrapes= — fix route model, swap to =<Scrapes::List>=
+6. =job-posts/show/job-applications/index= — fix route model (list already uses =JobApplications::Compact=)
+7. =job-posts/show/questions/index= — fix route model, complex inline answer form needs extraction first
+8. =companies/show/answers= — swap to =<Questions::List>= or similar
+9. =companies/show/scores= — swap to =<Scores::List>=
+10. =companies/show/questions/new= — fix route model
+11. =job-applications/show/questions/index= — fix route model
+12. =job-applications/show/questions/new= — fix route model
+13. Top-level index pages (=answers/index=, =questions/index=, =summaries/index=) — extract inner loop, keep pagination in route template
 
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)

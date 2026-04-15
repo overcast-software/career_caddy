@@ -22,6 +22,15 @@ Rules:
 - Do NOT touch items marked =[PENDING APPROVAL]=
 - *Max 2 CI attempts rule*: if tests/lint fail twice on the same problem, stop, document what failed and why in notes.org, and surface to the product owner. Do not loop indefinitely.
 - DONE tasks older than 30 days are archived to =todo_archive.org=. Last prune: [2026-04-13].
+- =PROJ= prefix on todo items means "use /plan mode" — enter planning, design the architecture, write the plan to notes.org, then exit.
+- Prefer amending recent commits for small fixes rather than creating new commits.
+- "Let's push" means commit+push submodules first, then parent. No need to ask.
+- Update =todo.org= and =notes.org= to reflect completed work before pushing.
+- All =manage.py= commands run inside Docker (=make shell-api=), never locally with =uv run=.
+- New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
+- Use =@tracked= intermediary for text inputs to prevent lost characters on fast typing.
+- Map every background/theme combo before implementing color changes. Plan CSS across all contexts first.
+- Async belongsTo proxy: =model.question.content.content= (double =.content=) needed for resolution.
 
 * Agentic Engineering — Curriculum Gaps [0/5]
 Items identified from the Agentic Engineering Curriculum (/home/oldbones/Downloads/agentic-engineering-curriculum.pdf) review on [2026-04-09].
@@ -98,7 +107,7 @@ Both =scrapes/form.hbs= (existing) and =job-posts/scrape.hbs= (new) have hold ra
 CLOSED: [2026-04-10 Thu]
 [[file:notes.org::*Pydantic-AI toolsets][Plan → notes.org]]
 Created =lib/toolsets.py=. Migrated =career_caddy_agent.py=. 44-test suite added. CI integration done.
-*** TODO OAuth 2.0 support for in-app chat (Phase 2)
+*** WAIT OAuth 2.0 support for in-app chat (Phase 2)
 Add =django-oauth-toolkit= to API; PKCE flow for Ember SPA; FastMCP =MultiAuth=.
 Separate workstream — API key auth covers current use cases.
 *** DONE Agent identity awareness — profile injection + MCP instructions [2026-04-11]
@@ -383,23 +392,63 @@ Summaries carousel now loads all user summaries and PATCHes to set active.
 ** DONE =make up= should include AI — it's integral
 CLOSED: [2026-04-13 Sun]
 Removed =profiles: [browser]= from =browser-mcp= service. Now starts with default =make up=. Removed =up-ai= Makefile target.
-** TODO Docker network error on =make up-ai=
+** DONE Docker network error on =make up-ai=
+CLOSED: [2026-04-15 Wed 07:46]
 #+BEGIN_SRC
 Error response from daemon: failed to set up container networking: network ... not found
 make: *** [Makefile:11: up-ai] Error 1
 #+END_SRC
-** TODO Claude for glint
-** TODO /omarchy reinstall ollama
+** NO Claude for glint
+CLOSED: [2026-04-15 Wed 07:46]
+not inscope of this project
+** DONE /omarchy reinstall ollama
+CLOSED: [2026-04-15 Wed 07:46]
+** TODO use omarchy to set theme
+publicity stunt
 * Inbox
-** TODO 403 shows guest a failure instead of access denied for a save.  delete didn't show anything on 403
+** DONE 403 shows guest a failure instead of access denied for a save.  delete didn't show anything on 403 [2026-04-15 frontend]
+CLOSED: [2026-04-15 Tue]
+Added =if (error?.status !== 403)= guard to all 18 delete handlers. Adapter already shows sticky 403 warning globally. Guard prevents doubled "Failed to delete" message.
+** DONE caddy ai chat is at the top [2026-04-15 frontend]
+CLOSED: [2026-04-15 Tue]
+=.caddy-fullpage= needed =display: flex; flex-direction: column=. =.course-main:has(.caddy-fullpage)= needed =overflow: hidden= (was =auto=, which let flex children overflow instead of constraining to height). Documented in notes.org.
+** DONE ai spend should load without button [2026-04-15 frontend]
+CLOSED: [2026-04-15 Tue]
+Route =model()= fetches data. Controller reads =this.model= directly. Button renamed to "Refresh". Period formatted with =format-date= helper.
+** DONE tools should include edit_answer [2026-04-15 ai]
+CLOSED: [2026-04-15 Tue]
+Added =update_answer()= to =api_tools.py= (content, favorite). Registered in =toolsets.py= (=all= + =career_caddy= scopes).
+** DONE ai chat could invoke reload on resource [2026-04-15 frontend+ai]
+CLOSED: [2026-04-15 Tue]
+Chat server emits =reload= SSE event after tool calls that mutate data. Frontend =chat.js= handles by calling =store.findRecord= or =store.findAll= with =reload: true=. Map of 10 mutating tools → resource types.
+** DONE job-post/182/scores shows score 4 twice [2026-04-15 api]
+CLOSED: [2026-04-15 Tue]
+Added =UniqueConstraint= on Score model: =(job_post, resume, user)= and =(job_post, user)= where =resume IS NULL=. Migration 0041. API already had dedup logic in =ScoreViewSet.create=; DB now enforces it.
+** DONE somehow I have access to guest ( job-post/4 ) and I can't delete it as a super admin [2026-04-15 api]
+CLOSED: [2026-04-15 Tue]
+=JobPostViewSet.destroy= ownership check now exempts =is_staff= users.
+** DONE implement company/show/questions/{show,/answers} [2026-04-15 frontend]
+CLOSED: [2026-04-15 Tue]
+Routes generated with =ember generate=. Created =<Answers::Show>= and =<Answers::List>= shared components. Question show route returns single question resource, company from =modelFor=.
+** DONE Refactor: Answers::Show + Answers::Form across nested answer routes [2026-04-15 frontend] :APPROVED:
+CLOSED: [2026-04-15 Tue]
+Created =<Answers::Show>= (with =<:actions>= named block) and =<Answers::List>=.
+=Answers::Form.afterSave()= now derives route from =currentRouteName= — removed all =@onSave= callbacks.
+Nested =answers/new= routes return single answer record. See [[file:notes.org::*Shared Answer Components][notes.org]] for gotchas.
+** DONE Refactor: =answers/:id= and =answers/:id/edit= top-level routes + nested question show routes [2026-04-15 frontend] :APPROVED:
+CLOSED: [2026-04-15 Tue]
+[[file:notes.org::*Shared Component Refactor — Round 2][Full notes → notes.org]]
+Migrated top-level =answers/show.hbs= → =<Answers::Show>=, =answers/edit.hbs= → =<Answers::Form>=.
+Fixed route model code smell: job-posts and job-applications question show routes now return single question.
+Replaced inline answer lists with =<Answers::List>= in both contexts. Deleted 2 dead =onSave= controllers.
+Added =showAnswersList= getter to job-applications (was missing). All three question show controllers now match the companies gold standard.
+** DONE PROJ plan integration of a job queue [2026-04-15]
+CLOSED: [2026-04-15 Tue]
+django-q2 with PostgreSQL broker. Replaces 7 daemon thread spawn points. Plan in notes.org + =~/.claude/plans/sequential-scribbling-wall.md=.
+** DONE PROJ plan the integration of activitypub - everyone shares jobs [2026-04-15]
+CLOSED: [2026-04-15 Tue]
+Federated job sharing. 4-phase plan: WebFinger/Actor/Outbox → Inbox/HTTP Signatures → Frontend feed → Admin. Plan in notes.org.
 
-[[file:~/Network/syncthing/Projects/career_caddy/CLAUDE.md::```]]
-** TODO caddy ai chat is at the top
-** TODO ai spend should load without button
-** TODO tools should include edit_answer
-** TODO ai chat could invoke reload on resource.
-** TODO job-post/182/scores shows score 4 twice.  I invoked score on career-data twice
-** TODO somehow I have access to guest job-post/4 and I can't delete it as a super admin
 ** DONE AI should use the current page contextually in answer a question [2026-04-14 frontend+ai]
 CLOSED: [2026-04-14 Mon]
 Added get_questions(), get_answers(), create_answer() tools. Chat page-aware table updated. Prompt instructs AI not to regurgitate data and to use elicitation buttons.
