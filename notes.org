@@ -1358,6 +1358,28 @@ This requires:
 
 Current state works (two requests per tick) but is wasteful. Consolidate when the poller service is refactored.
 
+* Builder-form style conventions [2026-04-14]
+Reference for agents working with =builder-form= in =frontend/app/styles/app.css=.
+
+** Layout classes
+| Class | Behaviour | Use for |
+|-------+-----------+---------|
+| =builder-form= | 2-col grid: =max-content 1fr= | Default form layout (label + input per row) |
+| =builder-form.two-col= | Equal 2-col grid, fields side-by-side | Settings profile, questions form |
+| =.field= | Direct child: =display:contents= (dissolves into grid) | Standard label+input pair |
+| =.field-full= | =flex-direction:column=, spans both cols. *All* child =input/textarea= get =width:100%= | Full-width fields (address, description, question content) |
+| =.field-row= | =display:flex=, spans both cols. Does *not* force child input width | Inline groups where you control widths with Tailwind |
+| =.form-actions= | Button row at bottom, spans both cols | Save / Cancel / Delete |
+
+** Key gotcha: =.field-full= forces =width:100%= on all descendant inputs
+If you put a grid or flex row of multiple inputs inside =.field-full=, each input expands to 100% and stacks vertically. Use =.field-row= instead when you need multiple inputs on one line (e.g. the links editor on settings/profile).
+
+** Inline styles
+Never use inline =style="..."= attributes. Tailwind utilities are the standard. If a Tailwind class is being overridden by =builder-form= CSS, choose the correct form layout class (=field-row= vs =field-full=) rather than fighting it with inline styles.
+
+** Read-only views
+Match the edit form's column layout. Use =grid grid-cols-2 gap-x-6 gap-y-4= on the =<dl>=. Full-width items (address, links) get =col-span-2=.
+
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
 * personal notes
