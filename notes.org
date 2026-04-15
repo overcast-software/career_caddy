@@ -1799,6 +1799,23 @@ Recommendation: leave as-is. The inline answer expansion is unique to this conte
 *** =/summaries= redesign with HyperUI details-list
 The top-level =/summaries= page currently uses =<Summaries::List>= (truncated table). Full summary text is preferred here. Redesign using the HyperUI details-list pattern (https://www.hyperui.dev/components/application/details-list/) to show each summary with full content, resume, active status, and job post metadata. See todo.org.
 
+*** Exception: =parent.params= + =peekRecord= for action-based record creation
+The refactor eliminated controller getters that used =currentRoute.parent.params= to derive
+parent models. However, =job-posts/show/scores= has a =scoreResume= action that creates a
+new score record needing a =jobPost= relationship. This is NOT a typical form — the score
+page isn't a "new" form with an in-memory object. It's a button that POSTs to the API.
+
+When there are zero scores, there's no model relationship to follow back to the parent.
+The job post IS in the store (loaded by the parent route), so =peekRecord= is safe.
+=parent.params= is the correct way to get the ID in this case.
+
+Pattern: =this.router.currentRoute.parent.params.job_post_id= → =this.store.peekRecord('job-post', id)=.
+
+This is the ONE exception to the "no =parent.params= in controllers" rule. It applies when:
+1. An action (not a getter) needs to create a record with a parent relationship
+2. The model is a flat array (scores), not a hash
+3. The parent is guaranteed to be in the store from the parent route's =model()=
+
 *** Redundant parent columns in child contexts
 Shared list components may show a parent column that's redundant when used in a child route (e.g. =companies/:id/scores= shouldn't show a Company column). The =@showCompany={{false}}= / =@showJobPost={{false}}= pattern handles this. Needs an audit pass to ensure all child contexts hide their parent column.
 
