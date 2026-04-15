@@ -1783,15 +1783,46 @@ Decision deferred — needs exploration of resume builder impact first.
 11. +job-applications/show/questions/new+ — DONE. Fixed route model.
 12. All controller =jobPost= getters using =currentRoute.parent.params= — DONE. Removed from scores, summaries, cover-letters, scrapes, questions/index.
 
-** Remaining
+13. +companies/show/answers+ — DONE. Rewrote =<Questions::List>= as conformed table. Deleted dead =list.js= with unused company filter.
+14. +Top-level index pages+ — DONE. =answers/index=, =questions/index=, =summaries/index= all use shared list components with =InfinityLoader= wrapping.
+15. +=Questions::InlineAnswer= extracted+ — DONE. Inline answer form (AI toggle, textarea, polling) moved from =job-posts/show/questions/index= controller+template into self-contained component. Controller 131 → 42 lines.
 
-1. =companies/show/answers= — inline question table, swap to shared component
-2. =job-posts/show/questions/index= — complex inline answer form needs extraction first
-3. Top-level index pages (=answers/index=, =questions/index=, =summaries/index=) — extract inner loop, keep pagination in route template
+** Remaining :TODO:
 
-** Future: Redundant columns in child contexts :TODO:
+*** =job-posts/show/questions/index= table is still inline
+The questions table in =job-posts/show/questions/index.hbs= can't use =<Questions::List>= directly because each row conditionally expands a =<Questions::InlineAnswer>= form row below it. The table headers + row markup are duplicated from the shared component. Options:
+1. Live with it — the template is clean enough now with the InlineAnswer extracted
+2. Make =Questions::List= yield each row so the consumer can inject the InlineAnswer =<tr>= — adds complexity for one use case
 
-Shared list components may show a parent column that's redundant when used in a child route. For example, =companies/:id/scores= shouldn't show a Company column. The =@showCompany={{false}}= / =@showJobPost={{false}}= pattern handles this, but needs an audit pass to ensure all child contexts hide their parent column.
+Recommendation: leave as-is. The inline answer expansion is unique to this context.
+
+*** =/summaries= redesign with HyperUI details-list
+The top-level =/summaries= page currently uses =<Summaries::List>= (truncated table). Full summary text is preferred here. Redesign using the HyperUI details-list pattern (https://www.hyperui.dev/components/application/details-list/) to show each summary with full content, resume, active status, and job post metadata. See todo.org.
+
+*** Redundant parent columns in child contexts
+Shared list components may show a parent column that's redundant when used in a child route (e.g. =companies/:id/scores= shouldn't show a Company column). The =@showCompany={{false}}= / =@showJobPost={{false}}= pattern handles this. Needs an audit pass to ensure all child contexts hide their parent column.
+
+*** =<Panel::Card>= future :DECISION_NEEDED:
+=<Panel::Card>= is used heavily in resume builder components (=experiences=, =educations=, =certifications=, =descriptions=) and some show templates. Top-level index pages no longer use it (migrated to shared list components). Two options:
+1. *Deprecate* — replace all uses with Tailwind utility classes directly. Requires a large refactor of resume builder components.
+2. *Keep and standardize* — make =<Panel::Card>= a thin wrapper around a consistent set of Tailwind classes. All list components and templates use it consistently.
+Decision deferred — needs exploration of resume builder impact first.
+
+** Shared component API reference
+
+| Component | Args | Notes |
+|-----------+------+-------|
+| =<Answers::List>= | =@answers @showRoute @editRoute @onDelete @onToggleFavorite @emptyMessage= | All optional except =@answers= |
+| =<Answers::Show>= | =@answer @editRoute= | =<:actions>= named block |
+| =<Answers::Form>= | =@answer @showQuestion @onSave= | =<:actions>= named block, AI toggle, polling |
+| =<Questions::List>= | =@questions @showRoute @editRoute @answerRoute @answersRoute @onDelete @emptyMessage= | All optional except =@questions= |
+| =<Questions::Item>= | =@question @askAI= | Read-only display |
+| =<Questions::InlineAnswer>= | =@question @onCancel @onComplete= | Self-contained answer form with AI/polling |
+| =<Scores::List>= | =@scores @isPending @showJobPost @showResume @showStatus @showCreated @onDelete @emptyMessage= | =@show*= default to true |
+| =<Scrapes::List>= | =@scrapes @isPending @showCompany @showJobPost @onRetry @emptyMessage= | =@show*= default to true |
+| =<CoverLetters::List>= | =@coverLetters @isPending @showJobPost @emptyMessage= | Favorite display built in |
+| =<Summaries::List>= | =@summaries @isPending @emptyMessage= | Table with Resume, Active columns |
+| =<Summaries::Carousel>= | =@summaries @resume= | Prev/next navigation, resume builder only |
 
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)

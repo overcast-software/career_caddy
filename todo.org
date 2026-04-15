@@ -442,8 +442,19 @@ Migrated top-level =answers/show.hbs= → =<Answers::Show>=, =answers/edit.hbs= 
 Fixed route model code smell: job-posts and job-applications question show routes now return single question.
 Replaced inline answer lists with =<Answers::List>= in both contexts. Deleted 2 dead =onSave= controllers.
 Added =showAnswersList= getter to job-applications (was missing). All three question show controllers now match the companies gold standard.
+** DONE Shared component refactor — full audit [2026-04-15 frontend] :APPROVED:
+CLOSED: [2026-04-15 Tue]
+[[file:notes.org::*Shared Component Refactor — Full Audit][Full notes + API reference → notes.org]]
+All route model code smells fixed (9 routes returning single resources). All =job-posts/show=,
+=companies/show=, and top-level index templates migrated to shared list components. Conformed
+=Scores::List=, =Scrapes::List=, =CoverLetters::List=, =Summaries::List=, =Questions::List=,
+=Answers::List= with optional columns, pending spinners, and =@emptyMessage=. Extracted
+=<Questions::InlineAnswer>= from 131-line controller. Renamed =Summaries::Carousel=. Deleted
+4 dead controllers and 2 dead JS files. Removed all controller =jobPost= getters.
 ** TODO Redesign =/summaries= index with HyperUI details-list pattern [frontend]
 The top-level =/summaries= page should show full summary text rather than a truncated table row. Use the HyperUI details-list pattern (https://www.hyperui.dev/components/application/details-list/) to display each summary with its full content, resume, active status, and job post metadata in a readable layout. The current =Summaries::List= table works well for =job-posts/show/summaries= where summaries are secondary, but on the dedicated =/summaries= page the content is the point.
+** TODO Audit redundant parent columns in child route list components [frontend]
+Shared list components with =@showCompany=, =@showJobPost=, =@showResume= args should hide parent columns when rendered inside the parent's child route (e.g. =companies/:id/scores= should pass =@showJobPost={{false}}=). Need to verify all consumers pass the right flags.
 ** DONE PROJ plan integration of a job queue [2026-04-15]
 CLOSED: [2026-04-15 Tue]
 django-q2 with PostgreSQL broker. Replaces 7 daemon thread spawn points. Plan in notes.org + =~/.claude/plans/sequential-scribbling-wall.md=.
