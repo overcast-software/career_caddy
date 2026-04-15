@@ -1380,39 +1380,76 @@ Never use inline =style="..."= attributes. Tailwind utilities are the standard. 
 ** Read-only views
 Match the edit form's column layout. Use =grid grid-cols-2 gap-x-6 gap-y-4= on the =<dl>=. Full-width items (address, links) get =col-span-2=.
 
-* Resume serializer — malformed JSON:API relationships [2026-04-14]
-The ResumeSerializer embeds sub-resources (summaries, certifications, educations,
-experiences, skills, projects) in =attributes= as plain JSON arrays. It also declares
-them as =relationships= with =links= but *no =data= linkage*.
+* Resume serializer — JSON:API relationship linkage + sideloading [2026-04-14]
+RESOLVED [2026-04-14]
 
-** Problem
-Ember Data sees the relationships, ignores the embedded attributes, and tries to fetch
-via the =related= URLs (e.g. =/api/v1/resumes/30/certifications=) — which don't exist
-as nested endpoints. This causes 404s and missing data in the frontend (summaries
-carousel, certifications display).
+** What was wrong
+=ResumeSerializer.to_resource= embedded sub-resources (summaries, certifications,
+educations, experiences, skills, projects) as plain JSON arrays in =attributes=.
+It declared them as =relationships= with =links= but *no =data= linkage*.
 
-** Root cause
-=BaseSerializer.to_resource= (line 142-145) intentionally omits =data= for to-many
-relationships to avoid "falsely asserting zero items." But for Resume, the data IS
-available — it's just embedded in attributes instead of proper JSON:API =included= sideload.
+Ember Data ignored the embedded attributes and tried to fetch via =related= URLs
+(e.g. =/api/v1/resumes/30/certifications=) — which don't exist as nested endpoints.
+Result: 404s and missing data (summaries carousel, certifications display).
 
-** Fix needed
-For non-slim Resume responses, the serializer should:
-1. Add =data= arrays to each to-many relationship (e.g. =summaries: {data: [{type: "summary", id: "26"}, ...], links: {...}}=)
-2. Add the full records to the =included= array so Ember Data can resolve them
-3. Remove the embedded attributes duplicates (=attributes.summaries=, =attributes.certifications=, etc.) — or keep them for backward compat and let JSON:API =included= take precedence
+** What was fixed
 
-Affected relationships: summaries, certifications, educations, experiences, skills, projects.
+*** ResumeSerializer (=api/job_hunting/api/serializers.py=)
+Removed ~130 lines of manual attribute embedding. Added proper JSON:API =data= linkage
+arrays using the existing =get_related()= method. Pattern matches =DjangoUserSerializer=.
+The =summary= convenience attribute (active summary text string) is kept.
 
-** Additional fetch issue
-The resume edit page triggers many extra API calls because Ember Data follows the
-=related= links for each async hasMany. Non-slim resume responses should return all
-component data in one response — no additional fetches needed.
+*** ExperienceSerializer (same file)
+Added =data= linkage for =descriptions= relationship. Without this, Ember Data couldn't
+match description records in =included= to their parent experience.
 
-** Scope
-This is a serializer-level refactor touching =ResumeSerializer.to_resource= and
-=BaseSerializer.to_resource=. The view code for =/api/v1/resumes/:id/= with
-=include= params also needs updating.
+*** ResumeViewSet (=api/job_hunting/api/views.py=)
+Added =_default_includes= class attribute. Both =list()= and =retrieve()= auto-include
+all sub-resources when no =?include== param is specified. No extra frontend fetches needed.
+
+*** _build_included ownership filter (=views.py=)
+Resources with =user_id=None= were silently dropped by the ownership filter
+(=None != user_id= is =True=). Fixed: skip the filter when =user_id is None= — if
+reached through a relationship on an already-authorized parent, they're safe to include.
+
+*** Summaries carousel (=frontend/app/components/summaries/list.js=)
+- Route loads all summaries via =store.findAll('summary')=
+- Controller passes =store.peekAll('summary')= (all user summaries, not just resume-linked)
+- =_navigate()= now PATCHes the summary with =active=true= + resume relationship
+  (was incorrectly pushing into resume's hasMany and saving the resume)
+- Position indicator added (e.g. "3 / 12")
+
+** Key pattern: JSON:API relationship =data= linkage
+When a serializer declares to-many =relationships=, =BaseSerializer.to_resource= only emits
+=links= (no =data=). This is correct for relationships that are paginated or expensive.
+For relationships that should resolve from =included= sideloads, the serializer's
+=to_resource= override must add =data= arrays:
+
+#+BEGIN_SRC python
+# In the serializer's to_resource():
+for rel_name, rel_type in rel_defs:
+    _, items = self.get_related(obj, rel_name)
+    linkage = [{"type": rel_type, "id": str(item.id)} for item in items]
+    res.setdefault("relationships", {})[rel_name] = {
+        "data": linkage,
+        "links": existing_links,
+    }
+#+END_SRC
+
+Without =data=, Ember Data has no way to match =included= records to their parent —
+even if the records are in the payload.
+
+** Key pattern: async hasMany proxy resolution
+Even with proper sideloading, Ember Data's =async: true= hasMany returns a =PromiseManyArray=.
+Accessing =.length= before resolution returns 0. Routes must =await= relationships:
+
+#+BEGIN_SRC javascript
+const resume = await this.store.findRecord('resume', resume_id);
+await Promise.all([resume.skills, resume.summaries, resume.projects]);
+// Now .length and .objectAt() work synchronously in templates
+#+END_SRC
+
+This await resolves instantly from the store (no extra fetch) when data is sideloaded.
 
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
