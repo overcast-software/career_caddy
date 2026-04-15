@@ -458,10 +458,14 @@ The top-level =/summaries= page should show full summary text rather than a trun
 =serializers.py= is ~1200 lines. Every serializer that needs to-many =data= linkage (Resume, Experience, Project, etc.) copy-pastes the same =get_related= → =linkage= loop in its =to_resource= override. This should be a base class method driven by a declarative list (e.g. =linked_relationships = ["descriptions", "skills"]=). Also audit for any remaining serializers missing =data= linkage that causes spurious Ember Data fetches.
 ** TODO Refactor =views.py= — reduce duplication across viewsets [api]
 =views.py= has grown large with repeated patterns: ownership filtering, =_build_included= calls, identical =list/retrieve/create/update/destroy= overrides. Extract shared mixins or a base viewset class. Consider splitting into per-resource view modules under =api/views/=.
-** TODO Chat reload events should refresh the current page data [frontend]
+** DONE Chat reload events should refresh the current page data [frontend]
+CLOSED: [2026-04-15 Tue]
 When the AI chat creates or modifies a resource (job post, score, answer, etc.), SSE reload events are emitted but the page data doesn't update. The frontend needs to listen for =reload= events and re-fetch the relevant store data so the UI reflects changes made via chat.
-** TODO Score function usage not reflected in AI Spend [ai+api]
-Using the score function via the AI chat doesn't show up in the AI Spend page. The =report_usage= call may not be firing for score operations, or the scoring endpoint isn't reporting usage through the same =AiUsage= model.
+UPDATE [2026-04-15]: Reload events ARE working (page refreshes) but the score poller doesn't kick in on the reloaded data — the score stays in "pending" visually until a manual refresh. The poller needs to be wired into the reload path.
+FIX [2026-04-15]: =_reloadResource= now awaits the reload, then auto-polls any scores/scrapes in non-terminal status via =_pollIfPending=.
+** DONE Score function usage not reflected in AI Spend [ai+api]
+CLOSED: [2026-04-15 Tue]
+The scoring thread's single try/except meant a usage recording failure could mark the score as failed. Split into separate try blocks — scoring failure and usage failure are independent. Added logging for both.
 ** TODO Audit redundant parent columns in child route list components [frontend]
 Shared list components with =@showCompany=, =@showJobPost=, =@showResume= args should hide parent columns when rendered inside the parent's child route (e.g. =companies/:id/scores= should pass =@showJobPost={{false}}=). Need to verify all consumers pass the right flags.
 ** DONE PROJ plan integration of a job queue [2026-04-15]
