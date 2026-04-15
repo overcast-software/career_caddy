@@ -457,6 +457,10 @@ All route model code smells fixed (9 routes returning single resources). All =jo
 ** DONE Redesign =/summaries= index with HyperUI details-list pattern [frontend]
 CLOSED: [2026-04-15 Tue]
 The top-level =/summaries= page should show full summary text rather than a truncated table row. Use the HyperUI details-list pattern (https://www.hyperui.dev/components/application/details-list/) to display each summary with its full content, resume, active status, and job post metadata in a readable layout. The current =Summaries::List= table works well for =job-posts/show/summaries= where summaries are secondary, but on the dedicated =/summaries= page the content is the point.
+** TODO Refactor =serializers.py= — extract data linkage pattern into BaseSerializer [api]
+=serializers.py= is ~1200 lines. Every serializer that needs to-many =data= linkage (Resume, Experience, Project, etc.) copy-pastes the same =get_related= → =linkage= loop in its =to_resource= override. This should be a base class method driven by a declarative list (e.g. =linked_relationships = ["descriptions", "skills"]=). Also audit for any remaining serializers missing =data= linkage that causes spurious Ember Data fetches.
+** TODO Refactor =views.py= — reduce duplication across viewsets [api]
+=views.py= has grown large with repeated patterns: ownership filtering, =_build_included= calls, identical =list/retrieve/create/update/destroy= overrides. Extract shared mixins or a base viewset class. Consider splitting into per-resource view modules under =api/views/=.
 ** TODO Audit redundant parent columns in child route list components [frontend]
 Shared list components with =@showCompany=, =@showJobPost=, =@showResume= args should hide parent columns when rendered inside the parent's child route (e.g. =companies/:id/scores= should pass =@showJobPost={{false}}=). Need to verify all consumers pass the right flags.
 ** DONE PROJ plan integration of a job queue [2026-04-15]
