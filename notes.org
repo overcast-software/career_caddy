@@ -999,27 +999,63 @@ Browser scraping on credentialed sites fails silently in prod Docker (no session
 | =add_job_post()=      | gpt-4o-mini        | ~$0.002  |
 | *Total per scrape*    |                    | *~$0.10* |
 
-*** Hold poller flow (scrape-only worker)
+*** Hold poller — scrape-only worker
+
+*What it is:* A local process (not Docker) that polls the Career Caddy API for
+scrapes with =status=hold=, runs Camoufox to fetch the page, and PATCHes the
+content back. The API handles everything downstream (extraction, job post
+creation, scrape profile updates).
+
+*Why it exists:* Browser scraping is too heavy for the VPS. The poller runs on
+a desktop or Pi, keeping the VPS as a thin API + frontend layer.
+
+*Running it:*
+| Method | Command |
+|--------+-----------------------------|
+| Standalone (prod) | =cd ai && cp .env.prod.example .env && uv run caddy-poller= |
+| Standalone (local dev) | =cd ai && CC_API_BASE_URL=http://localhost:8000 CC_API_TOKEN=xxx uv run caddy-poller= |
+| With dev stack | =make up-full= (Docker stack + poller in background) |
+
+*Prerequisites:*
+- =uv sync= + =uv run python -m camoufox fetch= (one-time)
+- =CC_API_BASE_URL= and =CC_API_TOKEN= env vars
+- No LLM keys needed on the worker — all LLM work happens API-side
+
+*Backoff:* The poller uses exponential backoff: 2, 4, 8, 16, 32, 64, 128, 256
+seconds. Resets to 2s when work is found. Stops after the full sequence with no
+work (~510s total). This means you run it, it processes any hold scrapes, backs
+off, and exits. Run it again when you queue more holds.
+
+*Flow:*
 #+BEGIN_SRC
-poll loop (300s interval, configurable via HOLD_POLL_INTERVAL)
-  GET /api/v1/scrapes/?filter[status]=hold
-  For each hold scrape:
-    PATCH status → running (+ ScrapeStatus record)
-    scrape_page(url) — direct Python, headed browser
-      login wall? → status=login_failed + screenshot
-      success? → continue
-    PATCH job_content + status=completed
-    → API _maybe_trigger_extraction() fires automatically:
-      parse_scrape() → extract job data (gpt-4o-mini on VPS)
-      _update_scrape_profile() → update domain stats
-      _generate_profile_hints() → LLM hints (first scrape per domain)
+caddy-poller starts
+  poll: GET /api/v1/scrapes/?filter[status]=hold
+  found work?
+    yes → for each hold scrape:
+            PATCH status → running
+            scrape_page(url) — Camoufox, no LLM
+              login wall? → status=failed + screenshot
+              success? → PATCH job_content + status=completed
+                → API fires _maybe_trigger_extraction():
+                  parse_scrape() → LLM extraction (gpt-4o-mini)
+                  _update_scrape_profile() → domain stats
+                  _generate_profile_hints() → LLM hints (first time only)
+            reset backoff to 2s
+    no  → backoff: 2 → 4 → 8 → 16 → 32 → 64 → 128 → 256 → stop
 #+END_SRC
 
-Worker does NO LLM calls — only browser scraping. All extraction + profile
-updates happen API-side when job_content is PATCHed back.
+*Env vars:*
+| Var | Default | Purpose |
+|-----+---------+---------|
+| =CC_API_BASE_URL= | (required) | API base URL |
+| =CC_API_TOKEN= | (required) | API key (=jh_*= or =Api-Key=) |
+| =BROWSER_HEADLESS= | =true= | Set =false= for VNC debugging (pibu has VNC) |
+| =HOLD_POLL_INTERVAL= | =30= | Initial poll interval (overridden by backoff) |
 
-Run locally: =cd ai && uv run caddy-poller= (with prod .env)
-Run with stack: =make up-full= (Docker stack + poller in background)
+*Platform notes:*
+- Needs 64-bit OS (=aarch64= or =x86_64=) — Playwright/Camoufox have no =armv7l= wheels
+- Pibu (32-bit Ubuntu) won't work; desktop is the current target
+- Pi 4+ with 64-bit OS would work
 
 *** ScrapeStatus (polymorphic Status pattern)
 Mirrors =JobApplicationStatus=. Uses =Status= table with =status_type="scrape"=.
