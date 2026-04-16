@@ -1,7 +1,9 @@
 #+title: CareerCaddy — Notes & Decision Records
-#+date: 2026-04-08
+:PROPERTIES:
+:CREATED:  2026-04-08
+:END:
 
-* Agent Mistakes — Tally: 3
+* Agent Mistakes — Tally: 3                                        :IMPORTANT:
 Track repeated agent errors so patterns are visible and accountable.
 
 | # | Date | Agent | Mistake | Rule violated |
@@ -13,7 +15,7 @@ Track repeated agent errors so patterns are visible and accountable.
 * Curriculum gap analysis [ARCHIVED 2026-04-11]
 Archived to [[file:notes_archive.org::*Curriculum gap analysis][notes_archive.org]]. Phase 2 maturity assessment; 6 gaps added to todo.org.
 
-* Pending Approval — Decision Considerations
+* Pending Approval — Decision Considerations                       :IMPORTANT:
 Decisions needed from the product owner before agents begin work.
 Reply inline or update todo.org to unblock.
 
@@ -60,7 +62,10 @@ Archived to [[file:notes_archive.org::*CSS maturation][notes_archive.org]]. COMP
   is staff is fine
 - This is a large API-first feature; frontend follows once the ownership model is defined.
 
-*** Decision [2026-04-08 product-owner]
+*** Decision
+:PROPERTIES:
+:DECIDED:  [2026-04-08 product-owner]
+:END:
 - Multi-tenancy: APPROVED.
 - Ownership model: use =is_staff= as the superuser flag.
 - No new =owner= FK needed — leverage existing fields (confirmed below).
@@ -111,7 +116,10 @@ Archived to [[file:notes_archive.org::*Email][notes_archive.org]]. DONE — djan
 ** Lazy load child resources [ARCHIVED 2026-04-13]
 Archived to [[file:notes_archive.org::*Lazy load child resources][notes_archive.org]]. DONE — 12 routes trimmed, async relationships, kept index includes to avoid N+1.
 
-** Pydantic-AI toolsets — dynamic tool scoping [2026-04-10]
+** Pydantic-AI toolsets — dynamic tool scoping
+:PROPERTIES:
+:CREATED:  [2026-04-10]
+:END:
 [[file:todo.org::*MCP exposure][↑ todo.org]]
 
 *** Problem
@@ -194,7 +202,10 @@ Pydantic-ai uses =inspect.signature()= to build JSON schemas for tool parameters
 | =ai/agents/career_caddy_agent.py= | Migrate MCPServerStdio → CareerCaddyToolset |
 | =ai/agents/job_email_to_caddy.py= | Update add_job_post call to pass deps |
 
-** MCP deployment at mcp.careercaddy.online [2026-04-10]
+** MCP deployment at mcp.careercaddy.online
+:PROPERTIES:
+:CREATED:  [2026-04-10]
+:END:
 [[file:todo.org::*MCP exposure][↑ todo.org]]
 
 *** Architecture decision
@@ -253,7 +264,10 @@ For in-app chat where the agent acts as the logged-in user:
 4. Frontend chat widget initiates PKCE, gets access token, passes to MCP
 Separate workstream. API key auth covers all current use cases.
 
-*** Agent identity awareness [2026-04-11]
+*** Agent identity awareness
+:PROPERTIES:
+:CREATED:  [2026-04-11]
+:END:
 Two paths for the agent to know the user's identity:
 
 **** Web chat (chat_server.py) — JWT pass-through (Option C)
@@ -282,7 +296,10 @@ Two auth token types serve different clients:
 - JWT: browser sessions (short-lived, auto-refreshed by the SPA)
 - API key (=jh_*=): MCP clients, Slack, CLI, third-party apps (long-lived, user-provisioned)
 
-*** Chat UI architecture [2026-04-11]
+*** Chat UI architecture
+:PROPERTIES:
+:CREATED:  [2026-04-11]
+:END:
 
 **** Grid-based sidebar
 The chat sidebar is a CSS grid area (=course-chat=), not a fixed overlay. It pushes the subnav
@@ -303,7 +320,10 @@ route transitions within the same browser tab.
 The floating bubble button was replaced with an inline "Chat with AI" link in the footer =<nav>=.
 Hidden for guests. Hidden when the chat sidebar is already open.
 
-*** Chat markdown + SPA link navigation [2026-04-12]
+*** Chat markdown + SPA link navigation
+:PROPERTIES:
+:CREATED:  [2026-04-12]
+:END:
 
 **** Markdown rendering
 Assistant messages in =<Chat::Message>= render through =<MarkdownToHtml>= (ember-cli-showdown).
@@ -322,7 +342,10 @@ Instead of raw HTTP errors, unauthenticated/guest chat attempts show friendly AI
 - 403 (guest account): "I can see you're browsing as a guest — welcome! [Sign up or log in](/login)..."
 Both use markdown links that navigate via the Ember router.
 
-*** Flash messages standard [2026-04-11]
+*** Flash messages standard
+:PROPERTIES:
+:CREATED:  [2026-04-11]
+:END:
 
 **** Severity types
 | Type | Use for | Example |
@@ -360,7 +383,10 @@ try {
 - DNS: A record for =mcp.careercaddy.online= → VPS IP
 - CI: build =ai/Dockerfile= with =INSTALL_CAMOUFOX=false= and push to GHCR
 
-*** Prod scraping — browser-mcp removed from VPS [2026-04-14]
+*** Prod scraping — browser-mcp removed from VPS
+:PROPERTIES:
+:CREATED:  [2026-04-14]
+:END:
 Browser scraping is too heavy for the VPS (4 CPU, shared with other apps). Camoufox caused
 sluggishness and Toptal timed out after 60s.
 
@@ -442,7 +468,10 @@ Archived to [[file:notes_archive.org::*SPA analytics with Plausible][notes_archi
 - ~~Blocked on CSS consolidation and shared components (CSS maturation tracks 1–3).~~ CSS tracks complete [2026-04-09]. Unblocked.
 - ~~Dark mode toggle has no effect until the dark mode track is complete.~~ Dark mode + ThemeService landed.
 
-*** Design decisions [2026-04-11]
+*** Design decisions
+:PROPERTIES:
+:CREATED:  [2026-04-11]
+:END:
 - =/settings= with two subnav tabs: *Profile* (default) and *Data* (import/export).
 - Career Data stays as its own top-level sidebar link — it's a resource view, not an action.
 - Import/export xlsx are actions, so they live under Settings > Data, not in the main nav.
@@ -500,7 +529,10 @@ Make a clear plan how to bring this feature about.
 Deferred until official alpha phase. Draft is captured in todo.org.
 Move this entry to notes.org when alpha begins and send then.
 
-* Linting techniques [2026-04-11]
+* Linting techniques                                                :IMPORTANT:
+:PROPERTIES:
+:CREATED:  [2026-04-11]
+:END:
 
 ** Frontend linting (Ember)
 The frontend has four lint targets run in parallel via =npm run lint=:
@@ -541,7 +573,10 @@ uv run --directory /path/to/api ruff check path/to/file.py  # check specific fil
 
 Ruff must be run via =uv run= because the project uses a uv-managed virtualenv. Always lint before pushing (per CLAUDE.md).
 
-* Color Palette System [2026-04-11]
+* Color Palette System
+:PROPERTIES:
+:CREATED:  [2026-04-11]
+:END:
 
 ** Architecture
 Two independent dimensions: *mode* (light/dark) and *palette* (indigo/blue/jade/rose/amber/violet).
@@ -596,7 +631,10 @@ curl -sf -X PATCH "${CC_API_URL:-http://localhost:8000}/api/v1/users/me/preferen
 - Frontend: ThemeService reads user preference on login, applies as custom palette
 - Frontend: derive 50-900 scale from single hex (color math or lookup table)
 
-* Email features — invitations, signup, test email [2026-04-13]
+* Email features — invitations, signup, test email
+:PROPERTIES:
+:CREATED:  [2026-04-13]
+:END:
 
 ** Invitation system
 - =Invitation= model: email, token (=secrets.token_urlsafe(32)=), created_by FK, created_at, accepted_at, expires_at (7 days)
@@ -631,7 +669,10 @@ curl -sf -X PATCH "${CC_API_URL:-http://localhost:8000}/api/v1/users/me/preferen
 - =test_invitation.py=: 27 tests (model, create, accept, list, destroy)
 - =test_test_email.py=: 4 tests (admin sends, default email, non-admin 403, unauth 401)
 
-* AI Chat — Architecture Reference [2026-04-13]
+* AI Chat — Architecture Reference
+:PROPERTIES:
+:CREATED:  [2026-04-13]
+:END:
 New agents: read this section to understand how AI chat works end-to-end.
 
 ** Overview
@@ -812,7 +853,10 @@ Enables the AI to understand "this job post" or check data on the current page.
 - =ALLOWED_HOSTS= in API settings must include the Docker hostname (=api=) for tool calls to work
 - Chat container does not need =INSTALL_CAMOUFOX= or browser dependencies
 
-* AI Chat Improvements [2026-04-13]
+* AI Chat Improvements
+:PROPERTIES:
+:CREATED:  [2026-04-13]
+:END:
 
 ** Implementation strategy
 8 items from todo.org grouped into clusters. Full plan at =~/.claude/plans/generic-gathering-quill.md=.
@@ -880,7 +924,10 @@ Phase 2 (dedicated =ChatAction= model with persistence) deferred until Phase 1 i
 SSE handles streaming + elicitation POST-back. WebSockets would need django-channels + ASGI +
 Redis + Docker changes. Marginal benefit. Revisit only if bidirectional becomes a hard requirement.
 
-* Admin AI Model Configuration [2026-04-13]
+* Admin AI Model Configuration
+:PROPERTIES:
+:CREATED:  [2026-04-13]
+:END:
 Plan for an admin UI to change which AI model each agent uses at runtime.
 [[file:todo.org::*admin interface for AI model selection][↑ todo.org]]
 
@@ -986,7 +1033,10 @@ Full plan at =~/.claude/plans/linked-finding-crayon.md=.
 - System prompt editing from admin UI
 - Ollama model discovery (query Ollama API)
 
-* Hold Poller, Screenshots, Multi-Model Pipeline [2026-04-14]
+* Hold Poller, Screenshots, Multi-Model Pipeline
+:PROPERTIES:
+:CREATED:  [2026-04-14]
+:END:
 [[file:todo.org::*MCP exposure at mcp.careercaddy.online][↑ todo.org (MCP exposure)]]
 [[file:todo.org::*Design plans for surfacing browser screenshots][↑ todo.org (screenshots)]]
 
@@ -1086,7 +1136,11 @@ Each transition logged with timestamp and note (error details, content length, s
 The =screenshot= MCP tool was listed in the docstring but never implemented — now implemented.
 Terminology: =snapshot= = text extraction (=page.inner_text=), =screenshot= = PNG image (=page.screenshot=).
 
-*** Chat-initiated scrapes [2026-04-14, updated 2026-04-16]
+*** Chat-initiated scrapes
+:PROPERTIES:
+:CREATED:  [2026-04-14]
+:UPDATED:  [2026-04-16]
+:END:
 Chat server =create_scrape()= now passes =status="hold"= so the hold-poller picks them up.
 Previously it omitted status (API defaulted to ="pending"= and dispatched browser-mcp directly),
 but browser-mcp is no longer running on the VPS. Both chat and public MCP server use hold.
@@ -1097,7 +1151,10 @@ System prompt updated: after creating a scrape, the AI offers elicitation button
 #+NOTE: [2026-04-16] New clones will have no poller running, so chat-created scrapes sit
 in hold. This needs documentation in README and/or .env defaults.
 
-*** ScrapeStatus logging gaps [2026-04-14]
+*** ScrapeStatus logging gaps
+:PROPERTIES:
+:CREATED:  [2026-04-14]
+:END:
 =ScrapeViewSet.create=, =.redo=, and hold creation never called =_log_scrape_status()=.
 Only the background scraper thread logged statuses (=running=, =scraping=, etc.).
 Result: scrape-status timeline was empty until the background thread ran.
@@ -1108,7 +1165,10 @@ Per-agent model overrides already work via env vars in =agent_factory.py:get_mod
 =BROWSER_SCRAPER_MODEL= gets its own env var (was sharing =PIPELINE_MODEL=).
 The DB-based admin model config (Option A in notes above) stays PENDING_APPROVAL.
 
-* Domain Scrape Profiles — learning loop for scrape cost reduction [2026-04-14]
+* Domain Scrape Profiles — learning loop for scrape cost reduction
+:PROPERTIES:
+:CREATED:  [2026-04-14]
+:END:
 [[file:todo.org::*Domain scrape profiles][↑ todo.org]]
 
 ** Motivation
@@ -1293,7 +1353,10 @@ Extraction step deferred (needs =OPENAI_API_KEY= in env).
   Requires =css_selectors= JSON + =preferred_tier= in ("auto", "0"). Falls back to LLM if title/company missing.
 - =_get_genesis_user()= fallback: AI costs always attributed (first staff user if no user on scrape).
 
-* Scrape → Parse → JobPost flow (documented for refactor) [2026-04-14]
+* Scrape → Parse → JobPost flow (documented for refactor)
+:PROPERTIES:
+:CREATED:  [2026-04-14]
+:END:
 
 ** Current entry points (3 paths, should be 1)
 
@@ -1349,7 +1412,8 @@ This path bypasses GenericParser entirely — uses the AI layer's own agents.
 5. *extract_job_from_scrape guard* (line 195) checks =status=="completed"= — but Path 2 sets status to "extracting" before calling parse. So if Path 2 is used, the guard in =extract_job_from_scrape= would reject it. They're separate flows that happen to call the same parser.
 6. *Company created without created_by* — =Company.objects.get_or_create(name=...)= has no user scoping. Multi-tenancy gap.
 
-** DONE Refactor completed [2026-04-14]
+** DONE Refactor completed
+CLOSED: [2026-04-14]
 Renamed =GenericParser= → =JobPostExtractor= (file: =job_post_extractor.py=).
 Single =parse_scrape(scrape_id, user_id, sync)= entry point replaces both =extract_job_from_scrape()= and inline thread in =ScrapeViewSet.parse=.
 - Env-var model selection: =JOB_PARSER_MODEL= → =CADDY_DEFAULT_MODEL= → =gpt-4o= default. Supports =ollama:model-name= prefix.
@@ -1372,7 +1436,10 @@ This requires:
 
 Current state works (two requests per tick) but is wasteful. Consolidate when the poller service is refactored.
 
-* Builder-form style conventions [2026-04-14]
+* Builder-form style conventions                                    :IMPORTANT:
+:PROPERTIES:
+:CREATED:  [2026-04-14]
+:END:
 Reference for agents working with =builder-form= in =frontend/app/styles/app.css=.
 
 ** Layout classes
@@ -1394,7 +1461,10 @@ Never use inline =style="..."= attributes. Tailwind utilities are the standard. 
 ** Read-only views
 Match the edit form's column layout. Use =grid grid-cols-2 gap-x-6 gap-y-4= on the =<dl>=. Full-width items (address, links) get =col-span-2=.
 
-* Resume serializer — JSON:API relationship linkage + sideloading [2026-04-14]
+* Resume serializer — JSON:API relationship linkage + sideloading
+:PROPERTIES:
+:CREATED:  [2026-04-14]
+:END:
 RESOLVED [2026-04-14]
 
 ** What was wrong
@@ -1465,7 +1535,10 @@ await Promise.all([resume.skills, resume.summaries, resume.projects]);
 
 This await resolves instantly from the store (no extra fetch) when data is sideloaded.
 
-* Full-height page layout (caddy chat) [2026-04-15]
+* Full-height page layout (caddy chat)
+:PROPERTIES:
+:CREATED:  [2026-04-15]
+:END:
 
 ** Problem
 The =/caddy= full-page chat didn't fill the viewport. Input sat in the middle of the page
@@ -1509,7 +1582,10 @@ If a flex column child won't fill available height, check the parent's =overflow
 =overflow: auto= or =overflow: scroll= on a flex container lets children overflow instead of
 being constrained. Use =overflow: hidden= when you need children to fit.
 
-* Job Queue Integration Plan [2026-04-15]
+* Job Queue Integration Plan
+:PROPERTIES:
+:CREATED:  [2026-04-15]
+:END:
 [[file:todo.org::*plan integration of a job job queue][↑ todo.org]]
 Full plan: =~/.claude/plans/sequential-scribbling-wall.md=
 
@@ -1541,7 +1617,10 @@ Docker container running =manage.py qcluster=.
 ** Unchanged
 Frontend poller, hold_poller, status field pattern, API 202 responses, chat SSE.
 
-* ActivityPub Integration Plan [2026-04-15]
+* ActivityPub Integration Plan
+:PROPERTIES:
+:CREATED:  [2026-04-15]
+:END:
 [[file:todo.org::*plan the integration of activitypub][↑ todo.org]]
 Full plan: =~/.claude/plans/sequential-scribbling-wall.md=
 
@@ -1781,7 +1860,8 @@ Two options:
 
 Decision deferred — needs exploration of resume builder impact first.
 
-** Completed [2026-04-15]
+** Completed
+CLOSED: [2026-04-15]
 
 1. +questions/show/answers/index+ — DONE. Swapped to =<Answers::List>=, fixed route model, deleted 2 dead edit controllers.
 2. +job-posts/show/scores+ — DONE. Fixed route model, swapped to =<Scores::List>= with =@showJobPost={{false}}=.
@@ -1854,7 +1934,10 @@ Decision deferred — needs exploration of resume builder impact first.
 | =<Summaries::List>= | =@summaries @isPending @emptyMessage= | Table with Resume, Active columns |
 | =<Summaries::Carousel>= | =@summaries @resume= | Prev/next navigation, resume builder only |
 
-** AI prompt assembly — injected prompts [2026-04-15]
+** AI prompt assembly — injected prompts
+:PROPERTIES:
+:CREATED:  [2026-04-15]
+:END:
 
 *** How AnswerService works (the reference implementation)
 
@@ -1917,7 +2000,10 @@ The top of every prompt file shows:
 3. The question or task
 4. Supporting context follows below
 
-* Refactor: views.py → views/ package [2026-04-15]
+* Refactor: views.py → views/ package
+:PROPERTIES:
+:CREATED:  [2026-04-15]
+:END:
 [[file:~/.claude/plans/vast-squishing-waffle.md][Full plan]]
 
 =views.py= is 8080 lines with 24 viewsets. Split into a =views/= package with 17 files.
@@ -1952,7 +2038,10 @@ The top of every prompt file shows:
 ** Migration: 11 incremental steps, each passes =make test-api=
 See full plan for step-by-step.
 
-* Refactor: serializers.py — extract duplication into BaseSerializer [2026-04-15]
+* Refactor: serializers.py — extract duplication into BaseSerializer
+:PROPERTIES:
+:CREATED:  [2026-04-15]
+:END:
 
 =serializers.py= is 1325 lines with 26 serializer classes. Unlike views.py, the file size is manageable — the problem is 3 copy-paste patterns that should be BaseSerializer methods.
 
@@ -1991,7 +2080,8 @@ ScoreSerializer, CoverLetterSerializer, JobApplicationSerializer, ApiKeySerializ
 ** Note: no file split needed
 Unlike views.py, serializers.py at ~1175 lines post-refactor is fine as a single file. The classes are small and cohesive.
 
-** DONE [2026-04-16 api]
+** DONE
+CLOSED: [2026-04-16 api]
 Implemented all 3 patterns. 1325 → 1135 lines (190 lines removed). 265 tests pass, ruff clean.
 - =user_fk= class attribute: auto-injects user relationship in =to_resource()= and =get_related()=. Migrated 7 serializers.
 - =linked_relationships= class attribute: auto-populates data linkage arrays for to-many relationships. Migrated 4 serializers.

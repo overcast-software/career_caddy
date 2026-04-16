@@ -1,6 +1,8 @@
 #+title: CareerCaddy
-#+date:    2026-04-07
 #+contact: Contact name
+:PROPERTIES:
+:CREATED:  2026-04-07
+:END:
 
 * HOW TO USE THIS FILE (agents: read this first)
 This is the living specification for CareerCaddy development.
@@ -58,16 +60,25 @@ See [[file:notes.org::*Curriculum gap analysis][notes.org: Curriculum gap analys
 
 * IN_PROGRESS [0/3]
 
-** IN_PROGRESS We want to increase code coverage in testing [2026-04-08 api]
+** IN_PROGRESS We want to increase code coverage in testing
+:PROPERTIES:
+:STARTED:  [2026-04-08 api]
+:END:
 #+NOTE: API agent owns this. Ongoing; more coverage can be added incrementally.
 
-** IN_PROGRESS MCP exposure at mcp.careercaddy.online [2026-04-10 ai+api]  :APPROVED:
+** IN_PROGRESS MCP exposure at mcp.careercaddy.online                      :APPROVED:
+:PROPERTIES:
+:STARTED:  [2026-04-10 ai+api]
+:END:
 [[file:notes.org::*MCP deployment at mcp.careercaddy.online][Architecture → notes.org]]
 *** TODO Configure Caddy reverse proxy + DNS for =mcp.careercaddy.online= [product-owner]
 *** WAIT OAuth 2.0 support for in-app chat (Phase 2)
 *** saved browser credentials is a major security vulnerability even for properly exposed MCP.
 
-** IN_PROGRESS fonts and buttons from "under construction" [2026-04-11 frontend] :APPROVED:
+** IN_PROGRESS fonts and buttons from "under construction"                 :APPROVED:
+:PROPERTIES:
+:STARTED:  [2026-04-11 frontend]
+:END:
 [[file:notes.org::*Fonts and buttons from "under construction" page][Considerations → notes.org]]
 Remaining: font adoption from under-construction.html.
 
@@ -94,8 +105,11 @@ CLOSED: [2026-04-15 Tue]
 [[file:notes.org::*Security audit — multi-tenancy data isolation][Considerations → notes.org]]
 
 ** IN_PROGRESS Hold poller + multi-model pipeline                   :APPROVED:
+:PROPERTIES:
+:STARTED:  [2026-04-14 ai+api+frontend]
+:END:
 [[file:notes.org::*Hold Poller, Screenshots, Multi-Model Pipeline][Plan → notes.org]]
-[2026-04-14 ai+api+frontend] All subtasks done except end-to-end test.
+All subtasks done except end-to-end test.
 *** DONE Pluggable browser engine (Camoufox or Playwright Chromium + stealth)
 CLOSED: [2026-04-16 Wed]
 =--engine camoufox|chrome= + =--headless/--headed= CLI args on browser_server, hold_poller, manual_login.
@@ -195,7 +209,10 @@ Error at =index.js:22= in resumes index route model hook.
 Likely the same async hasMany proxy issue seen earlier with =projects= (was =async: false=, fixed to =async: true=).
 May need to investigate other relationships or the =findAll('resume', { reload: true })= interaction with stale store state.
 
-** DONE caddy ai chat is at the top [2026-04-15 frontend]
+** DONE caddy ai chat is at the top
+:PROPERTIES:
+:STARTED:  [2026-04-15 frontend]
+:END:
 CLOSED: [2026-04-15 Tue]
 Replaced :has() flex chain with absolute positioning via @mainClass="caddy-fairway".
 Added @noSubnav, bottom padding for fixed footer.
