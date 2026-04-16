@@ -1,13 +1,17 @@
-.PHONY: up up-full down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai pipeline-url doctor doctor-poller help
+-include .env
+export
+
+.PHONY: up up-core up-full down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai pipeline-url doctor doctor-poller list help
 
 # ── Dev stack ──────────────────────────────────────────────────────────────
 
-up: ## Start full dev stack (db + api + frontend + chat + browser-mcp)
+up: ## Start core dev stack (db + api + frontend + chat)
 	docker compose down --remove-orphans 2>/dev/null || true
-	docker compose up
+	docker compose up db api frontend chat
 
-up-full: ## Start dev stack (run 'make poller-local' in a separate terminal for hold scrapes)
-	docker compose up
+up-full: ## Start all services including browser-mcp
+	docker compose down --remove-orphans 2>/dev/null || true
+	USE_MCP_BROWSER_AGENT=True docker compose up
 
 down: ## Stop all services and remove orphan containers
 	docker compose down --remove-orphans
@@ -58,11 +62,11 @@ ci-ai: ## Build the slim AI Docker image via Dagger (no camoufox — production 
 pipeline-url: ## Scrape a single job URL  (usage: make pipeline-url URL=https://...)
 	cd ai && uv run caddy-pipeline --url $(URL)
 
-poller: ## Poll for hold scrapes against prod
-	cd ai && uv run caddy-poller
+poller: ## Poll for hold scrapes against prod (pass ARGS="--engine chrome --headless")
+	cd ai && uv run caddy-poller $(ARGS)
 
 poller-local: ## Poll for hold scrapes against local dev (localhost:8000)
-	cd ai && CC_API_BASE_URL=http://localhost:8000 uv run caddy-poller
+	cd ai && CC_API_BASE_URL=http://localhost:8000 uv run caddy-poller $(ARGS)
 
 # ── Bootstrap ──────────────────────────────────────────────────────────────
 
@@ -75,6 +79,9 @@ doctor-poller: ## Check hold-poller environment
 bootstrap: ## Check if app needs initialization (prints status)
 	@curl -s http://localhost:8000/api/v1/initialize/ | python3 -m json.tool
 
+list: ## List running Docker services
+	@docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'

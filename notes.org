@@ -26,6 +26,11 @@ Archived to [[file:notes_archive.org::*Backups (export / import)][notes_archive.
 - Proposal: build a shared =<Tooltip>= Glimmer component that accepts a =@text= arg and wraps any element; adopt the HyperUI tooltip pattern.
 - Scope question: audit all ambiguous UI affordances first, or implement favorites tooltip only and expand later?
 
+- Scrape show subnav buttons (Retry, Queue, Parse) would benefit from tooltips explaining what each does:
+  - *Retry*: dispatches to browser-mcp for immediate scrape
+  - *Queue*: sets status to =hold= for the poller to pick up
+  - *Parse*: re-runs extraction on existing job content
+
 *** Waiting on
 Approve the shared-component pattern and confirm scope (favorites-only to start, or full audit).
 
@@ -1035,10 +1040,12 @@ caddy-poller starts
   poll: GET /api/v1/scrapes/?filter[status]=hold
   found work?
     yes → for each hold scrape:
-            PATCH status → running
-            scrape_page(url) — Camoufox, no LLM
-              login wall? → status=failed + screenshot
-              success? → PATCH job_content + status=completed
+            PATCH status → running (note: "Poller picked up")
+            scrape_page(url) — browser engine, no LLM
+              login wall? → status=failed (note: login wall message)
+              success? →
+                POST screenshot to /scrapes/{id}/screenshots/
+                PATCH job_content + status=completed (note: "Content delivered (N chars)")
                 → API fires _maybe_trigger_extraction():
                   parse_scrape() → LLM extraction (gpt-4o-mini)
                   _update_scrape_profile() → domain stats
@@ -1065,12 +1072,14 @@ Mirrors =JobApplicationStatus=. Uses =Status= table with =status_type="scrape"=.
 Statuses: hold, pending, running, authenticating, login_failed, scraping, extracting, completed, failed.
 Each transition logged with timestamp and note (error details, content length, screenshot path).
 
-*** Screenshot serving
-- Shared Docker volume: =screenshots:/app/screenshots= (browser-mcp + api)
-- =ScreenshotStore= abstraction in API — local disk now, S3 later
-- Naming: =scrape_{id}_{timestamp}.png=
-- Staff-only endpoints: =GET /api/v1/scrapes/{id}/screenshots/= (list), =GET .../screenshots/{filename}= (serve PNG)
-- Frontend: staff sees screenshot gallery on scrape show page
+*** Screenshot serving [updated 2026-04-16]
+- Poller uploads via =POST /api/v1/scrapes/{id}/screenshots/= (multipart form-data)
+- Stored in =screenshots/{scrape_id}/= folders (folder-per-scrape, not flat prefix naming)
+- =ScreenshotStore= abstraction in API — =list_for_scrape()=, =read()=, =save()=. Local disk now, S3 later.
+- Staff-only endpoints: =GET /api/v1/scrapes/{id}/screenshots/= (list filenames), =GET .../screenshots/{filename}= (serve PNG)
+- DRF format suffix routing strips =.png= — manual =re_path= in =urls.py= bypasses this for file serving
+- Frontend: staff sees filename list on scrape show, click to reveal image (fetched with JWT via blob URL)
+- No shared Docker volume needed — poller uploads through the API regardless of where it runs
 
 *** Browser headless mode
 =BROWSER_HEADLESS=false= env var makes Camoufox visible. Defaults to =true= (no change to prod).

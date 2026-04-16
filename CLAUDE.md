@@ -59,6 +59,9 @@ make test-api         # run API test suite
 make test-frontend    # run Ember QUnit tests
 make ci               # Dagger: lint + test API and frontend locally
 make pipeline-url URL=https://...   # scrape one job URL → add to Career Caddy
+make poller                          # hold-poller against prod (Camoufox default)
+make poller ARGS="--engine chrome"   # hold-poller with Chromium + stealth (ARM/Pi)
+make poller-local                    # hold-poller against localhost:8000
 ```
 
 ## Port Map

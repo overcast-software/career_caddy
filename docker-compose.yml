@@ -51,7 +51,7 @@ services:
       # Fallback for local dev — always set a real value in .env
       SECRET_KEY: ${SECRET_KEY:-dev-only-insecure-do-not-use-in-production}
       ALLOWED_HOSTS: "localhost,127.0.0.1,api"
-      USE_MCP_BROWSER_AGENT: "True"
+      USE_MCP_BROWSER_AGENT: "${USE_MCP_BROWSER_AGENT:-False}"
       BROWSER_MCP_SSE_URL: "http://browser-mcp:3004/sse"
       CHAT_SERVICE_URL: "http://chat:8000"
       SCREENSHOT_DIR: /app/screenshots
@@ -129,7 +129,6 @@ services:
       SCREENSHOT_DIR: /app/screenshots
     volumes:
       - ./ai/secrets.yml:/app/secrets.yml:ro
-      - screenshots:/app/screenshots
 
 
 volumes:

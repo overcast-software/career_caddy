@@ -100,7 +100,14 @@ CLOSED: [2026-04-15 Tue]
 CLOSED: [2026-04-16 Wed]
 =--engine camoufox|chrome= + =--headless/--headed= CLI args on browser_server, hold_poller, manual_login.
 Sessions portable across engines. Chromium path ARM-compatible for Pibu.
-*** TODO Test end-to-end locally on feature branch
+*** DONE Screenshot upload via API + on-demand viewer
+CLOSED: [2026-04-16 Wed]
+Poller uploads screenshots via =POST /scrapes/{id}/screenshots/=. API stores in =screenshots/{id}/= folders.
+Frontend: staff sees filename list, click to reveal image (fetched with auth via blob URL).
+Queue button sets scrape to =hold= for poller pickup. Status notes on all transitions.
+*** DONE End-to-end test: queue → poller → screenshot → viewer
+CLOSED: [2026-04-16 Wed]
+Tested locally: queue scrape 59, poller scraped + uploaded screenshot, clicked filename in UI, image displayed.
 
 * Features — PENDING APPROVAL
 
