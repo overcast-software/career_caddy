@@ -165,6 +165,23 @@ CLOSED: [2026-04-16 Wed]
 Convention: "hydration" = transitioning from a slim-loaded record to a full record.
 Fixed by passing =@model={{record.id}}= in =<LinkTo>= (forces model hook) + =reload: true= in edit route.
 
+** DONE Add =updated_at= timestamp to ScrapeProfile [api+frontend]
+CLOSED: [2026-04-16 Wed]
+=updated_at= surfaced in scrape-profiles index table and show page stats.
+Added =updating_profile= scrape status in pipeline between extraction and completion.
+Chat server now creates scrapes with =status="hold"= (poller picks them up).
+
+** TODO Document chat-scrape hold-by-default behavior
+New clones will have no poller running, so chat-created scrapes will sit in =hold= forever.
+Need to document this in README/CLAUDE.md and/or add =.env= defaults to make behavior obvious.
+
+** DONE Agent-derived CSS selectors for scrapes [ai+api]
+CLOSED: [2026-04-16 Wed]
+Browser agent is now profile-aware. Reads =css_selectors= before scraping, uses selectors for
+blocked/authenticated detection, discovers job_data selectors from live DOM, writes findings back.
+Schema: ={"blocked": {...}, "authenticated": {...}, "job_data": {...}}=. Login data stays in =sites.yml=.
+[[file:~/.claude/plans/whimsical-juggling-cherny.md][Full plan]]
+
 ** TODO Summaries carousel: add button when no summaries exist [frontend]
 The carousel shows "No summaries yet" but gives no way to create or fetch summaries.
 Needs an "Add Summary" action or a link to =/summaries/new=.

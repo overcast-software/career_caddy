@@ -1086,14 +1086,16 @@ Each transition logged with timestamp and note (error details, content length, s
 The =screenshot= MCP tool was listed in the docstring but never implemented — now implemented.
 Terminology: =snapshot= = text extraction (=page.inner_text=), =screenshot= = PNG image (=page.screenshot=).
 
-*** Chat-initiated scrapes [2026-04-14]
-Previously the AI chat tool =create_scrape()= hardcoded =status="hold"=, meaning scrapes
-created via chat sat idle until the hold poller picked them up. Changed to omit status
-(API defaults to ="pending"= and dispatches the browser scraper immediately).
-The MCP public server still passes =status="hold"= explicitly for the hold-poller workflow.
+*** Chat-initiated scrapes [2026-04-14, updated 2026-04-16]
+Chat server =create_scrape()= now passes =status="hold"= so the hold-poller picks them up.
+Previously it omitted status (API defaulted to ="pending"= and dispatched browser-mcp directly),
+but browser-mcp is no longer running on the VPS. Both chat and public MCP server use hold.
 
 System prompt updated: after creating a scrape, the AI offers elicitation buttons
 ("View scrape" → navigates user to =/scrapes/{id}=).
+
+#+NOTE: [2026-04-16] New clones will have no poller running, so chat-created scrapes sit
+in hold. This needs documentation in README and/or .env defaults.
 
 *** ScrapeStatus logging gaps [2026-04-14]
 =ScrapeViewSet.create=, =.redo=, and hold creation never called =_log_scrape_status()=.
@@ -2221,6 +2223,71 @@ After extraction:
 * Electron Desktop App — Feasibility Study
 [[file:todo.org::*PROJ Electron desktop app feasibility][↑ todo.org]]
 /Placeholder — detailed study to be written under this heading./
+
+* Profile-Aware Browser Agent
+:PROPERTIES:
+:CREATED: [2026-04-16]
+:END:
+[[file:~/.claude/plans/whimsical-juggling-cherny.md][Full plan]]
+[[file:todo.org::*Agent-derived CSS selectors][↑ todo.org]]
+
+** Motivation
+The browser agent (=scrape_page()=) navigated blind — no knowledge of a domain's blocked
+indicators, auth state, or job data structure. The =ScrapeProfile.css_selectors= JSONField
+existed but was never read before scraping or populated by the browser.
+
+** CSS selectors schema
+Three categories. Login data stays in =sites.yml= only — never touches the API.
+
+#+BEGIN_SRC json
+{
+  "blocked": {"paywall": ".paywall-overlay", "captcha": ".captcha-container"},
+  "authenticated": {"indicator": ".global-nav__me"},
+  "job_data": {"title": "h1.job-title", "company_name": ".company-name a",
+               "description": ".job-description", "location": ".job-location"}
+}
+#+END_SRC
+
+- =blocked= + =authenticated=: browser agent checks these after page load for state detection
+- =job_data=: API-side =_try_tier0_extraction()= uses these for zero-cost extraction
+- =login=: NOT stored — =sites.yml= via =Credentials.load()= handles login automation
+
+** Changes made
+
+*** =ai/lib/api_tools.py=
+Added =get_scrape_profile(hostname)= and =update_scrape_profile(id, **attrs)=.
+Wraps existing =GET /api/v1/scrape-profiles/?filter[hostname]=...= and =PATCH=.
+
+*** =ai/mcp_servers/browser_server.py=
+- =_check_profile_selectors(page, css_selectors)= — runs =query_selector= for each selector
+  in =authenticated=, =blocked=, =job_data=. Returns results dict.
+- =_discover_job_selectors(page)= — probes common job page patterns (=h1=, =.job-title=,
+  =[data-testid*="title"]=, etc.) when no profile selectors exist. Returns ={field: selector}=.
+- =scrape_page(url, profile=None)= — accepts optional profile dict, uses selectors for
+  detection (blocked → error, authenticated → skip login wall), discovers new selectors,
+  returns =selector_results= and =discovered_selectors= in response JSON.
+
+*** =ai/scripts/hold_poller.py=
+- Fetches scrape profile by hostname before scraping
+- Passes profile to =scrape_page()=
+- =_update_profile_from_results()= writes discovered selectors back to profile
+- Logs warnings when existing selectors stop matching (site redesign detection)
+
+*** =api/job_hunting/lib/parsers/job_post_extractor.py=
+- =_try_tier0_extraction()= reads from =css_selectors.get("job_data", {})= (nested schema)
+- =ProfileHints= model now includes =css_selectors= dict field
+- =_generate_profile_hints()= asks LLM to propose CSS selectors alongside text hints
+- Proposed selectors saved under =css_selectors["job_data"]= when none exist
+
+** Other changes this session
+- =updated_at= surfaced in scrape-profiles index table and show page
+- =updating_profile= scrape status added (between extraction and completion)
+- Chat server =create_scrape= now uses =status="hold"= (poller picks up)
+
+** Security invariants
+- Login selectors (=sites.yml=) never touch the API or scrape profile DB
+- No credential data flows through =css_selectors=
+- =api_tools.py= has no access to =secrets.yml= or browser automation code
 
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
