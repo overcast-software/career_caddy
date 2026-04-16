@@ -1,4 +1,4 @@
-.PHONY: up up-full up-mcp-gateway down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai pipeline pipeline-url doctor doctor-poller help
+.PHONY: up up-full down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai pipeline-url doctor doctor-poller help
 
 # ── Dev stack ──────────────────────────────────────────────────────────────
 
@@ -8,10 +8,6 @@ up: ## Start full dev stack (db + api + frontend + chat + browser-mcp)
 
 up-full: ## Start dev stack (run 'make poller-local' in a separate terminal for hold scrapes)
 	docker compose up
-
-up-mcp-gateway: ## Start full stack + MCP gateway aggregator (port 3002)
-	docker compose down --remove-orphans 2>/dev/null || true
-	docker compose --profile mcp-gateway up
 
 down: ## Stop all services and remove orphan containers
 	docker compose down --remove-orphans
@@ -58,10 +54,6 @@ ci-ai: ## Build the slim AI Docker image via Dagger (no camoufox — production 
 
 # ── AI Pipeline ────────────────────────────────────────────────────────────
 # Requires: CC_API_TOKEN and OPENAI_API_KEY set in .env or environment
-# For email mode: also requires NOTMUCH_MAILDIR set and notmuch indexed
-
-pipeline: ## Run the full job email → Career Caddy pipeline
-	cd ai && uv run caddy-pipeline
 
 pipeline-url: ## Scrape a single job URL  (usage: make pipeline-url URL=https://...)
 	cd ai && uv run caddy-pipeline --url $(URL)

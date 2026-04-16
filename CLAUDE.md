@@ -38,21 +38,11 @@ make up-ai
 # Browser MCP:  http://localhost:3004/sse
 ```
 
-**With full MCP gateway** (all tools aggregated on one SSE endpoint):
-
-```bash
-make up-mcp-gateway
-# MCP gateway:  http://localhost:3002/sse  (email_* + caddy_* + browser_* tools)
-```
-
 **Running the AI pipeline directly** (no docker service needed):
 
 ```bash
 # Scrape a single job URL
 make pipeline-url URL=https://example.com/job
-
-# Full email → scrape → API pipeline
-make pipeline
 ```
 
 ## Makefile Shortcuts
@@ -60,7 +50,6 @@ make pipeline
 ```bash
 make up               # core stack (db + api + frontend)
 make up-ai            # + browser MCP server (port 3004)
-make up-mcp-gateway   # + browser MCP + full gateway aggregator (port 3002)
 make down             # stop all services
 make logs             # follow all logs
 make shell-api        # bash shell in running api container
@@ -70,7 +59,6 @@ make test-api         # run API test suite
 make test-frontend    # run Ember QUnit tests
 make ci               # Dagger: lint + test API and frontend locally
 make pipeline-url URL=https://...   # scrape one job URL → add to Career Caddy
-make pipeline         # full email → scrape → API pipeline
 ```
 
 ## Port Map
@@ -80,10 +68,9 @@ make pipeline         # full email → scrape → API pipeline
 | PostgreSQL | 5432 | 5432 | 5432 |
 | Django API | 8000 | 8000 | 8025 |
 | Ember frontend | 4200 | 4200 | 8087 |
-| MCP gateway aggregator | 3002 | 3002 | — |
 | Browser MCP server | 3004 | 3004 | — |
 
-AI services are local-only — they require access to the host's email (notmuch) and browser automation (Camoufox).
+AI services are local-only — they require browser automation (Camoufox). Email workflows have been moved to `career_caddy_automation`.
 
 ## System Architecture
 
@@ -99,7 +86,7 @@ The **frontend** is a JSON:API client. The `application` adapter injects JWT aut
 
 The **API** uses Django ORM for all models. Startup requires only `manage.py migrate`.
 
-The **AI layer** runs locally. Agents chain MCP servers as tool providers. The main pipeline (`job_email_to_caddy.py`) orchestrates: email search → URL extraction → browser scrape → Career Caddy API POST. The AI layer authenticates to the API using a long-lived API key (`CC_API_TOKEN`), not a JWT.
+The **AI layer** runs locally. Agents chain MCP servers as tool providers. The pipeline (`job_email_to_caddy.py`) orchestrates: URL → browser scrape → Career Caddy API POST. The AI layer authenticates to the API using a long-lived API key (`CC_API_TOKEN`), not a JWT.
 
 ## Cross-Component Contracts
 

@@ -118,6 +118,12 @@ CLOSED: [2026-04-15 Tue]
 ** TODO use omarchy to set theme
 publicity stunt
 
+** PROJ caddy_automation: standalone toolkit + MCP verification   :APPROVED:
+[[file:notes.org::*Standalone Career Caddy Automation Toolkit (caddy_automation)][Architecture → notes.org]]
+
+** PROJ Electron desktop app feasibility                          :PENDING_APPROVAL:
+[[file:notes.org::*Electron Desktop App — Feasibility Study][Architecture + trade-offs → notes.org]]
+
 * Features — Open TODOs
 
 ** DONE Refactor =serializers.py= — extract data linkage pattern into BaseSerializer [api]

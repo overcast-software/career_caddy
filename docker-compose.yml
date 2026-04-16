@@ -1,13 +1,10 @@
 ---
 # Unified local development environment
 #
-# Profiles:
-#   (default)               Core stack: db + api + frontend + chat + browser-mcp
-#   --profile mcp-gateway   + MCP gateway aggregator (3002) — caddy + email + browser on one endpoint
+# Core stack: db + api + frontend + chat + browser-mcp
 #
 # Usage:
 #   docker compose up                                        # full dev stack
-#   docker compose --profile mcp-gateway up                  # + all MCP tools on one endpoint
 #
 # Copy .env.example to .env and fill in values before first run.
 
@@ -134,26 +131,6 @@ services:
       - ./ai/secrets.yml:/app/secrets.yml:ro
       - screenshots:/app/screenshots
 
-  # ── MCP Gateway (--profile mcp-gateway) ──────────────────────────────────
-  # Aggregates email + caddy + browser tools under namespaced prefixes on port 3002.
-  # Use when connecting Claude Desktop or any MCP client that needs all tools on
-  # one endpoint (email_*, caddy_*, browser_*).
-
-  caddy-mcp:
-    profiles: [mcp-gateway]
-    build:
-      context: ./ai
-    working_dir: /app
-    command: uv run caddy-gateway
-    ports:
-      - "3002:3002"
-    env_file: .env
-    environment:
-      FASTMCP_HOST: "0.0.0.0"
-      FASTMCP_PORT: "3002"
-    volumes:
-      - ${NOTMUCH_MAILDIR:-/dev/null}:/mail:ro
-      - ./ai/secrets.yml:/app/secrets.yml:ro
 
 volumes:
   postgres_data:

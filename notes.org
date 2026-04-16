@@ -1986,6 +1986,233 @@ Implemented all 3 patterns. 1325 → 1135 lines (190 lines removed). 265 tests p
 - =linked_relationships= class attribute: auto-populates data linkage arrays for to-many relationships. Migrated 4 serializers.
 - Cleanup: replaced ExperienceSerializer inline =_dp()= with enhanced =_parse_date()= (now falls back to dateparser).
 
+* Standalone Career Caddy Automation Toolkit (caddy_automation)
+[[file:todo.org::*PROJ caddy_automation][↑ todo.org]]
+Codename: =caddy_automation=. Folder: =career_caddy_automation/=.
+
+#+NOTE: [2026-04-16] Initial extraction complete. Email removed from =ai/= (email_server.py,
+email_classifier_agent.py, gateway.py deleted; agent_factory stripped; job_email_to_caddy.py
+now URL-only). A2A orchestrator, hold_poller, discover_sites, manual_login all in standalone project.
+
+** Goal
+Separate personal automation (email pipeline, browser scraping) from the Career Caddy product.
+The =ai/= directory ships with Career Caddy. Personal automation lives in its own repo that
+/consumes/ the Career Caddy API — the same way any user would.
+
+This project also serves as the reference implementation for anyone who wants to build their
+own automation on top of Career Caddy's API or MCP endpoint.
+
+** What stays in =ai/= vs what moves out
+
+*** Stays in =ai/= (ships with Career Caddy)
+| File | Purpose |
+|------+---------|
+| =chat_server.py= | Frontend chat via SSE — internal Docker service |
+| =public_server.py= | =mcp.careercaddy.online= — public MCP endpoint |
+| =hold_poller.py= | Scrape worker — polls for =status=hold= scrapes |
+| =career_caddy_server.py= | MCP wrapper for internal agents (stdio) |
+| =lib/api_tools.py= | Shared API client — used by both internal and external |
+| =lib/toolsets.py= | =CareerCaddyToolset= — pydantic-ai tool wrapper |
+| =lib/models/= | Shared pydantic models (JobPostData, CompanyData, etc.) |
+
+*** Moves to =career_caddy_automation/= (personal + reference)
+| File | Purpose |
+|------+---------|
+| =email_server.py= | notmuch email search/tagging — only works for the owner |
+| =email_classifier_agent.py= | LLM-based email classification loop |
+| =job_email_to_caddy.py= | Full pipeline: email → scrape → post |
+| =browser_server.py= | Camoufox browser automation |
+| =gateway.py= | Aggregates email + caddy + browser servers |
+| =job_extractor_agent.py= | HTML → structured =JobPostData= |
+| =career_caddy_agent.py= | Agent that does CRUD with duplicate checking |
+
+** Two connection modes
+
+The standalone toolkit can talk to Career Caddy two ways:
+
+*** 1. Direct API (simple, for the owner)
+Set two env vars and go:
+#+begin_example
+CC_API_BASE_URL=https://api.careercaddy.online   # or http://localhost:8000
+CC_API_TOKEN=jh_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+#+end_example
+The toolkit makes HTTP requests directly to the JSON:API endpoints.
+This is what the current =ai/= layer does internally.
+
+*** 2. MCP SSE (the "right" way for external consumers)
+Connect a pydantic-ai agent to the public MCP endpoint:
+#+begin_src python
+from pydantic_ai.mcp import MCPServerSse
+
+server = MCPServerSse(
+    url="https://mcp.careercaddy.online/mcp",
+    headers={"Authorization": "Bearer jh_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+)
+#+end_src
+This proves that =mcp.careercaddy.online= works for external agents and is the
+pattern we'd recommend to other Career Caddy users.
+
+The public MCP server (=public_server.py=) exposes career-data tools only:
+- Companies: =create_company=, =find_company_by_name=, =search_companies=
+- Job Posts: =create_job_post_with_company_check=, =find_job_post_by_link=, =search_job_posts=
+- Applications: =create_job_application=, =get_applications_for_job_post=, =update_job_application=
+- Career Data: =get_career_data=, =get_resumes=, =get_questions=, =score_job_post=
+- Scrapes: =create_scrape=, =get_scrapes=, =update_scrape=
+
+No email or browser tools — those are personal and run locally.
+
+** Proposed project structure
+
+#+begin_example
+career_caddy_automation/
+├── pyproject.toml              # pydantic-ai, httpx, fastmcp, camoufox (optional)
+├── .env.example                # CC_API_BASE_URL, CC_API_TOKEN, OPENAI_API_KEY
+├── .envrc                      # direnv: source .env
+├── secrets.yml.example         # browser login creds template (optional)
+├── README.md
+├── src/
+│   ├── client/                 # Reusable Career Caddy API client
+│   │   ├── api_client.py       # Extracted from ai/lib/api_tools.py
+│   │   ├── models.py           # JobPostData, CompanyData, APIResponse
+│   │   └── toolset.py          # CareerCaddyToolset for pydantic-ai agents
+│   ├── agents/                 # Reusable agents
+│   │   ├── job_extractor.py    # HTML → structured JobPostData (no API needed)
+│   │   └── caddy_poster.py     # Agent that creates job posts with duplicate checking
+│   └── pipelines/              # Concrete automations (the examples people emulate)
+│       ├── url_to_caddy.py     # Simplest: scrape one URL → post to Career Caddy
+│       └── email_to_caddy.py   # Full: email search → scrape → post (needs notmuch)
+├── mcp_servers/                # Local MCP servers (optional, for gateway mode)
+│   ├── email_server.py         # notmuch integration
+│   └── browser_server.py       # Camoufox browser automation
+└── scripts/
+    ├── tag_emails.py           # Daemon: classify + tag emails hourly
+    └── process_tagged.py       # Daemon: process tagged emails → Career Caddy
+#+end_example
+
+*** What each layer does
+- =src/client/= :: The reusable core. Anyone who wants to talk to Career Caddy's API
+  from Python imports this. No LLM dependency — just =httpx= and =pydantic=.
+- =src/agents/= :: Pydantic-AI agents that use the client. These /do/ need an LLM
+  (OpenAI, Anthropic, or Ollama). The =job_extractor= parses raw HTML into structured
+  data. The =caddy_poster= pushes it to the API.
+- =src/pipelines/= :: End-to-end workflows. =url_to_caddy.py= is the minimal example
+  (scrape a URL, extract job data, post it). =email_to_caddy.py= is the full pipeline
+  (requires notmuch + browser automation).
+- =mcp_servers/= :: Optional. Only needed if running the local gateway (aggregates
+  email + browser + caddy tools on one SSE endpoint). Most users won't need this.
+- =scripts/= :: Daemon loops. Personal automation that runs on a schedule.
+
+** Configuration: how =.env= works
+
+*** For personal use
+#+begin_example
+# .env
+CC_API_BASE_URL=https://api.careercaddy.online
+CC_API_TOKEN=jh_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+NOTMUCH_MAILDIR=~/.mail
+#+end_example
+Load via =direnv= (=.envrc= contains =dotenv=) or =source .env=.
+
+*** For someone else
+They fork the repo, create their own =.env= with their Career Caddy instance URL and API key.
+If they don't use email, they skip =NOTMUCH_MAILDIR= and only use =url_to_caddy.py=.
+If they don't have Camoufox, they can still post job data directly via the API client.
+
+*** What =CC_API_TOKEN= is
+A long-lived API key generated in Career Caddy's web UI (Settings → API Keys).
+Format: =jh_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=. Sent as =Authorization: Bearer jh_xxx=.
+The public MCP server validates it by calling =/api/v1/me/= on the Career Caddy API.
+
+** Dependencies
+
+*** Required (the reusable core)
+- =httpx= — HTTP client for Career Caddy API
+- =pydantic= — data models
+
+*** Required for agents
+- =pydantic-ai= — agent framework
+- =openai= or =anthropic= — LLM provider (or Ollama for local)
+
+*** Optional (personal automation)
+- =fastmcp= — only if running local MCP servers
+- =camoufox= + =playwright= — browser automation (~700 MB for the Firefox binary)
+- =beautifulsoup4= + =html2text= — HTML parsing
+- System: =notmuch= CLI — email indexing (Linux/macOS only)
+
+** MCP verification plan
+
+This is the first time we verify that =mcp.careercaddy.online= works for an external agent.
+
+*** Steps
+1. Generate a fresh API key in Career Caddy web UI (Settings → API Keys)
+2. Write a minimal test script in =career_caddy_automation/=:
+   #+begin_src python
+   from pydantic_ai import Agent
+   from pydantic_ai.mcp import MCPServerSse
+
+   server = MCPServerSse(
+       url="https://mcp.careercaddy.online/mcp",
+       headers={"Authorization": "Bearer jh_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+   )
+
+   agent = Agent("openai:gpt-4o-mini", mcp_servers=[server])
+
+   async def test():
+       async with agent:
+           result = await agent.run("List my job posts")
+           print(result.output)
+   #+end_src
+3. Confirm: auth succeeds (token validates via =/api/v1/me/=)
+4. Confirm: =get_job_posts= returns data
+5. Confirm: =create_job_post_with_company_check= creates a job post
+6. Confirm: =find_job_post_by_link= finds it back
+7. Document any issues (CORS, timeouts, auth failures, missing tools)
+
+*** What could go wrong
+- CORS: the MCP SSE endpoint may need CORS headers for browser-based clients
+  (not relevant for Python agents, but worth noting for future web clients)
+- Token validation: =ApiKeyTokenVerifier= calls =/api/v1/me/= — needs the API
+  to be reachable from wherever =public_server.py= runs
+- Timeout: long-running tool calls (scrape creation) may hit SSE timeouts
+- Missing tools: =public_server.py= intentionally excludes email/browser tools —
+  confirm the tool list matches what the standalone toolkit expects
+
+** What someone else would do with this repo
+
+1. Clone =career_caddy_automation/=
+2. =uv sync= (or =pip install -e .=)
+3. Copy =.env.example= → =.env=, fill in their Career Caddy URL + API key + LLM key
+4. Run the simplest example:
+   #+begin_example
+   uv run python src/pipelines/url_to_caddy.py https://example.com/job/posting
+   #+end_example
+5. If they want to build their own pipeline, they import =src/client/= and write
+   their own =src/pipelines/my_pipeline.py=
+
+** GitHub-ready checklist
+- [ ] README with quickstart (clone, env, run)
+- [ ] =.env.example= with all vars documented
+- [ ] =secrets.yml.example= (for browser creds, optional)
+- [ ] =.gitignore= (=.env=, =secrets.yml=, =__pycache__/=, =.camoufox/=)
+- [ ] MIT license
+- [ ] No hardcoded tokens or secrets
+- [ ] Entry points in =pyproject.toml= (e.g. =caddy-url=, =caddy-email=, =caddy-tag=)
+
+** Relationship to the monorepo =ai/= layer
+
+The standalone project /extracts/ code from =ai/=, it doesn't /import/ from it.
+After extraction:
+- =ai/lib/api_tools.py= remains the source of truth for the API client
+- If the API changes, update =ai/lib/api_tools.py= first, then sync to the standalone project
+- The standalone project is a /consumer/ of Career Caddy, not a part of it
+- Future option: publish =src/client/= as =career-caddy-client= on PyPI so both
+  the monorepo and the standalone project depend on the same package
+
+* Electron Desktop App — Feasibility Study
+[[file:todo.org::*PROJ Electron desktop app feasibility][↑ todo.org]]
+/Placeholder — detailed study to be written under this heading./
+
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
 * personal notes
