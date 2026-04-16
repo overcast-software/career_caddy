@@ -136,6 +136,31 @@ Enhanced PollableController with hooks, created PollableListController. Migrated
 
 * Inbox
 
+** DONE Add cancel button to resume edit page [frontend]
+CLOSED: [2026-04-16 Wed]
+
+** DONE /resumes index: add application/score counts via meta tag [api+frontend]
+CLOSED: [2026-04-16 Wed]
+Slim mode returns =meta= block with counts. Application serializer merges resource-level =meta= into attributes. 271 tests pass.
+
+** DONE Hydrate slim resume on edit transition [frontend]
+CLOSED: [2026-04-16 Wed]
+Convention: "hydration" = transitioning from a slim-loaded record to a full record.
+Fixed by passing =@model={{record.id}}= in =<LinkTo>= (forces model hook) + =reload: true= in edit route.
+
+** TODO Summaries carousel: add button when no summaries exist [frontend]
+The carousel shows "No summaries yet" but gives no way to create or fetch summaries.
+Needs an "Add Summary" action or a link to =/summaries/new=.
+
+** DONE "Cannot remove a resource that is not present" navigating back to /resumes [frontend]
+CLOSED: [2026-04-16 Wed]
+Fixed by switching resumes index from =findAll('resume', { reload: true })= to =query('resume', { slim: true })=.
+Slim mode avoids relationship reconciliation that caused the error.
+Repro: resume edit → settings/appearance → back to /resumes index.
+Error at =index.js:22= in resumes index route model hook.
+Likely the same async hasMany proxy issue seen earlier with =projects= (was =async: false=, fixed to =async: true=).
+May need to investigate other relationships or the =findAll('resume', { reload: true })= interaction with stale store state.
+
 ** DONE caddy ai chat is at the top [2026-04-15 frontend]
 CLOSED: [2026-04-15 Tue]
 Replaced :has() flex chain with absolute positioning via @mainClass="caddy-fairway".
