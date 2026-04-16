@@ -1841,6 +1841,69 @@ Decision deferred — needs exploration of resume builder impact first.
 | =<Summaries::List>= | =@summaries @isPending @emptyMessage= | Table with Resume, Active columns |
 | =<Summaries::Carousel>= | =@summaries @resume= | Prev/next navigation, resume builder only |
 
+** AI prompt assembly — injected prompts [2026-04-15]
+
+*** How AnswerService works (the reference implementation)
+
+The answer generation pipeline:
+
+#+BEGIN_SRC
+Frontend POST /api/v1/answers/ { ai_assist: true, injected_prompt: "..." }
+  → AnswerViewSet.create (views.py ~5940)
+    → extracts injected_prompt from request payload
+    → builds career_markdown from /career-data/ via ApplicationPromptBuilder.build_from_career_data()
+    → spawns async thread calling AnswerService.generate_answer()
+      → load_context_for_question(): resolves user, application, job_post, company, resumes, cover_letters, Q&A history
+      → ApplicationPromptBuilder.build(context, injected_prompt=..., career_markdown=...)
+        → assembles prompt in this order:
+           1. Instructions (preamble — system rules)
+           2. ## Additional Instructions (injected_prompt — caller-supplied directives)
+           3. ## Question to Answer (the actual question)
+           4. ## Career Profile (career_markdown, if provided — replaces resumes)
+           5. ## Job Details
+           6. ## Company
+           7. ## Resume(s) Summary
+           8. ## Cover Letters
+           9. ## Q&A History
+      → write_prompt_to_file() (debug only — writes to api/runtime/prompts/)
+      → _call_ai(prompt) → OpenAI chat.completions
+      → saves Answer record
+#+END_SRC
+
+The prompt is structured so =head= on any logged prompt file shows: what rules apply, what's being asked, and what special instructions were given — before the bulk of supporting context.
+
+*** Current state of all AI services
+
+| Service | File | Prompt method | Uses ApplicationPromptBuilder? | Injected prompt? |
+|---|---|---|---|---|
+| Answers | =answer_service.py= | =ApplicationPromptBuilder.build()= | YES | YES |
+| Summaries | =summary_service.py= | Jinja2 (=summary_service_prompt.j2=) | NO | YES |
+| Cover Letters | =cover_letter_service.py= | Jinja2 (=cover_letter_prompt.j2=) | NO | YES |
+| Scores | =job_scorer.py= | Jinja2 (=job_scorer_prompt.j2=) | NO | YES |
+
+=build_from_career_data()= is called by views.py for answers, summaries, cover letters, and scores — but only to render the career data into markdown. The actual prompt assembly for summaries/cover-letters/scores uses Jinja2 templates, not =build()=.
+
+*** Pattern for adding injected_prompt to other services
+
+Each service that gains injected_prompt support should follow the AnswerService pattern:
+
+1. Accept =injected_prompt= as an optional parameter on the generate method
+2. Place it after the preamble/instructions but before the question and supporting context
+3. Pass it through to =write_prompt_to_file()= so logged prompts show it at the top
+4. Frontend sends it as an attribute in the JSON:API payload (same as answers)
+
+For Jinja2-based services (summaries, cover letters, scores), the template gains an ={% if injected_prompt %}= block after the system instructions block.
+
+*** Prompt file readability contract
+
+=head= on any =api/runtime/prompts/*.md= file should answer: /what is being asked and how?/
+
+The top of every prompt file shows:
+1. System instructions (the rules)
+2. Additional instructions (the injected prompt — user's specific directives)
+3. The question or task
+4. Supporting context follows below
+
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
 * personal notes
