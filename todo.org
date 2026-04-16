@@ -96,6 +96,10 @@ CLOSED: [2026-04-15 Tue]
 ** IN_PROGRESS Hold poller + multi-model pipeline                   :APPROVED:
 [[file:notes.org::*Hold Poller, Screenshots, Multi-Model Pipeline][Plan → notes.org]]
 [2026-04-14 ai+api+frontend] All subtasks done except end-to-end test.
+*** DONE Pluggable browser engine (Camoufox or Playwright Chromium + stealth)
+CLOSED: [2026-04-16 Wed]
+=--engine camoufox|chrome= + =--headless/--headed= CLI args on browser_server, hold_poller, manual_login.
+Sessions portable across engines. Chromium path ARM-compatible for Pibu.
 *** TODO Test end-to-end locally on feature branch
 
 * Features — PENDING APPROVAL
