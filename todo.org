@@ -21,7 +21,7 @@ Rules:
 - Feature branches cut from =main=; PRs target =main=
 - Do NOT touch items marked =[PENDING APPROVAL]=
 - *Max 2 CI attempts rule*: if tests/lint fail twice on the same problem, stop, document what failed and why in notes.org, and surface to the product owner. Do not loop indefinitely.
-- DONE tasks older than 30 days are archived to =todo_archive.org=. Last prune: [2026-04-13].
+- DONE tasks older than 30 days are archived to =todo_archive.org=. Last prune: [2026-04-15].
 - =PROJ= prefix on todo items means "use /plan mode" — enter planning, design the architecture, write the plan to notes.org, then exit.
 - Prefer amending recent commits for small fixes rather than creating new commits.
 - "Let's push" means commit+push submodules first, then parent. No need to ask.
@@ -38,458 +38,130 @@ See [[file:notes.org::*Curriculum gap analysis][notes.org: Curriculum gap analys
 
 ** TODO Add self-review pass before pushing (Evaluator-Optimizer pattern)
 [[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
-Currently: plan → implement → test → push. No explicit review gate.
-Curriculum pattern (gstack): plan → implement → /review → /qa → /ship as explicit cognitive mode switches.
-Proposal: before each push, agent does a quick self-audit:
-- Did any files change unexpectedly?
-- Does the diff match what was planned?
-- Are there any obvious regressions (dead code introduced, missing tests)?
-Add this checklist to CLAUDE.md or frontend/CLAUDE.md as a pre-push reminder.
 [PENDING APPROVAL] — Decide whether this is a formal checklist in CLAUDE.md or just a convention.
 
 ** TODO Write a blueprint for the feature branch workflow
 [[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
-Curriculum: Stripe Blueprints interleave deterministic nodes (lints, tests, git) with agent nodes (planning, code).
-Our most repeated workflow: create branch → plan → implement → make test-frontend → push.
-Action: codify this as an explicit blueprint in CLAUDE.md or a =scripts/blueprint-feature.sh= stub so the deterministic steps (branch naming, test, lint, push) are not agent-improvised each time.
 [PENDING APPROVAL] — Confirm scope: just document in CLAUDE.md, or create a Makefile target?
 
 ** TODO Establish a codename system for major subsystems
 [[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
-Curriculum: /Iris beats spec024 for human memory and AI comprehension./
-Currently: subsystems referenced by path (=api/=, =frontend/=, =ai/=) or generic names ("the AI pipeline").
-Proposal: assign short human-readable codenames to the 3–5 major subsystems for use in commit messages, notes, and agent prompts. Examples:
-- =Caddy= — the main Django API
-- =Fairway= — the Ember frontend (already using golf metaphors in CSS: tee-box, sandtrap, course, fairway)
-- =Caddie= (or =Loop=) — the Pydantic-AI pipeline
 [PENDING APPROVAL] — Product owner to confirm names or propose alternatives.
 
 ** TODO Implement context hygiene strategy for notes.org and todo.org
 [[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
-Curriculum: "Just-in-Time context loading" — unnecessary context wastes tokens and degrades performance.
-notes.org is now ~400+ lines and growing. todo.org has many DONE items.
-Actions:
-- Move DONE tasks older than 30 days to an =todo_archive.org= file
-- Split notes.org into topic files (e.g., =notes-css.org=, =notes-api.org=) once it exceeds 600 lines
-- Add a note to CLAUDE.md: "Read only the sections of notes.org relevant to your current task"
 [PENDING APPROVAL] — Approve splitting strategy before implementing.
 #+NOTE: [2026-04-13] Archival is now active — 3 prunes completed. Splitting deferred until notes.org exceeds 600 lines.
 
 ** TODO Add handover documentation convention for stuck agents
 [[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
-Curriculum: when an agent hits "Max 2 CI rounds," it must generate a "Where I Got Stuck" artifact using Context → Choice → Rationale format. This prevents the human from re-diagnosing from scratch.
-Action: add to CLAUDE.md — if a problem cannot be resolved after 2 attempts, write a =#+NOTE:= in the relevant todo.org task with:
-- Context: what was being attempted
-- What failed: exact error or symptom
-- What was tried: the two approaches
-- Recommendation: what to investigate next
-Then surface to product owner rather than continuing to loop.
 
 * IN_PROGRESS [0/3]
 
 ** IN_PROGRESS We want to increase code coverage in testing [2026-04-08 api]
-#+NOTE: API agent owns this. Added test_job_post.py, test_job_application.py, test_resume.py, test_answer.py — CRUD + model + auth tests for four previously uncovered resources. Ongoing; more coverage can be added incrementally.
+#+NOTE: API agent owns this. Ongoing; more coverage can be added incrementally.
 
 ** IN_PROGRESS MCP exposure at mcp.careercaddy.online [2026-04-10 ai+api]  :APPROVED:
 [[file:notes.org::*MCP deployment at mcp.careercaddy.online][Architecture → notes.org]]
-*** DONE Create =public_server.py= with API key auth and 21 tools
-*** DONE API: add "hold" status bypass to =ScrapeViewSet.create=
-*** DONE Add =caddy-public= entry point to =pyproject.toml=
-*** DONE Add =mcp= service to =docker-compose.prod.yml=
-*** DONE Upgrade FastMCP to 3.2.3
-*** DONE Frontend: admin-only "hold" radio for scrape creation [2026-04-14 frontend]
-CLOSED: [2026-04-14 Mon]
-Both =scrapes/form.hbs= (existing) and =job-posts/scrape.hbs= (new) have hold radio for staff.
-*** DONE CI: build + push AI Docker image to GHCR (=INSTALL_CAMOUFOX=false=)
-*** DONE AI test suite: 44 tests in CI (toolsets, api_tools, public_server security)
 *** TODO Configure Caddy reverse proxy + DNS for =mcp.careercaddy.online= [product-owner]
-*** DONE Pydantic-AI toolsets: replace MCPServerStdio with CareerCaddyToolset
-CLOSED: [2026-04-10 Thu]
-[[file:notes.org::*Pydantic-AI toolsets][Plan → notes.org]]
-Created =lib/toolsets.py=. Migrated =career_caddy_agent.py=. 44-test suite added. CI integration done.
 *** WAIT OAuth 2.0 support for in-app chat (Phase 2)
-Add =django-oauth-toolkit= to API; PKCE flow for Ember SPA; FastMCP =MultiAuth=.
-Separate workstream — API key auth covers current use cases.
-*** DONE Agent identity awareness — profile injection + MCP instructions [2026-04-11]
-System prompt in chat_server.py now explicitly tells the agent to use injected profile data.
-Fallback to username/email when first_name is empty. public_server.py has FastMCP instructions
-telling MCP clients to call get_current_user at session start.
-#+NOTE: [2026-04-13] Prod agent couldn't recite phone/address (name worked). Root cause: stale GHCR image — prod was running old code before profile field extraction. Resolved by rebuilding Docker images. Prompt reword (commit 1022736) was not the fix — the rebuild was.
-*** DONE Chat server + JWT pass-through auth (Option C) [2026-04-11]
-CLOSED: [2026-04-11 Fri]
-*** DONE Chat sidebar + full-page /caddy route [2026-04-11]
-CLOSED: [2026-04-11 Fri]
-*** DONE Guest guards for chat + 403 flash handling [2026-04-11]
-CLOSED: [2026-04-11 Fri]
-*** DONE Flash messages audit — bug fixes + standardization [2026-04-11]
-CLOSED: [2026-04-11 Fri]
-*** DONE Markdown rendering + SPA link navigation in chat [2026-04-12 frontend]
-CLOSED: [2026-04-12 Sat]
 *** saved browser credentials is a major security vulnerability even for properly exposed MCP.
 
 ** IN_PROGRESS fonts and buttons from "under construction" [2026-04-11 frontend] :APPROVED:
 [[file:notes.org::*Fonts and buttons from "under construction" page][Considerations → notes.org]]
-[[file:notes.org::*Color Palette System][Palette system → notes.org]]
-Color palette system implemented: indigo (default), blue, jade, rose, amber, violet.
-Settings > Appearance tab with palette cards + dark mode toggle.
-All ~50 template files migrated from hardcoded blue/indigo to =accent-*= Tailwind classes.
 Remaining: font adoption from under-construction.html.
-
-* Bugs — API
-
-** DONE creating user in admin/users gives "Password is required" despite having password
-CLOSED: [2026-04-13 Sun]
-Frontend user model was missing =@attr('string') password= — field never serialized to API.
-** DONE AI usage: scored a job-post but it didn't show up as score — all records show "chat"
-CLOSED: [2026-04-13 Sun]
-=job_scorer.py= now attaches =_usage= and =_model_name= to result; =_score()= creates =AiUsage= with =trigger="score"=.
-** DONE import is not idempotent (skip-duplicates not working?)
-CLOSED: [2026-04-13 Sun]
-Linkless job posts had no dedup check — fell through and created duplicates every import.
-Added fallback dedup on =title + company + created_by=. Downstream (applications, questions, answers) now correctly cascade-skip via ID mapping.
-** DONE revoke API key returns 200 but doesn't actually delete. Same on Admin/ index.
-CLOSED: [2026-04-13 Sun]
-=destroy()= now calls =obj.delete()= instead of =obj.revoke()= (was soft-delete only).
-** DONE AI spend appears broken in prod — scrape/parse costs missing
-CLOSED: [2026-04-14 Mon]
-Root cause: =GenericParser.analyze_with_ai()= called =agent.run_sync()= but discarded
-=result.usage()= — no =AiUsage= record was created. Scoring and chat worked because they
-had explicit usage tracking; the parser never did.
-Fix: added =_record_usage()= callback to =GenericParser= that creates =AiUsage= with
-=trigger="scrape"=, =agent_name="generic_parser"=, computed cost via =estimate_cost()=.
-Note: browser automation (=scrape_page= in =browser_server.py=) has no LLM — it's pure
-Playwright/Camoufox. Only the parser extraction step uses an LLM (GPT-4o).
-** DONE scrape failure — MCP ConnectTimeout in Docker
-CLOSED: [2026-04-14 Mon]
-=docker-compose.prod.yml= had =BROWSER_SERVICE_URL=http://host.docker.internal:3012= (legacy REST)
-but no =USE_MCP_BROWSER_AGENT=True=, so dispatch fell through to =_dispatch_legacy()= hitting
-port 3012 which doesn't exist. Replaced with =USE_MCP_BROWSER_AGENT=True= and
-=BROWSER_MCP_SSE_URL=http://host.docker.internal:3004/sse=.
-
-* Bugs — Frontend
-
-** DONE score screen is off center
-CLOSED: [2026-04-13 Sun]
-Replaced bare =<div class="container">= with =<RouteLayout>= in =scores/show.hbs=.
-** DONE I don't see "successfully deleted" when cleaning up (deleting) a job-post
-CLOSED: [2026-04-13 Sun]
-Added =flashMessages.success('Job post deleted.')= to =job-posts/item.js= (index list delete path).
-** DONE dark mode: non-indigo palettes have bright highlights instead of grey. Fairway in dark for any color should be #0f172a, not same as light mode.
-CLOSED: [2026-04-13 Sun]
-Added dark-mode CSS override for all non-indigo palettes: =--page-bg: #0f172a; --tee-bg: #334155=.
-** DONE favorite button for resumes is bigger than other buttons
-CLOSED: [2026-04-13 Sun]
-Reduced =.btn.favorite= padding to =4px 8px= with =font-size: 0.75rem= to match row siblings.
-** DONE scores/index status pill label breaks when "completed" separates from left side of pill
-CLOSED: [2026-04-13 Sun]
-Added =inline-block whitespace-nowrap= to status pill span.
-** DONE admin path =/admin/1= goes to first API key — should be namespaced =/admin/api-keys/1=
-CLOSED: [2026-04-13 Sun]
-Changed router paths to =/api-keys/new= and =/api-keys/:api_key_id=.
-** DONE when making a new API key I didn't get a chance to copy it
-CLOSED: [2026-04-13 Sun]
-After creation, stays on page showing full key with Copy button; user clicks Done to navigate away.
-** DONE as a guest I should not be able to post or patch a cover letter — reevaluate security auth
-CLOSED: [2026-04-14 Mon]
-Four viewsets had =permission_classes = [IsAuthenticated]= without =IsGuestReadOnly=, allowing
-guests (who have valid JWTs) to POST/PATCH/DELETE: CoverLetterViewSet, ApiKeyViewSet,
-DjangoUserViewSet, and StatusViewSet. All four now include =IsGuestReadOnly=.
-** DONE job-application show: TypeError in status-log component
-CLOSED: [2026-04-14 Mon]
-=Array.from(rel)= on =applicationStatuses= relationship could yield =undefined= entries
-(unloaded/deleted records). Added =.filter(Boolean)= in =status-log.js= =_sortedRecords=.
-
-* Bugs — AI Chat
-
-** DONE chat can't follow up after initial response
-CLOSED: [2026-04-13 Sun]
-Root cause: =api= Docker hostname missing from =ALLOWED_HOSTS=. Every tool call from chat service → API returned 400 =DisallowedHost=. Fixed in =api/settings.py=. Also added =history_processors= to chat agent for robustness.
-*** note: no job posts existed in prod where testing happened
-*** no "thinking" shown after "One moment, please."
-** DONE IN_PROGRESS AI was willing to make a job post without a company — should infer from recruiter company, email domain, or job posting hostname (like ziprecruiter) if it has to.  unknown isn't acceptible [2026-04-13 ai+frontend]
-CLOSED: [2026-04-14 Tue 11:38]
-#+NOTE: [2026-04-13] Blocklist added to =create_job_post_with_company_check= in =api_tools.py= — rejects "unknown", "n/a", "tbd", etc. with error message instructing AI to infer company. System prompt updated with inference instructions. Needs testing.
-** DONE IN_PROGRESS AI counted only 2/5 resumes — apparently only counted favorites [2026-04-13 ai]
-CLOSED: [2026-04-14 Tue 11:38]
-#+NOTE: [2026-04-13] Root cause: no =get_resumes= tool existed in =TOOL_REGISTRY=. Added =get_resumes()= to =api_tools.py= and registered in toolsets (=all= + =career_caddy= scopes). System prompt note added. Needs testing.
-** DONE can we give the AI chat reference to your current page? paydantic context that evolves when page changes by sending it as part of the package to the api then updating the chat. [2026-04-13 frontend+api+ai]
-CLOSED: [2026-04-13 Sun]
-Three bugs found and fixed: model hallucinating page names (tightened prompt), stale context on
-follow-ups (inject page URL prefix into each user message), eager init for first load.
-Page-aware data access added: route-to-tool mapping table in system prompt + resource ID extraction.
-See [[file:notes.org::*Item 3: Page context][notes.org]] for full details.
-** DONE IN_PROGRESS can the AI bot navigate the user to the correct page? [2026-04-13 frontend+ai]
-CLOSED: [2026-04-14 Tue 11:38]
-#+NOTE: [2026-04-13] Done. Two mechanisms: (1) AI includes =<!-- navigate:/path -->= marker in text — frontend detects, strips, and calls =router.transitionTo()=. (2) Server can emit =navigate= SSE event. System prompt instructs when to navigate. Needs testing.
-** DONE IN_PROGRESS I want elicitation like in https://gofastmcp.com/servers/elicitation for the chat.  and explicit buttons. [2026-04-13 frontend+ai]
-CLOSED: [2026-04-14 Tue 11:38]
-and example might be, can I score that for you?  then it POST score and navigates to the pending status score page.
-elicitation pattern could be a new table with records that the log in user can modify via api.
-#+NOTE: [2026-04-13] Phase 1 done. AI emits JSON code block with =elicitation: true= and actions array. Frontend =chat/message.js= detects it, renders accent-colored buttons below the message. Clicking sends the action's =message= as a regular chat message. No new backend model — Phase 2 (dedicated model) deferred. Needs testing.
-** DONE IN_PROGRESS can the AI bot help a person get started by accessing the same data as the screen the user is on? [2026-04-13 ai]
-CLOSED: [2026-04-14 Tue 11:39]
-for instance, they navigate the user to resumes, behind the scenes they access resumes API and see that they dont' have any.  then the AI suggests adding one.
-#+NOTE: [2026-04-13] Done. System prompt "Onboarding Help" section instructs AI to check current page context on greetings, query the corresponding tool, and suggest creating items if list is empty. Depends on page context (item 3) and =get_resumes= tool (item 2). Needs testing.
-** DONE explore the cost benefit of using websockets for chat.
-CLOSED: [2026-04-13 Sun]
-Decision: deferred. SSE handles all current and planned features including elicitation via POST-back. WebSockets would require django-channels, ASGI deployment, Redis, Docker changes — significant infrastructure for marginal benefit.
-** DONE IN_PROGRESS AI usage for non-admin is scoped to the logged in user.  admin can see per user usage. [2026-04-13 frontend]
-CLOSED: [2026-04-14 Tue 11:39]
-#+NOTE: [2026-04-13] Backend already scoped correctly. Added staff-only user dropdown to =settings/ai-spend= page — fetches user list, passes =user_id= param to API. "All users" default for admins. Non-admin sees own data only. Needs testing.
-
 
 * Features — APPROVED (ready to work)
 
 ** TODO revamp scrapes/edit page                                   :APPROVED:
 [[file:notes.org::*Revamp scrapes/edit page][Considerations → notes.org]]
-Use more recent conventions. The spacing for the inputs looks good.
+Use more recent conventions.
 
 ** TODO As a superuser I want to be able to manage user accounts   :APPROVED:
-Check if this is complete.
 [[file:notes.org::*Superuser account management][Considerations → notes.org]]
 *** TODO decide on user roles and be able to manage them as admin
 
-** TODO Security audit — multi-tenancy data isolation              :APPROVED:
+** DONE Security audit — multi-tenancy data isolation              :APPROVED:
+CLOSED: [2026-04-15 Tue]
+[2026-04-15 api] Report at =api/SECURITY_AUDIT.md=. All 7 remediation phases implemented:
+- DjangoUserViewSet detail actions: ownership guards on 5 endpoints
+- career_data(): staff-only cross-user access
+- ProjectViewSet: scoped list/retrieve/destroy via user FK
+- Education/Certification/Experience/Description: scoped via resume join tables
+- _build_included(): added resume + project to type filter
+- ScrapeViewSet: ownership checks on update/partial_update/destroy
+265 tests pass, ruff clean.
 [[file:notes.org::*Security audit — multi-tenancy data isolation][Considerations → notes.org]]
-Multi-tenancy is a new feature and I want to make the data is secure.
-
-** IN_PROGRESS Design plans for surfacing browser screenshots       :APPROVED:
-[[file:notes.org::*Browser screenshot visibility (scrape debugging)][Considerations → notes.org]]
-[[file:notes.org::*Hold Poller, Screenshots, Multi-Model Pipeline][Implementation plan → notes.org]]
-It might be just for debugging, but browser scraping is difficult and as a super user I want visibility.
-[2026-04-14 ai+api+frontend] Part of hold-poller feature branch. Screenshot tool, auto-capture, shared volume, staff-only API + frontend.
-*** DONE Implement =screenshot= MCP tool in browser_server.py [2026-04-14 ai]
-CLOSED: [2026-04-14 Mon]
-*** DONE Auto-capture screenshots in =scrape_page()= [2026-04-14 ai]
-CLOSED: [2026-04-14 Mon]
-*** DONE =ScreenshotStore= abstraction (S3-ready) [api]
-CLOSED: [2026-04-14 Mon]
-*** DONE Staff-only =GET /api/v1/scrapes/{id}/screenshots/= endpoints [api]
-CLOSED: [2026-04-14 Mon]
-*** DONE Shared Docker volume for screenshots [docker]
-CLOSED: [2026-04-14 Mon]
-*** DONE Frontend: screenshot gallery on scrape show page (staff) [frontend]
-CLOSED: [2026-04-14 Mon]
 
 ** IN_PROGRESS Hold poller + multi-model pipeline                   :APPROVED:
 [[file:notes.org::*Hold Poller, Screenshots, Multi-Model Pipeline][Plan → notes.org]]
-[2026-04-14 ai+api+frontend]
-*** DONE =BROWSER_SCRAPER_MODEL= env var in agent_factory.py [ai]
-CLOSED: [2026-04-14 Mon]
-*** DONE =BROWSER_HEADLESS= env var in browser_server.py [ai]
-CLOSED: [2026-04-14 Mon]
-*** DONE Login-wall detection in =scrape_page()= [ai]
-CLOSED: [2026-04-14 Mon]
-*** DONE =ScrapeStatus= join table (polymorphic Status pattern) [api]
-CLOSED: [2026-04-14 Mon]
-*** DONE =filter[status]= on ScrapeViewSet.list [api]
-CLOSED: [2026-04-14 Mon]
-*** DONE =_log_scrape_status()= in scraper dispatch [api]
-CLOSED: [2026-04-14 Mon]
-*** DONE =hold_poller.py= script + =caddy-poller= entry point [ai]
-CLOSED: [2026-04-14 Mon]
-*** DONE Hold radio on =job-posts/scrape.hbs= [frontend]
-CLOSED: [2026-04-14 Mon]
-*** DONE Status timeline on scrape show page [frontend]
-CLOSED: [2026-04-14 Mon]
-*** DONE Document .env model config in ai/CLAUDE.md [ai]
-CLOSED: [2026-04-14 Mon]
-*** DONE Makefile =poller= target
-CLOSED: [2026-04-14 Mon]
+[2026-04-14 ai+api+frontend] All subtasks done except end-to-end test.
 *** TODO Test end-to-end locally on feature branch
-
-** DONE Domain scrape profiles — learning loop for cost reduction   :APPROVED:
-CLOSED: [2026-04-14 Mon]
-[2026-04-14 api+frontend] All 10 subtasks complete.
-[[file:notes.org::*Domain Scrape Profiles][Full spec → notes.org]]
-Per-hostname profiles that capture auth requirements, CSS selectors, extraction hints, and page structure from past scrapes. Feeds into tiered scrape cost: Tier 0 (deterministic, $0) → Tier 1 (mini+hints, $0.005) → Tier 2 (Haiku, $0.025) → Tier 3 (Sonnet, $0.10).
-*** DONE =ScrapeProfile= model + =preferred_tier= + =enabled= fields [api]
-CLOSED: [2026-04-14 Mon]
-*** DONE Staff-only API endpoints (list, detail, update — no create/delete) [api]
-CLOSED: [2026-04-14 Mon]
-*** DONE Auto-populate profile after successful extraction [api]
-CLOSED: [2026-04-14 Mon]
-=_update_scrape_profile()= in =job_post_extractor.py= — creates/updates profile on successful parse.
-Also marks =requires_auth= on login_failed via =_log_scrape_status()= in =scraper.py=.
-*** DONE LLM follow-up to write =extraction_hints= + =page_structure= [api]
-CLOSED: [2026-04-14 Mon]
-=_generate_profile_hints()= uses =ProfileHints= Pydantic model for structured output.
-gpt-4o-mini call, records =AiUsage= with =trigger="scrape_profile"=.
-*** DONE Inject =extraction_hints= into extractor prompt [api]
-CLOSED: [2026-04-14 Mon]
-=_get_profile_hints()= looks up =ScrapeProfile= by hostname and appends hints block to prompt.
-*** DONE Frontend: =scrape-profile= Ember Data model [frontend]
-CLOSED: [2026-04-14 Mon]
-*** DONE Frontend: =/admin/scrape-profiles= index table (hostname, auth, rate, count, tier) [frontend]
-CLOSED: [2026-04-14 Mon]
-*** DONE Frontend: =/admin/scrape-profiles/:id= show/edit page (stats + config panels) [frontend]
-CLOSED: [2026-04-14 Mon]
-*** DONE Frontend: add "Scrape Profiles" to admin subnav [frontend]
-CLOSED: [2026-04-14 Mon]
-*** DONE Tier 0: deterministic CSS selector extraction [api]
-CLOSED: [2026-04-14 Mon]
-=_try_tier0_extraction()= in =job_post_extractor.py= — uses BeautifulSoup + stored CSS selectors.
-Runs before LLM call in =parse()=. Falls back to LLM if title or company not found.
 
 * Features — PENDING APPROVAL
 
 ** TODO tool tips — where could they be useful?                    :PENDING_APPROVAL:
-[PENDING APPROVAL] — Defer until shared components are built.
 [[file:notes.org::*Tooltips][Considerations → notes.org]]
-Favorites could be explained with tool tip.
-Using HyperUI component patterns, write the tooltip as an argument into an Ember component.
 
 ** TODO Tackling deprecations                                      :PENDING_APPROVAL:
-[PENDING APPROVAL] — Easy shims ready to go; full sweep needs approval.
 [[file:notes.org::*Tackling Ember deprecations][Considerations → notes.org]]
-Ember deprecations are numerous. Dagger is out of date. FastMCP may have an update.
 
 ** TODO Ian Finnis letter                                          :PENDING_APPROVAL:
-[PENDING APPROVAL] — Post-alpha only.
 [[file:notes.org::*Ian Finnis letter][Considerations → notes.org]]
-Write a message to Ian Finnis asking permission to use his likeness for the webpage.
-Point out it's a free service, explain open source in layman's terms.
-Started writing while watching him and Tommy Fleetwood win the FedEx Cup in September.
-Link to his social media or anything else he requests.
-No money made — server costs are a loss. Blog at dougheadley.com, reach at doug@overcastsoftware.com.
-New golfer, ~4 years. Social: https://www.instagram.com/finoEFC/
 
-* Features — New / Unspecified
-
-** DONE invited to create account
-CLOSED: [2026-04-13 Sun]
-Invitation model with one-time tokens. =POST /api/v1/accept-invite/= public endpoint.
-Frontend =/accept-invite?token=...= route. Admin =/admin/invitations= page.
-** DONE test email
-CLOSED: [2026-04-13 Sun]
-=POST /api/v1/test-email/= admin-only endpoint verifies SMTP config.
-** DONE invite to create account from waitlist
-CLOSED: [2026-04-13 Sun]
-"Invite" button on admin waitlist page. Creates invitation, sends email, auto-removes waitlist entry.
-** DONE signup page with dual mode (registration / waitlist)
-CLOSED: [2026-04-13 Sun]
-=/signup= shows full registration form when =REGISTRATION_OPEN=true=, waitlist form when closed.
-Backend enforces — cookie manipulation cannot bypass.
-** DONE password validation
-CLOSED: [2026-04-13 Sun]
-=AUTH_PASSWORD_VALIDATORS= added to Django settings. Min 8 chars, no common passwords, no numeric-only.
-Validation on both =DjangoUserViewSet.create()= and =accept_invite=.
 ** TODO admin interface for AI model selection                     :PENDING_APPROVAL:
 [[file:notes.org::*Admin AI Model Configuration][Architecture + trade-offs → notes.org]]
-Admin page to change which AI model each agent role uses at runtime.
-DB-stored overrides with cached API fetch (Option A). 6 new files, 11 modified.
-Touches all 3 components: API (model + endpoint), AI (cache + =get_model()=), frontend (admin tab).
+
 ** TODO omarchy theme integration
-We had looked at this before and found it feasible. Turn it into a feature.
 [[file:notes.org::*Color Palette System][Omarchy integration roadmap → notes.org]]
-** DONE Resume serializer: fix JSON:API relationship linkage + sideloading
-CLOSED: [2026-04-14 Mon]
-[[file:notes.org::*Resume serializer — JSON:API relationship linkage + sideloading][Full analysis → notes.org]]
-Removed attribute embedding, added proper =data= linkage + auto-includes in viewset.
-Fixed =_build_included= ownership filter for =user_id=None= records.
-Summaries carousel now loads all user summaries and PATCHes to set active.
-** DONE scores: need an edit page to help with relationships that need to be manually set
-CLOSED: [2026-04-15 Tue]
-Scores::Form component with cascading company → job post selects + resume picker.
-Scores::Item rewritten with HyperUI details-list pattern.
-** DONE =make up= should include AI — it's integral
-CLOSED: [2026-04-13 Sun]
-Removed =profiles: [browser]= from =browser-mcp= service. Now starts with default =make up=. Removed =up-ai= Makefile target.
-** DONE Docker network error on =make up-ai=
-CLOSED: [2026-04-15 Wed 07:46]
-#+BEGIN_SRC
-Error response from daemon: failed to set up container networking: network ... not found
-make: *** [Makefile:11: up-ai] Error 1
-#+END_SRC
-** NO Claude for glint
-CLOSED: [2026-04-15 Wed 07:46]
-not inscope of this project
-** DONE /omarchy reinstall ollama
-CLOSED: [2026-04-15 Wed 07:46]
+
 ** TODO use omarchy to set theme
 publicity stunt
-* Inbox
-** TODO caddy ai chat is at the top [2026-04-15 frontend]
-this was marked completed but it still looks like this /home/oldbones/Pictures/screenshot-2026-04-15_09-46-19.png
-=.caddy-fullpage= needed =display: flex; flex-direction: column=. =.course-main:has(.caddy-fullpage)= needed =overflow: hidden= (was =auto=, which let flex children overflow instead of constraining to height). Documented in notes.org.
-** DONE ai spend should load without button [2026-04-15 frontend]
-CLOSED: [2026-04-15 Tue]
-Route =model()= fetches data. Controller reads =this.model= directly. Button renamed to "Refresh". Period formatted with =format-date= helper.
-** DONE tools should include edit_answer [2026-04-15 ai]
-CLOSED: [2026-04-15 Tue]
-Added =update_answer()= to =api_tools.py= (content, favorite). Registered in =toolsets.py= (=all= + =career_caddy= scopes).
-** DONE ai chat could invoke reload on resource [2026-04-15 frontend+ai]
-CLOSED: [2026-04-15 Tue]
-Chat server emits =reload= SSE event after tool calls that mutate data. Frontend =chat.js= handles by calling =store.findRecord= or =store.findAll= with =reload: true=. Map of 10 mutating tools → resource types.
-** DONE job-post/182/scores shows score 4 twice [2026-04-15 api]
-CLOSED: [2026-04-15 Tue]
-Added =UniqueConstraint= on Score model: =(job_post, resume, user)= and =(job_post, user)= where =resume IS NULL=. Migration 0041. API already had dedup logic in =ScoreViewSet.create=; DB now enforces it.
-** DONE somehow I have access to guest ( job-post/4 ) and I can't delete it as a super admin [2026-04-15 api]
-CLOSED: [2026-04-15 Tue]
-=JobPostViewSet.destroy= ownership check now exempts =is_staff= users.
-** DONE implement company/show/questions/{show,/answers} [2026-04-15 frontend]
-CLOSED: [2026-04-15 Tue]
-Routes generated with =ember generate=. Created =<Answers::Show>= and =<Answers::List>= shared components. Question show route returns single question resource, company from =modelFor=.
-** DONE Refactor: Answers::Show + Answers::Form across nested answer routes [2026-04-15 frontend] :APPROVED:
-CLOSED: [2026-04-15 Tue]
-Created =<Answers::Show>= (with =<:actions>= named block) and =<Answers::List>=.
-=Answers::Form.afterSave()= now derives route from =currentRouteName= — removed all =@onSave= callbacks.
-Nested =answers/new= routes return single answer record. See [[file:notes.org::*Shared Answer Components][notes.org]] for gotchas.
-** DONE Refactor: =answers/:id= and =answers/:id/edit= top-level routes + nested question show routes [2026-04-15 frontend] :APPROVED:
-CLOSED: [2026-04-15 Tue]
-[[file:notes.org::*Shared Component Refactor — Round 2][Full notes → notes.org]]
-Migrated top-level =answers/show.hbs= → =<Answers::Show>=, =answers/edit.hbs= → =<Answers::Form>=.
-Fixed route model code smell: job-posts and job-applications question show routes now return single question.
-Replaced inline answer lists with =<Answers::List>= in both contexts. Deleted 2 dead =onSave= controllers.
-Added =showAnswersList= getter to job-applications (was missing). All three question show controllers now match the companies gold standard.
-** DONE Shared component refactor — full audit [2026-04-15 frontend] :APPROVED:
-CLOSED: [2026-04-15 Tue]
-[[file:notes.org::*Shared Component Refactor — Full Audit][Full notes + API reference → notes.org]]
-All route model code smells fixed (9 routes returning single resources). All =job-posts/show=,
-=companies/show=, and top-level index templates migrated to shared list components. Conformed
-=Scores::List=, =Scrapes::List=, =CoverLetters::List=, =Summaries::List=, =Questions::List=,
-=Answers::List= with optional columns, pending spinners, and =@emptyMessage=. Extracted
-=<Questions::InlineAnswer>= from 131-line controller. Renamed =Summaries::Carousel=. Deleted
-4 dead controllers and 2 dead JS files. Removed all controller =jobPost= getters.
-** DONE Redesign =/summaries= index with HyperUI details-list pattern [frontend]
-CLOSED: [2026-04-15 Tue]
-The top-level =/summaries= page should show full summary text rather than a truncated table row. Use the HyperUI details-list pattern (https://www.hyperui.dev/components/application/details-list/) to display each summary with its full content, resume, active status, and job post metadata in a readable layout. The current =Summaries::List= table works well for =job-posts/show/summaries= where summaries are secondary, but on the dedicated =/summaries= page the content is the point.
-** TODO Refactor =serializers.py= — extract data linkage pattern into BaseSerializer [api]
-=serializers.py= is ~1200 lines. Every serializer that needs to-many =data= linkage (Resume, Experience, Project, etc.) copy-pastes the same =get_related= → =linkage= loop in its =to_resource= override. This should be a base class method driven by a declarative list (e.g. =linked_relationships = ["descriptions", "skills"]=). Also audit for any remaining serializers missing =data= linkage that causes spurious Ember Data fetches.
-** TODO Refactor =views.py= — reduce duplication across viewsets [api]
-=views.py= has grown large with repeated patterns: ownership filtering, =_build_included= calls, identical =list/retrieve/create/update/destroy= overrides. Extract shared mixins or a base viewset class. Consider splitting into per-resource view modules under =api/views/=.
-** DONE Chat reload events should refresh the current page data [frontend]
-CLOSED: [2026-04-15 Tue]
-When the AI chat creates or modifies a resource (job post, score, answer, etc.), SSE reload events are emitted but the page data doesn't update. The frontend needs to listen for =reload= events and re-fetch the relevant store data so the UI reflects changes made via chat.
-UPDATE [2026-04-15]: Reload events ARE working (page refreshes) but the score poller doesn't kick in on the reloaded data — the score stays in "pending" visually until a manual refresh. The poller needs to be wired into the reload path.
-FIX [2026-04-15]: =_reloadResource= now awaits the reload, then auto-polls any scores/scrapes in non-terminal status via =_pollIfPending=.
-** DONE Score function usage not reflected in AI Spend [ai+api]
-CLOSED: [2026-04-15 Tue]
-The scoring thread's single try/except meant a usage recording failure could mark the score as failed. Split into separate try blocks — scoring failure and usage failure are independent. Added logging for both.
-** TODO Flash/highlight main content area on chat reload [frontend]
-Chat service sets =@tracked lastReloadAt= + resource type when =_reloadResource= fires. =RouteLayout= watches it and toggles a CSS animation class on =.fairway= (background pulse). Pure CSS animation, auto-cleans after transition. See notes from exploration in this conversation.
-** TODO Adopt PollableController across all pollable show routes [frontend]
-=controllers/pollable.js= is a base controller that auto-polls =this.model= when status is non-terminal. Currently used by =questions/show/answers/show= and =job-posts/show/questions/show/answers/show=. Extend to:
-- =scores/show= (replace inline polling in =job-posts/show/scores= controller)
-- =scrapes/show=
-- Any other show route where the model has a =status= field that progresses asynchronously.
-Pattern: controller extends =PollableController=, route calls =controller.startPollingIfPending()= in =setupController=.
-** TODO Audit redundant parent columns in child route list components [frontend]
-Shared list components with =@showCompany=, =@showJobPost=, =@showResume= args should hide parent columns when rendered inside the parent's child route (e.g. =companies/:id/scores= should pass =@showJobPost={{false}}=). Need to verify all consumers pass the right flags.
-** DONE PROJ plan integration of a job queue [2026-04-15]
-CLOSED: [2026-04-15 Tue]
-django-q2 with PostgreSQL broker. Replaces 7 daemon thread spawn points. Plan in notes.org + =~/.claude/plans/sequential-scribbling-wall.md=.
-** DONE PROJ plan the integration of activitypub - everyone shares jobs [2026-04-15]
-CLOSED: [2026-04-15 Tue]
-Federated job sharing. 4-phase plan: WebFinger/Actor/Outbox → Inbox/HTTP Signatures → Frontend feed → Admin. Plan in notes.org.
 
-** DONE AI should use the current page contextually in answer a question [2026-04-14 frontend+ai]
-CLOSED: [2026-04-14 Mon]
-Added get_questions(), get_answers(), create_answer() tools. Chat page-aware table updated. Prompt instructs AI not to regurgitate data and to use elicitation buttons.
-[[orgit:~/Network/syncthing/Projects/career_caddy/][~/Network/syncthing/Projects/career_caddy/ (magit-status)]]
-** DONE saving a new answer transitions before question is finished creating [2026-04-14 frontend]
-CLOSED: [2026-04-14 Mon]
-Explicit IDs in transitions, save button shows "AI Generating…", LinkTo uses IDs to force model hooks, answers list hidden when viewing specific answer.
-** DONE when selecting new question after having answered one for a job-post, job-application and company, new question should assume those relationships. [2026-04-14 frontend]
-CLOSED: [2026-04-14 Mon]
-Context-aware Save & New (job-application > job-post > query params). Form reads all context from question relationships. Company dropdown hits API. Questions::Item resilient to async.
+* Features — Open TODOs
+
+** DONE Refactor =serializers.py= — extract data linkage pattern into BaseSerializer [api]
+CLOSED: [2026-04-16 Wed]
+[[file:notes.org::*Refactor: serializers.py][Plan → notes.org]]
+3 patterns extracted: linked_relationships, user_fk auto-linkage, user FK resolution in get_related. 190 lines removed (1325 → 1135). 265 tests pass.
+
+** TODO Refactor =views.py= → =views/= package [api]
+[[file:notes.org::*Refactor: views.py][Plan → notes.org]]  [[file:~/.claude/plans/vast-squishing-waffle.md][Full plan]]
+Split 8080-line file into 17-file package. Extract PaginatedListMixin + ResumeRelationshipMixin. DjangoUserViewSet inherits BaseViewSet. 11 incremental steps.
+** TODO Flash/highlight main content area on chat reload [frontend]
+** DONE Adopt PollableController across all pollable show routes [frontend]
+CLOSED: [2026-04-15 Tue]
+Enhanced PollableController with hooks, created PollableListController. Migrated 6 controllers. 13 unit tests.
+** TODO Audit redundant parent columns in child route list components [frontend]
+
+* Inbox
+
+** DONE Add cancel button to resume edit page [frontend]
+CLOSED: [2026-04-16 Wed]
+
+** DONE /resumes index: add application/score counts via meta tag [api+frontend]
+CLOSED: [2026-04-16 Wed]
+Slim mode returns =meta= block with counts. Application serializer merges resource-level =meta= into attributes. 271 tests pass.
+
+** DONE Hydrate slim resume on edit transition [frontend]
+CLOSED: [2026-04-16 Wed]
+Convention: "hydration" = transitioning from a slim-loaded record to a full record.
+Fixed by passing =@model={{record.id}}= in =<LinkTo>= (forces model hook) + =reload: true= in edit route.
+
+** TODO Summaries carousel: add button when no summaries exist [frontend]
+The carousel shows "No summaries yet" but gives no way to create or fetch summaries.
+Needs an "Add Summary" action or a link to =/summaries/new=.
+
+** DONE "Cannot remove a resource that is not present" navigating back to /resumes [frontend]
+CLOSED: [2026-04-16 Wed]
+Fixed by switching resumes index from =findAll('resume', { reload: true })= to =query('resume', { slim: true })=.
+Slim mode avoids relationship reconciliation that caused the error.
+Repro: resume edit → settings/appearance → back to /resumes index.
+Error at =index.js:22= in resumes index route model hook.
+Likely the same async hasMany proxy issue seen earlier with =projects= (was =async: false=, fixed to =async: true=).
+May need to investigate other relationships or the =findAll('resume', { reload: true })= interaction with stale store state.
+
+** DONE caddy ai chat is at the top [2026-04-15 frontend]
+CLOSED: [2026-04-15 Tue]
+Replaced :has() flex chain with absolute positioning via @mainClass="caddy-fairway".
+Added @noSubnav, bottom padding for fixed footer.

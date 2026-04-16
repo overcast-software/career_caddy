@@ -1,13 +1,14 @@
 #+title: CareerCaddy — Notes & Decision Records
 #+date: 2026-04-08
 
-* Agent Mistakes — Tally: 2
+* Agent Mistakes — Tally: 3
 Track repeated agent errors so patterns are visible and accountable.
 
 | # | Date | Agent | Mistake | Rule violated |
 |---+------+-------+---------+---------------|
 | 1 | 2026-04-14 | frontend | Compound bash: =cd ... && git diff= | One command per Bash call, use =-C= or absolute paths |
 | 2 | 2026-04-15 | frontend | Jumped to coding before fully reading notes.org | "read notes, internalize the lessons" — read the full file before acting |
+| 3 | 2026-04-16 | api | Used =cd= in Bash call for frontend git status | One command per Bash call, use =-C= or absolute paths |
 
 * Curriculum gap analysis [ARCHIVED 2026-04-11]
 Archived to [[file:notes_archive.org::*Curriculum gap analysis][notes_archive.org]]. Phase 2 maturity assessment; 6 gaps added to todo.org.
@@ -401,7 +402,8 @@ adding =INSTALL_CAMOUFOX=true= to Dagger publish), then removed same day due to 
 - Output format: a markdown report committed to =api/SECURITY_AUDIT.md=, no code changes in the same branch.
 
 *** Waiting on
-Approve the audit branch (read-only, report only). Code changes in a separate branch after review. APPROVED
+~~Approve the audit branch (read-only, report only). Code changes in a separate branch after review.~~ APPROVED.
+#+NOTE: [2026-04-15] Audit complete — report at =api/SECURITY_AUDIT.md=. 5 critical (Education, Certification, Experience, Description, Project ViewSets + career_data endpoint), 2 high (DjangoUserViewSet detail actions), 2 medium (_build_included filter, ScrapeViewSet update/destroy). Remediation plan included with 7 prioritized phases.
 
 ** Dockerfile caching [ARCHIVED 2026-04-11]
 Archived to [[file:notes_archive.org::*Dockerfile caching][notes_archive.org]]. DONE — dependency-first caching in all 3 Dockerfiles + Dagger pipeline.
@@ -1903,6 +1905,86 @@ The top of every prompt file shows:
 2. Additional instructions (the injected prompt — user's specific directives)
 3. The question or task
 4. Supporting context follows below
+
+* Refactor: views.py → views/ package [2026-04-15]
+[[file:~/.claude/plans/vast-squishing-waffle.md][Full plan]]
+
+=views.py= is 8080 lines with 24 viewsets. Split into a =views/= package with 17 files.
+
+** Key decisions
+- =views/__init__.py= re-exports everything — =urls.py= unchanged
+- =DjangoUserViewSet= inherits =BaseViewSet= (deletes 5 duplicated methods)
+- =PaginatedListMixin= replaces copy-paste pagination in 8+ viewsets
+- =ResumeRelationshipMixin= replaces ~30-line block in 4 viewsets (Experience, Education, Certification, Description)
+- =ResumeViewSet= stays ~1455 lines (405-line =_upsert= is a single cohesive unit)
+
+** File mapping (17 files)
+| File | Contents | ~Lines |
+|------+----------+--------|
+| =_constants.py= | OpenAPI schema objects | 110 |
+| =base.py= | BaseViewSet | 520 |
+| =mixins.py= | PaginatedListMixin, ResumeRelationshipMixin | 100 |
+| =standalone.py= | function views (healthcheck, profile, etc) | 640 |
+| =user.py= | DjangoUserViewSet | 620 |
+| =resume.py= | ResumeViewSet | 1455 |
+| =resume_components.py= | Experience, Education, Certification, Description | 640 |
+| =qa.py= | Question, Answer | 520 |
+| =job_post.py= | JobPostViewSet | 430 |
+| =scrape.py= | Scrape + ScrapeProfile | 480 |
+| =cover_letter.py= | CoverLetterViewSet | 445 |
+| =application.py= | JobApplication, Status, JobApplicationStatus | 370 |
+| =score.py= | ScoreViewSet | 260 |
+| =company.py= | CompanyViewSet | 180 |
+| =project.py= | Project, Summary | 340 |
+| =admin.py= | ApiKey, AiUsage, Waitlist, Invitation | 380 |
+
+** Migration: 11 incremental steps, each passes =make test-api=
+See full plan for step-by-step.
+
+* Refactor: serializers.py — extract duplication into BaseSerializer [2026-04-15]
+
+=serializers.py= is 1325 lines with 26 serializer classes. Unlike views.py, the file size is manageable — the problem is 3 copy-paste patterns that should be BaseSerializer methods.
+
+** Pattern 1: Data linkage for to-many relationships (4 serializers)
+ResumeSerializer, JobPostSerializer, ExperienceSerializer, ProjectSerializer each copy-paste a ~15-line loop:
+#+BEGIN_SRC python
+rel_defs = [("summaries", "summary"), ...]
+for rel_name, rel_type in rel_defs:
+    _, items = self.get_related(obj, rel_name)
+    linkage = [{"type": rel_type, "id": str(item.id)} for item in items]
+    res.setdefault("relationships", {})[rel_name] = {"data": linkage, "links": ...}
+#+END_SRC
+
+*Fix:* Add =linked_relationships= class attribute (list of rel names) to BaseSerializer. =to_resource()= auto-adds =data= linkage for those relationships. Serializers just declare the list.
+
+** Pattern 2: User relationship linkage in =to_resource()= (4 serializers)
+CoverLetterSerializer, JobApplicationSerializer, ApiKeySerializer, QuestionSerializer each inject =user= or =created_by= relationship data with the same ~8-line block.
+
+*Fix:* Add =user_fk= class attribute (e.g. ="user_id"= or ="created_by_id"=). BaseSerializer.to_resource() auto-injects user relationship data when set.
+
+** Pattern 3: User FK resolution in =get_related()= (5 serializers)
+ScoreSerializer, CoverLetterSerializer, JobApplicationSerializer, ApiKeySerializer, QuestionSerializer each override =get_related()= with identical "look up User by FK" code.
+
+*Fix:* BaseSerializer.get_related() checks =user_fk= attribute and handles the user lookup automatically. Subclasses only override for genuinely custom logic.
+
+** Implementation: 3 steps, each passes =make test-api=
+1. Add =linked_relationships= to BaseSerializer, migrate 4 serializers
+2. Add =user_fk= to BaseSerializer, migrate 4 =to_resource()= overrides + 5 =get_related()= overrides
+3. Clean up — remove empty =to_resource()= / =get_related()= overrides that are now no-ops
+
+** Stats after refactor
+- 16 serializers currently override =to_resource()= → ~8 would still need overrides
+- 9 serializers currently override =get_related()= → ~3 would still need overrides (DjangoUser, Resume, Company have genuinely custom logic)
+- Estimated ~150 lines removed across the file
+
+** Note: no file split needed
+Unlike views.py, serializers.py at ~1175 lines post-refactor is fine as a single file. The classes are small and cohesive.
+
+** DONE [2026-04-16 api]
+Implemented all 3 patterns. 1325 → 1135 lines (190 lines removed). 265 tests pass, ruff clean.
+- =user_fk= class attribute: auto-injects user relationship in =to_resource()= and =get_related()=. Migrated 7 serializers.
+- =linked_relationships= class attribute: auto-populates data linkage arrays for to-many relationships. Migrated 4 serializers.
+- Cleanup: replaced ExperienceSerializer inline =_dp()= with enhanced =_parse_date()= (now falls back to dateparser).
 
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
