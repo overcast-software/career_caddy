@@ -1979,6 +1979,12 @@ ScoreSerializer, CoverLetterSerializer, JobApplicationSerializer, ApiKeySerializ
 ** Note: no file split needed
 Unlike views.py, serializers.py at ~1175 lines post-refactor is fine as a single file. The classes are small and cohesive.
 
+** DONE [2026-04-16 api]
+Implemented all 3 patterns. 1325 → 1135 lines (190 lines removed). 265 tests pass, ruff clean.
+- =user_fk= class attribute: auto-injects user relationship in =to_resource()= and =get_related()=. Migrated 7 serializers.
+- =linked_relationships= class attribute: auto-populates data linkage arrays for to-many relationships. Migrated 4 serializers.
+- Cleanup: replaced ExperienceSerializer inline =_dp()= with enhanced =_parse_date()= (now falls back to dateparser).
+
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
 * personal notes

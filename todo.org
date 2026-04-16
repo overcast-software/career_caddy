@@ -120,9 +120,10 @@ publicity stunt
 
 * Features — Open TODOs
 
-** TODO Refactor =serializers.py= — extract data linkage pattern into BaseSerializer [api]
+** DONE Refactor =serializers.py= — extract data linkage pattern into BaseSerializer [api]
+CLOSED: [2026-04-16 Wed]
 [[file:notes.org::*Refactor: serializers.py][Plan → notes.org]]
-3 patterns to extract: linked_relationships, user_fk auto-linkage, user FK resolution in get_related. ~150 lines removed. No file split needed.
+3 patterns extracted: linked_relationships, user_fk auto-linkage, user FK resolution in get_related. 190 lines removed (1325 → 1135). 265 tests pass.
 
 ** TODO Refactor =views.py= → =views/= package [api]
 [[file:notes.org::*Refactor: views.py][Plan → notes.org]]  [[file:~/.claude/plans/vast-squishing-waffle.md][Full plan]]
