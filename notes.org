@@ -2635,5 +2635,58 @@ for future downstream authors (themes, integrations).
 - Maintainer deploy script: =npm pkg set devDependencies.@careercaddy/site-chrome=...=
   before =npm install && npm run build=.
 
+* Lightweight JobPost from email + on-demand scrape
+[2026-04-17 api+frontend] [[file:~/.claude/plans/hazy-herding-river.md][Plan]]
+
+** Motivation
+Reading email and POST-scraping every job link was too much overhead for
+pages the user would never open. Emails usually carry only the *title +
+link*, so pre-scraping wastes browser time and infra. Better: drop a
+stub JobPost fast, let the user browse, scrape on demand.
+
+** Flow
+- =career_caddy_automation= POSTs minimal JobPost ={title, link}= to
+  =/api/v1/job-posts/= (company nullable, description omitted).
+- When email *does* carry company info, the existing
+  =create_job_post_with_company_check= path in the automation repo is
+  unchanged.
+- User browses =/job-posts= → sees a *needs scrape* badge on any post
+  with no description.
+- User opens one → clicks *Run scrape* on =job-posts.show=. Creates a
+  Scrape with =status="hold"= bound to the JobPost (and its Company if
+  present). Hold-poller picks it up; extractor fills in the rest.
+
+** Decisions
+- *Null company, no sentinel.* JobPost.company FK is already nullable
+  and the list template already renders an amber "missing" badge.
+  Seeding an "Unknown" Company would just bloat the company pool.
+- *"Scraped" = has description.* The indicator is description-based,
+  not Scrape-row-based — a failed/hold Scrape record doesn't mean the
+  post is usefully populated, and an imported post may have a
+  description without a Scrape. =JobPost.needsScrape= is a getter,
+  not a sideloaded relationship — no =include=scrapes= on the index.
+- *"hold" not "pending" for on-demand scrapes.* =pending= sits there
+  doing nothing; the dispatcher does not auto-pick it. =hold= is the
+  status the hold-poller watches. Match the existing chat-scrape
+  convention.
+- *Idempotent JobPost POST.* Duplicate-link now returns the existing
+  post with 200 instead of 409 (reverses the earlier Inbox decision
+  ="when POSTing a new job-post, if the url is already there don't
+  500"=). Automation can safely retry without dedup logic of its own.
+- *Explicit =relationships.job-post= on scrape POST wins over URL
+  match.* URL-match fallback stays as a safety net. Company is
+  inherited from the linked post when not supplied.
+
+** Files
+- =api/job_hunting/api/views/jobs.py= — duplicate-link 200 return
+- =api/job_hunting/api/views/scrapes.py= — explicit job_post binding
+  in the hold branch
+- =frontend/app/models/job-post.js= — =needsScrape= getter
+- =frontend/app/components/job-posts/list.hbs= — badge
+- =frontend/app/templates/job-posts/show.hbs= + controllers/show.js —
+  Run-scrape button + action
+- =CLAUDE.md= — corrected the stale =job_email_to_caddy.py= pointer to
+  =~/Projects/career_caddy_automation= + =mcp.careercaddy.online/mcp=
+
 * Scratch / Working Notes
 Ephemeral notes during active development. Prune or promote into a proper section before shipping.

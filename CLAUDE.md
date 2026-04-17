@@ -91,7 +91,7 @@ The **frontend** is a JSON:API client. The `application` adapter injects JWT aut
 
 The **API** uses Django ORM for all models. Startup requires only `manage.py migrate`.
 
-The **AI layer** runs locally. Agents chain MCP servers as tool providers. The pipeline (`job_email_to_caddy.py`) orchestrates: URL → browser scrape → Career Caddy API POST. The AI layer authenticates to the API using a long-lived API key (`CC_API_TOKEN`), not a JWT.
+The **AI layer** runs locally. Agents chain MCP servers as tool providers. Email→JobPost orchestration now lives in the sibling repo `~/Projects/career_caddy_automation`, which consumes tools from `mcp.careercaddy.online/mcp`; this repo's `ai/` only ships the local browser/scrape agents and the hold-poller. The AI layer authenticates to the API using a long-lived API key (`CC_API_TOKEN`), not a JWT.
 
 ## Cross-Component Contracts
 

@@ -198,18 +198,33 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
-** TODO Adaptive ScrapeProfile: record failures + auto-demote Tier 0 [api]
-=preferred_tier= never moves and =success_rate= only averages 1.0s in (see
-=api/job_hunting/lib/parsers/job_post_extractor.py:449-491= —
-=_update_scrape_profile= runs only on success). Needed:
-- Call =_update_scrape_profile= on extraction failure too, averaging in =0.0=.
-- When Tier 0 returns but Tier 1+ overrides it (or selectors stop matching),
-  bump a demotion counter; auto-disable Tier 0 for that hostname when the
-  rolling failure rate crosses a threshold.
-- Surface success_rate honestly in the frontend so a bad profile is visible.
-Context: scrape 13 (linkedin.com) hit a "We're logging you in..." interstitial
-and created a hallucinated company+job post; profile still read
-=success_rate: 1.0, scrape_count: 5=.
+** DONE Lightweight JobPost from email + run-scrape on-demand [api+frontend]
+CLOSED: [2026-04-17 Fri]
+[[file:~/.claude/plans/hazy-herding-river.md][Full plan]]
+Automation repo (=~/Projects/career_caddy_automation=) can now POST minimal
+JobPosts ({title, link}) without scraping up-front. User browses
+=/job-posts=, spots a "needs scrape" badge on posts with no description,
+opens one, clicks *Run scrape* which creates a Scrape with
+=status="hold"= tied to the JobPost (and its Company if present). The
+hold-poller completes it and the extractor fills company/description.
+API: duplicate-link POST now returns the existing post with 200 instead
+of the earlier 409 — automation can retry idempotently. Scrape hold
+branch honors an explicit =relationships.job-post= and inherits the
+linked post's company when none supplied. Frontend: =needsScrape= getter
+on =job-post= model (description-based), badge in list, Run-scrape
+button+action on =job-posts.show=. CLAUDE.md: corrected stale
+=job_email_to_caddy.py= reference to point at
+=career_caddy_automation= + =mcp.careercaddy.online/mcp=.
+** DONE Adaptive ScrapeProfile: record failures + auto-demote Tier 0 [api]
+CLOSED: [2026-04-17 Fri]
+Migration 0047 adds =failure_count= and =tier0_miss_count= to ScrapeProfile.
+=_update_scrape_profile= now runs in a =finally= in =parse_scrape= and takes
+=success= + =tier0_hit= — failures average 0.0 into =success_rate= instead of
+silently recording 1.0. =_try_tier0_extraction= returns =(data, attempted)= so
+misses (selectors ran but didn't yield title+company) bump =tier0_miss_count=.
+Auto-demotes =preferred_tier= from =auto= → ="1"= once =tier0_miss_count >= 5=
+and miss ratio >= 50%. New fields surfaced in ScrapeProfileSerializer. 7
+unit tests in =TestUpdateScrapeProfile=; 275 full-suite tests pass.
 ** TODO I moved from chat where I told it to scrape to a pending scrape at scrape.show and spinner didn't fire
 ** DONE Logfire instrumentation for chat_server [ai+infra]
 CLOSED: [2026-04-17 Fri]
