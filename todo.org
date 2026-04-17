@@ -163,6 +163,14 @@ Split 8080-line file into 17-file package. Extract PaginatedListMixin + ResumeRe
 ** DONE Adopt PollableController across all pollable show routes [frontend]
 CLOSED: [2026-04-15 Tue]
 Enhanced PollableController with hooks, created PollableListController. Migrated 6 controllers. 13 unit tests.
+** DONE Refactor polling into pollable service [frontend]
+CLOSED: [2026-04-16 Wed]
+[[file:~/.claude/plans/peaceful-dreaming-gosling.md][Full plan]]
+Consolidated PollableController + PollableListController into =pollable= service.
+Polls survive navigation, seamless spinner, flash-with-link on completion.
+Deleted both base controllers, migrated all 8 consumers. 13 service tests.
+** TODO Flash message slide-wipe transition [frontend]
+Queue sequential display instead of stacking. First flash finishes its time, slides left, next slides in.
 ** TODO Audit redundant parent columns in child route list components [frontend]
 ** DONE Company show: get child resource counts from API metadata instead of relationship length [api+frontend]
 CLOSED: [2026-04-16 Wed]
