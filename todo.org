@@ -199,6 +199,15 @@ sorted arrays directly.
 
 * Inbox
 
+** DONE scrape_and_score MCP tool [ai]
+CLOSED: [2026-04-17 Fri]
+Composite tool: POST /scrapes (pending, falls back to hold on 501) → poll
+to terminal status → resolve job_post_id from relationships → POST /scores
+(optional resume_id) → return scores_url at /job-posts/:id/scores.
+Registered via pydantic-ai toolset filtering: added to TOOL_REGISTRY and the
+=scoring= scope (inherited by =all=, so chat agent gets it; kept out of the
+=career_caddy= scope). Not exposed on either MCP server. 6 unit tests.
+
 ** DONE Add cancel button to resume edit page [frontend]
 CLOSED: [2026-04-16 Wed]
 
