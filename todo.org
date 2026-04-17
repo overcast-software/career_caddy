@@ -151,6 +151,17 @@ publicity stunt
 
 * Features — Open TODOs
 
+** DONE Ember Engines extension points for private website layer [frontend]
+CLOSED: [2026-04-17 Fri]
+[[file:notes.org::*Ember Engines extension points for private website layer][Architecture → notes.org]]  [[file:~/.claude/plans/eventual-launching-meadow.md][Full plan]]
+Installed =ember-engines@0.13.1= (compatible with Ember 6.6). Added =extensions= and
+=public-routes= services, conditional engine mount in =router.js= gated by
+=@embroider/macros='s =dependencySatisfies=, sidebar rendering for registered nav
+entries (sidebar + footer positions with =authOnly= filter). Documented public
+customization API in =frontend/EXTENSIONS.md=. 214 tests pass, ruff + prettier +
+template-lint clean. Private =@careercaddy/site-chrome= engine lives in a separate
+repo (out of scope here).
+
 ** DONE Refactor =serializers.py= — extract data linkage pattern into BaseSerializer [api]
 CLOSED: [2026-04-16 Wed]
 [[file:notes.org::*Refactor: serializers.py][Plan → notes.org]]

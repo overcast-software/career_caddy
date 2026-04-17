@@ -2379,6 +2379,82 @@ Wraps existing =GET /api/v1/scrape-profiles/?filter[hostname]=...= and =PATCH=.
 - No credential data flows through =css_selectors=
 - =api_tools.py= has no access to =secrets.yml= or browser automation code
 
+* Ember Engines extension points for private website layer
+Session: [2026-04-17]. Full design in =~/.claude/plans/eventual-launching-meadow.md=.
+
+** Motivation
+OSS users should get a narrow job-tool app. Maintainer wants personal website
+content (landing, inspirations/back-links, changelog, metrics dashboard) on
+the *same domain*, visually integrated, without shipping personal content in
+the OSS tarball and without forking. Must also leave a canonical Ember path
+for future downstream authors (themes, integrations).
+
+** Decision: Ember Engines, not bespoke route registry
+- =ember-engines@0.13.1= is the canonical Ember way to ship modular,
+  lazy-loadable sub-applications with dependency-injected host services.
+- Pre-flight confirmed 0.13.1 peer dep is =ember-source >=3.28.12=; clean
+  install and build on Ember 6.6, 214 tests pass.
+- Private engine =@careercaddy/site-chrome= lives in a *separate private
+  repo*. Maintainer's deploy injects it via =npm pkg set= before build. OSS
+  =package.json= never references it.
+- Ember's =@embroider/macros= =dependencySatisfies= compiles the host mount
+  out entirely when the engine isn't installed — zero runtime cost for OSS
+  users, zero maintenance cost (no env flags).
+
+** Host hooks landed in OSS (this session)
+1. =app/services/extensions.js= — tracked =navEntries= registry with
+   =register(entries)= and =entriesAt(position)=. Entry shape:
+   ={ route, label, icon?, position, authOnly? }= where position is
+   =sidebar= or =footer=.
+2. =app/services/public-routes.js= — =exact= Set + =prefixes= Set +
+   =isPublic(routeName)=. Replaces the hardcoded check in
+   =routes/application.js=.
+3. =app/router.js= — conditional =this.mount('@careercaddy/site-chrome',
+   { as: 'site-chrome', path: '/' })= wrapped in
+   =macroCondition(dependencySatisfies('@careercaddy/site-chrome', '*'))=.
+4. =app/components/sidebar.{js,hbs}= — reads =extensions.entriesAt(...)= for
+   both sidebar and footer positions, filters by =authOnly=, renders with
+   =LinkTo= and optional icon.
+5. =frontend/EXTENSIONS.md= — public customization API doc.
+
+** Why not alternatives
+- *Separate static site on subdomain* — killed domain feel, user rejected.
+- *Markdown overlay directory* — good for static pages only; metrics
+  dashboard needs real components + Ember Data access, so addon is needed
+  anyway.
+- *Plain addon with route registry* — works but is a bespoke API. Engines
+  are the canonical Ember pattern; if someone builds a theme pack or
+  integration later, they already know engines from Ember docs. Chose
+  engines to avoid teaching a Career-Caddy-specific extension API.
+- *Build-time file layering* — fragile to OSS renames, invisible coupling.
+
+** Dev workflow for the private engine (when it's scaffolded)
+- =npm link= the engine checkout into =frontend/node_modules/=.
+- Run =npm start= in =frontend/= — host watcher picks up engine file edits.
+- Engine has its own =tests/dummy/= host for isolated route development.
+- Lazy loading ships separate chunk; Tailwind =content= glob in maintainer's
+  build must include engine template paths or utility classes get purged.
+- Service lookup failures if engine injects a service not declared in
+  =dependencies.services= in =engine.js= — keep that in sync with actual
+  injections.
+
+** Known gotchas
+- =npm install= in host unlinks the engine; re-run =npm link=.
+- Route-name collisions between host and engine (both can claim
+  =/welcome=): engine wins under its mount. Document claimed URLs in the
+  engine repo.
+- The existing =/about= host route collides with any engine landing at
+  the same path — if engine ships a =/welcome= rather than replacing
+  =/about=, no collision.
+
+** Open follow-ups
+- Scaffold =@careercaddy/site-chrome= in a private repo (engine type).
+- Decide lazy-loading on/off for dev builds (on is the prod goal).
+- If the metrics dashboard needs cross-user aggregates, add staff-only
+  endpoints to the OSS API (legit admin features, not maintainer-only).
+- Maintainer deploy script: =npm pkg set devDependencies.@careercaddy/site-chrome=...=
+  before =npm install && npm run build=.
+
 * Scratch / Working Notes
 (use this section for ephemeral notes during development)
 * personal notes
