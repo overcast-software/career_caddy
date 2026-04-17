@@ -22,7 +22,7 @@ Reply inline or update todo.org to unblock.
 ** Backups (export / import) [ARCHIVED 2026-04-11]
 Archived to [[file:notes_archive.org::*Backups (export / import)][notes_archive.org]]. DONE — xlsx export/import with skip-duplicates, superuser-only.
 
-** Tooltips
+** UI tooltips — shared <Tooltip> component scope
 [[file:todo.org::*tool tips][↑ todo.org]]
 - Only one concrete example was given: the ★ favorites button.
 - Proposal: build a shared =<Tooltip>= Glimmer component that accepts a =@text= arg and wraps any element; adopt the HyperUI tooltip pattern.
@@ -174,7 +174,7 @@ endpoint + ownership check".
 ** CSS maturation / HyperUI / dark mode / jade palette [ARCHIVED 2026-04-11]
 Archived to [[file:notes_archive.org::*CSS maturation][notes_archive.org]]. COMPLETED — 4 tracks, dark mode, jade palette, Tailwind-first.
 
-** Superuser account management
+** Multi-tenancy — is_staff role + per-queryset ownership filter :IMPORTANT:
 [[file:todo.org::*As a superuser I want to be able to manage user accounts][↑ todo.org]]
 
 - Currently no row-level ownership on the 33 domain models — any authenticated user can read any record.
@@ -345,17 +345,12 @@ MCP Client → mcp.careercaddy.online (Caddy, TLS) → public_server.py (FastMCP
 - The Django API resolves user identity from the key — the MCP server never touches the DB.
 - Each tool reads the token via =get_access_token()= from FastMCP's dependency injection.
 - =get_current_user= tool: returns the authenticated user's profile so agents know who they act as.
-- plan for AI integration chat on the frontend
-- plan for AI integration via slack
-**** I have a branch at  /home/oldbones/Network/syncthing/Projects/career_caddy_ai/lib/tiger-agents-for-work
-It is capable of doing chat in slack
-however it's a hack on the original, and I'd like to not need to depend on a fork of that tiger project
-The agent should work on behalf of the person talking to it and no other.  It serves multiple users by using the correct api key
-- AI integration should have authorization access
-- By leveraging toolsets,   the AI should be constrained by user account auth.  some users will only get readonly for example
-**** I have  /home/oldbones/Network/syncthing/Projects/career_caddy_ai/run_email_web.py that I'd like to rework into and application to test mcp/careercaddy.online
-**** a chat client live in a sidebar on the right hand side of the web appliation although a full screen can be found at /caddy
-**** The chat can only be accessed by authed users with access and login from the front end will inform the agent on which user to act for.
+
+*** Future: Slack integration (aspirational)
+- Prototype branch at =~/Projects/career_caddy_ai/lib/tiger-agents-for-work= can chat in Slack, but it's a hack on a fork of the tiger project — goal is to not depend on that fork.
+- Multi-tenant requirement: the agent must act on behalf of whichever user is talking to it, keyed by that user's =jh_*= API key.
+- Authorization must flow through: leveraging toolsets, some users should be read-only while others can write — MCP/toolset scoping, not hard-coded in the agent.
+- Verification target: rework =ai/run_email_web.py= into a minimal test harness that exercises =mcp.careercaddy.online= end to end.
 
 *** Tools exposed (21)
 14 ported from =career_caddy_server.py=:
@@ -380,24 +375,63 @@ API change: =ScrapeViewSet.create= accepts =status="hold"= and skips the =SCRAPI
 - No =CC_API_TOKEN= env var on the container — all auth from clients
 - Rate limiting via Caddy's =rate_limit= directive
 
-*** Gotcha: internal HTTP must send =X-Forwarded-Proto: https=
-Django enables =SECURE_SSL_REDIRECT=True= in prod. The Caddy edge sets
-=X-Forwarded-Proto: https= so public requests pass, but =mcp → http://api:8000=
-internal calls don't go through Caddy. Without the header, Django responds
-=301 → https://api:8000/= and the MCP verifier sees a non-200, silently fails
-token validation, and every client gets =invalid_token=.
+*** Gotcha: =invalid_token= debugging playbook (two shapes) :IMPORTANT:
+Every time the MCP silently returns =invalid_token= for a token that works
+against the public API, the cause has been a non-200 on the internal =mcp →
+http://api:8000/api/v1/me/= hop. FastMCP's =verify_token= returns =None= on
+anything other than 200, so the failure is invisible until you reproduce the
+upstream call from inside the mcp container.
 
-Fix: every internal httpx call to the API includes
-=X-Forwarded-Proto: https=. Callers that already do this:
+**** Shape 1: =ALLOWED_HOSTS= rejection (400 DisallowedHost) — fixed 2026-04-17
+Django's =ALLOWED_HOSTS= did not include the Docker service hostname =api=.
+Internal requests sent =Host: api:8000=, Django responded 400 DisallowedHost
+before auth ran. Outer =api/settings.py= was dead code (never used by
+=DJANGO_SETTINGS_MODULE=job_hunting.settings=), so its attempt to append
+="api"= to the list never took effect in prod.
+
+Fix (commit a303170): unconditionally add ="api"= to =ALLOWED_HOSTS= in
+=api/job_hunting/settings.py= and delete the dead outer =api/settings.py=.
+
+**** Shape 2: =SECURE_SSL_REDIRECT= 301 — fixed 2026-04-17
+Django enables =SECURE_SSL_REDIRECT=True= in prod
+([[file:api/job_hunting/settings.py::SECURE_SSL_REDIRECT][settings.py:293]]). The
+Caddy edge sets =X-Forwarded-Proto: https= so public requests pass, but
+=mcp → http://api:8000= internal calls don't go through Caddy. Without the
+header, Django responds =301 → https://api:8000/= and the MCP verifier sees
+a non-200 → =invalid_token=.
+
+Fix (ai commit 58c1f3d): every internal httpx call to the API includes
+=X-Forwarded-Proto: https=. Callers that send it today:
 - =ai/lib/api_tools.py= =ApiClient._headers= (and =post_file=, fixed 2026-04-17)
 - =ai/lib/models/career_caddy.py= =APIContext=
 - =ai/lib/usage_reporter.py=
 - =ai/mcp_servers/chat_server.py= =_fetch_user_profile=
 - =ai/mcp_servers/public_server.py= =ApiKeyTokenVerifier.verify_token= (fixed 2026-04-17)
 
-=public_server.py= also runs a =GET /api/v1/healthcheck/= probe at startup
-and crashloops the container on non-200, so a future misconfig fails loudly
-instead of producing silent =invalid_token= errors.
+**** Diagnostic playbook
+When =curl https://mcp.careercaddy.online/mcp= returns 401 invalid_token but
+the same token returns 200 from =curl https://api.careercaddy.online/api/v1/me/=:
+
+1. On the VPS, reproduce the exact internal call that =verify_token= makes:
+   #+begin_src sh
+   docker compose -f docker-compose.prod.yml exec -e TOKEN='jh_...' mcp \
+     python -c 'import os,httpx;r=httpx.get(os.environ["CC_API_BASE_URL"]+"/api/v1/me/",\
+     headers={"Authorization":"Bearer "+os.environ["TOKEN"]});\
+     print(r.status_code);print(dict(r.headers));print(r.text[:500])'
+   #+end_src
+2. Read the status code:
+   - *400 DisallowedHost* → shape 1, rebuild api image with =api= in =ALLOWED_HOSTS=.
+   - *301 → location: https://api:8000/...* → shape 2, add =X-Forwarded-Proto: https= to the caller.
+   - *401* → token actually revoked or wrong user; regenerate via =/api/v1/api-keys/=.
+   - *200* → mcp-side bug; check the new =logger.warning= in =verify_token=.
+3. If the container shows =unhealthy= status that's a red herring — the healthcheck hits =/mcp= which always 401s unauth. The service can still be functioning.
+
+**** Startup probe
+=public_server.py:_probe_upstream_api()= runs =GET /api/v1/healthcheck/= with
+=X-Forwarded-Proto: https= at boot and exits non-zero on any non-200 or
+connect error. This turns future misconfigs (ALLOWED_HOSTS drift, wrong
+=CC_API_BASE_URL=, downed api container) into a loud crashloop with a
+clear log line, rather than a quietly-up container that rejects every token.
 
 *** OAuth roadmap (Phase 2 — not yet implemented)
 For in-app chat where the agent acts as the logged-in user:
@@ -667,7 +701,7 @@ https://pydantic.dev/docs/logfire/integrations/web-frameworks/django/
 It would be nice to audit the needs for running an application for a user trying to set things up.
 Make a clear plan how to bring this feature about.
 
-** Ian Finnis letter
+** Ian Finnis letter [DEFERRED — send at alpha]
 [[file:todo.org::*Ian Finnis letter][↑ todo.org]]
 Deferred until official alpha phase. Draft is captured in todo.org.
 Move this entry to notes.org when alpha begins and send then.
@@ -1067,7 +1101,7 @@ Phase 2 (dedicated =ChatAction= model with persistence) deferred until Phase 1 i
 SSE handles streaming + elicitation POST-back. WebSockets would need django-channels + ASGI +
 Redis + Docker changes. Marginal benefit. Revisit only if bidirectional becomes a hard requirement.
 
-* Admin AI Model Configuration
+* Admin AI Model Configuration [DEFERRED — .env-based for now]
 :PROPERTIES:
 :CREATED:  [2026-04-13]
 :END:
@@ -2143,13 +2177,14 @@ The top of every prompt file shows:
 3. The question or task
 4. Supporting context follows below
 
-* Refactor: views.py → views/ package
+* DONE Refactor: views.py → views/ package
+CLOSED: [2026-04-15]
 :PROPERTIES:
 :CREATED:  [2026-04-15]
 :END:
 [[file:~/.claude/plans/vast-squishing-waffle.md][Full plan]]
 
-=views.py= is 8080 lines with 24 viewsets. Split into a =views/= package with 17 files.
+Was 8080 lines with 24 viewsets. Split into a =views/= package with 17 files.
 
 ** Key decisions
 - =views/__init__.py= re-exports everything — =urls.py= unchanged
@@ -2181,7 +2216,8 @@ The top of every prompt file shows:
 ** Migration: 11 incremental steps, each passes =make test-api=
 See full plan for step-by-step.
 
-* Refactor: serializers.py — extract duplication into BaseSerializer
+* DONE Refactor: serializers.py — BaseSerializer consolidation
+CLOSED: [2026-04-15]
 :PROPERTIES:
 :CREATED:  [2026-04-15]
 :END:
@@ -2230,7 +2266,7 @@ Implemented all 3 patterns. 1325 → 1135 lines (190 lines removed). 265 tests p
 - =linked_relationships= class attribute: auto-populates data linkage arrays for to-many relationships. Migrated 4 serializers.
 - Cleanup: replaced ExperienceSerializer inline =_dp()= with enhanced =_parse_date()= (now falls back to dateparser).
 
-* Standalone Career Caddy Automation Toolkit (caddy_automation)
+* caddy_automation — sibling repo for personal automation
 [[file:todo.org::*PROJ caddy_automation][↑ todo.org]]
 Codename: =caddy_automation=. Folder: =career_caddy_automation/=.
 
@@ -2453,7 +2489,7 @@ After extraction:
 - Future option: publish =src/client/= as =career-caddy-client= on PyPI so both
   the monorepo and the standalone project depend on the same package
 
-* Electron Desktop App — Feasibility Study
+* Electron Desktop App — Feasibility Study [PLACEHOLDER]
 [[file:todo.org::*PROJ Electron desktop app feasibility][↑ todo.org]]
 /Placeholder — detailed study to be written under this heading./
 
@@ -2522,7 +2558,8 @@ Wraps existing =GET /api/v1/scrape-profiles/?filter[hostname]=...= and =PATCH=.
 - No credential data flows through =css_selectors=
 - =api_tools.py= has no access to =secrets.yml= or browser automation code
 
-* Ember Engines extension points for private website layer
+* DONE Ember Engines extension points for private website layer
+CLOSED: [2026-04-17]
 Session: [2026-04-17]. Full design in =~/.claude/plans/eventual-launching-meadow.md=.
 
 ** Motivation
@@ -2599,5 +2636,4 @@ for future downstream authors (themes, integrations).
   before =npm install && npm run build=.
 
 * Scratch / Working Notes
-(use this section for ephemeral notes during development)
-* personal notes
+Ephemeral notes during active development. Prune or promote into a proper section before shipping.

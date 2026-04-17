@@ -149,6 +149,9 @@ publicity stunt
 ** PROJ Electron desktop app feasibility                          :PENDING_APPROVAL:
 [[file:notes.org::*Electron Desktop App — Feasibility Study][Architecture + trade-offs → notes.org]]
 
+** TODO Reactive Resume plugin                                    :PENDING_APPROVAL:
+[[file:notes.org::*Reactive Resume as a PDF-render plugin][Plugin architecture + scope → notes.org]]
+
 * Features — Open TODOs
 
 ** DONE Ember Engines extension points for private website layer [frontend]
