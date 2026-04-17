@@ -156,9 +156,14 @@ CLOSED: [2026-04-16 Wed]
 [[file:notes.org::*Refactor: serializers.py][Plan → notes.org]]
 3 patterns extracted: linked_relationships, user_fk auto-linkage, user FK resolution in get_related. 190 lines removed (1325 → 1135). 265 tests pass.
 
-** TODO Refactor =views.py= → =views/= package [api]
-[[file:notes.org::*Refactor: views.py][Plan → notes.org]]  [[file:~/.claude/plans/vast-squishing-waffle.md][Full plan]]
-Split 8080-line file into 17-file package. Extract PaginatedListMixin + ResumeRelationshipMixin. DjangoUserViewSet inherits BaseViewSet. 11 incremental steps.
+** DONE Refactor =views.py= → =views/= package [api]
+CLOSED: [2026-04-16 Wed]
+:PROPERTIES:
+:STARTED:  [2026-04-16 api]
+:END:
+[[file:notes.org::*Refactor: views.py][Plan → notes.org]]  [[file:~/.claude/plans/resilient-jumping-glade.md][Full plan]]
+Split 8269-line monolith into 17-file =views/= package. No mixin extraction, no inheritance changes.
+=__init__.py= re-exports everything — =urls.py= unchanged. 271 tests pass, ruff clean.
 ** TODO Flash/highlight main content area on chat reload [frontend]
 ** DONE Adopt PollableController across all pollable show routes [frontend]
 CLOSED: [2026-04-15 Tue]
@@ -198,9 +203,9 @@ CLOSED: [2026-04-16 Wed]
 Added =updating_profile= scrape status in pipeline between extraction and completion.
 Chat server now creates scrapes with =status="hold"= (poller picks them up).
 
-** TODO Document chat-scrape hold-by-default behavior
-New clones will have no poller running, so chat-created scrapes will sit in =hold= forever.
-Need to document this in README/CLAUDE.md and/or add =.env= defaults to make behavior obvious.
+** DONE Document chat-scrape hold-by-default behavior
+CLOSED: [2026-04-16 Wed]
+Added note to root CLAUDE.md explaining hold-by-default and need for running poller.
 
 ** DONE Agent-derived CSS selectors for scrapes [ai+api]
 CLOSED: [2026-04-16 Wed]
@@ -209,9 +214,9 @@ blocked/authenticated detection, discovers job_data selectors from live DOM, wri
 Schema: ={"blocked": {...}, "authenticated": {...}, "job_data": {...}}=. Login data stays in =sites.yml=.
 [[file:~/.claude/plans/whimsical-juggling-cherny.md][Full plan]]
 
-** TODO Summaries carousel: add button when no summaries exist [frontend]
-The carousel shows "No summaries yet" but gives no way to create or fetch summaries.
-Needs an "Add Summary" action or a link to =/summaries/new=.
+** DONE Summaries carousel: add button when no summaries exist [frontend]
+CLOSED: [2026-04-16 Wed]
+Added named =:empty= block to carousel component. Resume edit shows link to job-posts page with guidance text.
 
 ** DONE "Cannot remove a resource that is not present" navigating back to /resumes [frontend]
 CLOSED: [2026-04-16 Wed]
@@ -245,3 +250,32 @@ Edit button is now a =<LinkTo>= to the edit route. =/settings= redirects to =/se
 CLOSED: [2026-04-15 Tue]
 Replaced :has() flex chain with absolute positioning via @mainClass="caddy-fairway".
 Added @noSubnav, bottom padding for fixed footer.
+** DONE flash error in dark mode had light div and light text unreadable
+CLOSED: [2026-04-16 Wed]
+Replaced hardcoded light colors in flash alert variants with theme-aware CSS vars (--danger-surface, --warning-surface, --success-surface etc).
+** DONE As staff, I need a nuclear button for job-posts that deletes every child relation (including quetions and their answers).
+CLOSED: [2026-04-16 Wed]
+API: =DELETE /job-posts/{id}/nuclear/= staff-only endpoint deletes all children (questions+answers, scores, scrapes, cover letters, applications, summaries) then the job post.
+Frontend: amber "Nuclear" button with warning icon on job-posts edit form, staff-only. Double confirm dialog.
+** DONE when deleting a question.  it stays on the same page and the question is not really gone.  it should redirect back using the algorithm made to swim up the breadcrumbs to the correct index
+CLOSED: [2026-04-16 Wed]
+Added confirm dialog + =router.transitionTo('questions')= after successful destroyRecord in questions/show controller.
+** DONE when POSTing a new job-post, if the url is already there don't 500.  send back an error message
+CLOSED: [2026-04-16 Wed]
+API: pre-check for duplicate link before save, returns 409 with detail message.
+Frontend: job-posts/new controller now extracts =error.errors[0].detail= for flash messages.
+** DONE AI answer polling is acting weird.  it will continue to say polling even when the answer is there.
+CLOSED: [2026-04-16 Wed]
+=askAI= now transitions to =questions.show.answers.show= (which has =startPollingIfPending=) instead of the answers index.
+Answers index route now uses =question.answers= relationship instead of =store.query= with filter.
+*** DONE it never started polling was in `/questions/answers`
+CLOSED: [2026-04-16 Wed]
+*** DONE pressing show answers envokes /api/v1/answers/?filter[question_id]=8 and not questions.answers (/questions/8/answers)
+CLOSED: [2026-04-16 Wed]
+Changed to use question model's answers relationship.
+** WAIT job-posts.show.questions.show.answer
+
+** DONE scrape error — poller crashes on transient connection errors
+CLOSED: [2026-04-16 Wed]
+Wrapped =poll_once()= in try/except in the main loop so transient =RemoteProtocolError= doesn't crash the poller.
+

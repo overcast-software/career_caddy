@@ -38,6 +38,8 @@ make up-ai
 # Browser MCP:  http://localhost:3004/sse
 ```
 
+**Chat-created scrapes default to `hold` status.** The chat server creates scrapes with `status="hold"` so the hold-poller picks them up. Without a running poller (`make poller` or `make poller-local`), these scrapes sit in `hold` forever. On fresh clones, start the poller or manually change scrape status to trigger processing.
+
 **Running the AI pipeline directly** (no docker service needed):
 
 ```bash
