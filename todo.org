@@ -211,6 +211,22 @@ Error at =index.js:22= in resumes index route model hook.
 Likely the same async hasMany proxy issue seen earlier with =projects= (was =async: false=, fixed to =async: true=).
 May need to investigate other relationships or the =findAll('resume', { reload: true })= interaction with stale store state.
 
+** DONE Fix invalid job-post dates + summary jobPost ID error [api+frontend]
+CLOSED: [2026-04-16 Wed]
+API: backfill =posted_date= from =created_at= on create/update when null. Data migration for existing records.
+Frontend: =moment-format= falls back to =createdAt= in list/compact. Form no longer shows phantom "today" date.
+Summary controller uses =modelFor= instead of =peekRecord= to reliably get parent jobPost.
+
+** DONE Snippet dark mode + layout overhaul [frontend]
+CLOSED: [2026-04-16 Wed]
+Snippet inputs now have dark mode classes. Changed from side-by-side to label+remove stacked left, textarea right.
+Dividers between snippets, =+ Add= button inline with last Remove.
+
+** DONE Settings profile route restructure [frontend]
+CLOSED: [2026-04-16 Wed]
+Split =/settings= profile view/edit into =/settings/profile= (read-only) and =/settings/profile/edit= (form).
+Edit button is now a =<LinkTo>= to the edit route. =/settings= redirects to =/settings/profile= temporarily.
+
 ** DONE caddy ai chat is at the top
 :PROPERTIES:
 :STARTED:  [2026-04-15 frontend]
