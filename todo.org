@@ -164,8 +164,11 @@ Split 8080-line file into 17-file package. Extract PaginatedListMixin + ResumeRe
 CLOSED: [2026-04-15 Tue]
 Enhanced PollableController with hooks, created PollableListController. Migrated 6 controllers. 13 unit tests.
 ** TODO Audit redundant parent columns in child route list components [frontend]
-** TODO Company show: get child resource counts from API metadata instead of relationship length [api+frontend]
-Currently =.jobPosts.length= etc. forces eager loading all relationships. Return counts in =meta= block from the API instead.
+** DONE Company show: get child resource counts from API metadata instead of relationship length [api+frontend]
+CLOSED: [2026-04-16 Wed]
+API retrieve returns =meta= with 5 counts. Added =scores=, =questions=, =scrapes= to CompanySerializer relationships
+and new action endpoints. Frontend uses count attrs instead of =.length=. Child routes await relationships and return
+sorted arrays directly.
 
 * Inbox
 
