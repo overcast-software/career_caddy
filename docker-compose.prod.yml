@@ -127,6 +127,7 @@ services:
       CHAT_MODEL: ${CHAT_MODEL:-openai:gpt-4o-mini}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
     command: ["uv", "run", "caddy-chat"]
     depends_on:
       api:

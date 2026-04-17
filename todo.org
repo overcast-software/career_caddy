@@ -199,6 +199,14 @@ sorted arrays directly.
 
 * Inbox
 
+** DONE Logfire instrumentation for chat_server [ai+infra]
+CLOSED: [2026-04-17 Fri]
+chat_server.py never called =logfire.configure= / =instrument_pydantic_ai=,
+and docker-compose.prod.yml wasn't passing =LOGFIRE_TOKEN= to the chat
+service — so chat runs were dark in logfire. Added a gated configure +
+instrument block (mirrors browser_server) and forwarded =LOGFIRE_TOKEN=
+to the chat container.
+
 ** DONE scrape_and_score MCP tool [ai]
 CLOSED: [2026-04-17 Fri]
 Composite tool: POST /scrapes (pending, falls back to hold on 501) → poll
