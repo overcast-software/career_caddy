@@ -47,6 +47,130 @@ Approve the shared-component pattern and confirm scope (favorites-only to start,
 *** Waiting on
 Confirm the target convention. Agents will pattern-match against an existing edit page unless told otherwise.
 
+** Reactive Resume as a PDF-render plugin
+[[file:todo.org::*Reactive Resume plugin][↑ todo.org]]
+
+Use a self-hosted [[https://rxresu.me][Reactive Resume]] on =resume.careercaddy.online= strictly
+as a *PDF rendering backend* — Career Caddy owns the resume data, rxresume
+owns the themes and the =pdf= pipeline. Ship the integration as a *separate
+pip-installable plugin* so the core app's scope does not widen.
+
+*** Scope boundaries (locked)
+- No schema changes in core. No =rxresume_id= column, no new tables, no
+  migration.
+- No bidirectional sync. No per-user accounts on rxresume. No OAuth.
+- The rxresume resource is *transient*: import → print → delete, all in one
+  request. Nothing persisted on the rxresume side after the request finishes.
+- One service-account user and one API key on the rxresume side, both owned
+  by the plugin's env (=RXRESUME_API_KEY=), not by core.
+
+*** Why a plugin and not an in-app feature
+- Keeps core narrow — the whole rxresume concept is absent unless the plugin
+  is =pip install='d.
+- Lets us swap renderers later (WeasyPrint, Typst, rxresume, something else)
+  without touching core.
+- Matches the /career_caddy_automation/ precedent of extracting optional
+  subsystems out of the main repo when they start carrying their own weight.
+
+*** Plugin framework — [[https://djp.readthedocs.io][djp]]
+- Simon Willison's [[https://github.com/pytest-dev/pluggy][pluggy]] wrapper built for Django. Plugins are pip
+  packages discovered via setuptools entry points.
+- Hooks djp already provides that we'd use: =installed_apps=, =urlpatterns=,
+  =settings=.
+- Core adds one custom hookspec for renderers:
+  #+begin_src python
+  # core: api/plugins/hookspecs.py
+  import djp
+  hookspec = djp.hookspec
+  @hookspec
+  def resume_renderers():
+      """Return dict[str, ResumeRenderer] keyed by render format (e.g. 'pdf')."""
+  #+end_src
+- Fallback if djp is too much: plain entry points
+  (=[project.entry-points."career_caddy.renderers"]=) and ~30 lines of
+  discovery in core. Same UX, no dep.
+
+*** Transient-resource flow (no DB)
+1. User clicks "Download PDF" on =resumes/show=.
+2. Core view loads the =Resume=, checks ownership, hands it to the renderer.
+3. Plugin =POST='s =/resume/import= → short-lived =rxresume_id= in a local var.
+4. Plugin =GET='s =/api/resume/print/{id}= → PDF bytes.
+5. Plugin =DELETE='s the transient rxresume resource (no service-account garbage).
+6. Core streams the bytes to the browser.
+
+*** Plugin package layout (separate repo)
+=cc-rxresume-plugin/=
+- =pyproject.toml= declares the djp entry point:
+  #+begin_src toml
+  [project.entry-points.djp]
+  cc_rxresume = "cc_rxresume.plugin"
+  #+end_src
+- =cc_rxresume/plugin.py= — djp hookimpls: register the renderer; contribute
+  no URLs (core's render endpoint is enough).
+- =cc_rxresume/renderer.py= — =ReactiveResumeRenderer= (stateless service
+  object). Signature sketch:
+  #+begin_src python
+  class ReactiveResumeRenderer:
+      def __init__(self, base_url: str, api_key: str, theme: str = "azurill"): ...
+      def render_pdf(self, resume: "Resume") -> bytes:
+          data = self._to_rxresume_json(resume)
+          rxid = self._import(data)
+          try:
+              return self._print(rxid)
+          finally:
+              self._delete(rxid)
+  #+end_src
+- =cc_rxresume/mapper.py= — pure functions that translate a Career Caddy
+  =Resume= (via =to_export_context()=, resume.py:135) into rxresume's
+  =ResumeData= schema. Validates against =GET /api/resume/schema= in tests.
+- =cc_rxresume/client.py= — httpx wrapper with =x-api-key= header, following
+  the pattern in [[file:ai/lib/api_tools.py][ai/lib/api_tools.py]].
+- Env it reads: =RXRESUME_BASE_URL=, =RXRESUME_API_KEY=, =RXRESUME_THEME=.
+
+*** Core changes (minimal)
+- Add =djp= to =api/pyproject.toml= and wire in =api/config/settings.py=:
+  =INSTALLED_APPS += djp.installed_apps()=, =urlpatterns += djp.urlpatterns()=.
+- Add =api/plugins/hookspecs.py= with the =resume_renderers= hookspec.
+- Add one generic endpoint =GET /api/v1/resumes/:id/render/:format/= in
+  [[file:api/job_hunting/api/views/career_data.py][career_data.py]] that:
+  - Checks ownership (=resume.user == request.user=).
+  - Looks up the renderer for =:format= via the plugin manager.
+  - Returns =404= if no plugin supplies that format — core has no hardcoded
+    knowledge of rxresume.
+  - Streams the bytes.
+- No model, serializer, or migration changes. Net diff in core: ~60 lines.
+
+*** Deployment presumptions
+- Subdomain =resume.careercaddy.online= on the VPS (DNS + TLS via the existing
+  Caddy reverse proxy, config outside this repo).
+- =docker-compose.prod.yml= gets =rxresume= + =rxresume-db= services (official
+  image, [[https://docs.rxresu.me/self-hosting/docker][self-host docs]]).
+- If the plugin is installed, the =api= image bundles =cc-rxresume-plugin= via
+  its =requirements.txt= (or a Dockerfile build-arg so non-rxresume deploys
+  skip it entirely).
+
+*** Out of scope for v1
+- Pull / sync from rxresume → Career Caddy.
+- Per-user rxresume accounts, OAuth, any credential UI.
+- Storing the PDF — always regenerated on demand.
+- Any DB changes.
+
+*** Open questions for the product owner
+1. Confirm subdomain: =resume.=, =cv.=, or other?
+2. Use =djp= (new dep, typed, Django-idiomatic) or plain entry points (no dep,
+   ~30 lines)? Recommendation: =djp=.
+3. Theme: single fixed theme (=RXRESUME_THEME= env) or per-resume pick?
+   Per-resume can be a query param on the render endpoint — no DB field.
+4. Plugin repo home: new =overcast-software/cc-rxresume-plugin= GitHub repo,
+   or monorepo subfolder (=plugins/cc-rxresume/=)? Recommendation: separate
+   repo, matches /career_caddy_automation/ precedent.
+
+*** Waiting on
+Approval of (1) subdomain, (2) djp vs plain entry points, (3) theme strategy,
+(4) plugin repo home. Then move to =todo.org= as tickets: "plugin hookspec in
+core", "cc-rxresume-plugin scaffold", "rxresume compose service", "render
+endpoint + ownership check".
+
 ** CSS maturation / HyperUI / dark mode / jade palette [ARCHIVED 2026-04-11]
 Archived to [[file:notes_archive.org::*CSS maturation][notes_archive.org]]. COMPLETED — 4 tracks, dark mode, jade palette, Tailwind-first.
 
@@ -255,6 +379,25 @@ API change: =ScrapeViewSet.create= accepts =status="hold"= and skips the =SCRAPI
 - Docker service does NOT mount =secrets.yml= or mail directories
 - No =CC_API_TOKEN= env var on the container — all auth from clients
 - Rate limiting via Caddy's =rate_limit= directive
+
+*** Gotcha: internal HTTP must send =X-Forwarded-Proto: https=
+Django enables =SECURE_SSL_REDIRECT=True= in prod. The Caddy edge sets
+=X-Forwarded-Proto: https= so public requests pass, but =mcp → http://api:8000=
+internal calls don't go through Caddy. Without the header, Django responds
+=301 → https://api:8000/= and the MCP verifier sees a non-200, silently fails
+token validation, and every client gets =invalid_token=.
+
+Fix: every internal httpx call to the API includes
+=X-Forwarded-Proto: https=. Callers that already do this:
+- =ai/lib/api_tools.py= =ApiClient._headers= (and =post_file=, fixed 2026-04-17)
+- =ai/lib/models/career_caddy.py= =APIContext=
+- =ai/lib/usage_reporter.py=
+- =ai/mcp_servers/chat_server.py= =_fetch_user_profile=
+- =ai/mcp_servers/public_server.py= =ApiKeyTokenVerifier.verify_token= (fixed 2026-04-17)
+
+=public_server.py= also runs a =GET /api/v1/healthcheck/= probe at startup
+and crashloops the container on non-200, so a future misconfig fails loudly
+instead of producing silent =invalid_token= errors.
 
 *** OAuth roadmap (Phase 2 — not yet implemented)
 For in-app chat where the agent acts as the logged-in user:
