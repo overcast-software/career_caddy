@@ -198,7 +198,19 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
-
+** TODO Adaptive ScrapeProfile: record failures + auto-demote Tier 0 [api]
+=preferred_tier= never moves and =success_rate= only averages 1.0s in (see
+=api/job_hunting/lib/parsers/job_post_extractor.py:449-491= —
+=_update_scrape_profile= runs only on success). Needed:
+- Call =_update_scrape_profile= on extraction failure too, averaging in =0.0=.
+- When Tier 0 returns but Tier 1+ overrides it (or selectors stop matching),
+  bump a demotion counter; auto-disable Tier 0 for that hostname when the
+  rolling failure rate crosses a threshold.
+- Surface success_rate honestly in the frontend so a bad profile is visible.
+Context: scrape 13 (linkedin.com) hit a "We're logging you in..." interstitial
+and created a hallucinated company+job post; profile still read
+=success_rate: 1.0, scrape_count: 5=.
+** TODO I moved from chat where I told it to scrape to a pending scrape at scrape.show and spinner didn't fire
 ** DONE Logfire instrumentation for chat_server [ai+infra]
 CLOSED: [2026-04-17 Fri]
 chat_server.py never called =logfire.configure= / =instrument_pydantic_ai=,
@@ -309,4 +321,3 @@ Changed to use question model's answers relationship.
 ** DONE scrape error — poller crashes on transient connection errors
 CLOSED: [2026-04-16 Wed]
 Wrapped =poll_once()= in try/except in the main loop so transient =RemoteProtocolError= doesn't crash the poller.
-
