@@ -198,6 +198,19 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** DONE sort=-posted_date puts NULLs first (Postgres default) [api]
+CLOSED: [2026-04-17 Fri]
+=/api/v1/job-posts/?sort=-posted_date= returned rows with
+=posted_date = NULL= ahead of real dates — Postgres defaults to NULLs
+first on DESC. Switched the sort in both list views in =jobs.py= to
+=F(field).desc(nulls_last=True)= / =.asc(nulls_last=True)= so empty
+dates always fall to the end.
+** DONE Login-wall false positive on slow-rendering pages [ai]
+CLOSED: [2026-04-17 Fri]
+=scrape_page= returned =login_wall_detected= on pages that just
+hadn't finished swapping in real content yet. Added a 3× 3s retry
+around =_detect_login_wall= in =ai/mcp_servers/browser_server.py=
+before giving up — matches the existing loading-state retry pattern.
 ** DONE Lightweight JobPost from email + run-scrape on-demand [api+frontend]
 CLOSED: [2026-04-17 Fri]
 [[file:~/.claude/plans/hazy-herding-river.md][Full plan]]
