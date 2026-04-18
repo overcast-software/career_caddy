@@ -49,3 +49,6 @@ make help
 curl -s http://localhost:8000/api/v1/healthcheck/ | python3 -m json.tool
 
 curl -s -X POST http://localhost:8000/api/v1/test-email/ -H "Authorization: Bearer $CC_API_TOKEN" -H "Content-Type: application/json" -d '{"email":"doug@overcastsoftware.com"}'
+
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Api-Key $CC_API_TOKEN" "$CC_API_BASE_URL/api/v1/scrapes/?filter%5Bstatus%5D=hold"
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Api-Key $CC_API_TOKEN" http://localhost:8000/api/v1/scrapes/

@@ -1121,11 +1121,19 @@ The tool could get the json and convert it rather than the api formatting it.
 ***** Logic can hang on the model to decide what to send to chat like wether or not to chime in on a page
 **** Data structure I see is user.profile.onboarding which is a jsonb column
 ****
- * Admin AI Model Configuration [DEFERRED — .env-based for now]
+ * Admin AI Model Configuration [PARTIAL — read-only docs shipped 2026-04-18; runtime DB override deferred]
 :PROPERTIES:
 :CREATED:  [2026-04-13]
+:UPDATED:  [2026-04-18]
 :END:
 Plan for an admin UI to change which AI model each agent uses at runtime.
+
+=/admin/ai-models= page landed [2026-04-18] as a read-only reference: lists
+the 4 live roles (caddy, chat, job_extractor, browser_scraper), their env
+var names, defaults, and restart instructions. No DB, no API, no AI service
+change. The runtime DB-backed override variant (full Option A below) stays
+deferred until we hit a concrete need to switch models without a restart
+(A/B test, cost experiment).
 [[file:todo.org::*admin interface for AI model selection][↑ todo.org]]
 
 ** Motivation

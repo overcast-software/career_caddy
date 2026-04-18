@@ -383,8 +383,22 @@ Tested locally: queue scrape 59, poller scraped + uploaded screenshot, clicked f
 ** TODO Ian Finnis letter                                          :PENDING_APPROVAL:
 [[file:notes.org::*Ian Finnis letter][Considerations → notes.org]]
 
-** TODO admin interface for AI model selection                     :PENDING_APPROVAL:
-[[file:notes.org::*Admin AI Model Configuration][Architecture + trade-offs → notes.org]]
+** DONE admin interface for AI model selection (read-only docs)   :APPROVED:
+CLOSED: [2026-04-18 Fri]
+[2026-04-18 frontend] Shipped =/admin/ai-models= as a read-only reference
+page: 4 agent roles (caddy, chat, job_extractor, browser_scraper), their
+env var names, defaults, and restart instructions. Added "AI Models" link
+to the admin subnav across 9 templates. No backend work.
+[[file:notes.org::*Admin AI Model Configuration][Partial status → notes.org]]
+
+** TODO AI Models admin — runtime DB override (revisit)          :PENDING_APPROVAL:
+[[file:notes.org::*Admin AI Model Configuration][Full architecture → notes.org]]
+Follow-on to the read-only page shipped [2026-04-18]. DB-stored configs
++ 30s TTL cache in AI service + live admin UI. Don't start until there's
+a concrete need to switch models without a restart (A/B test, cost
+experiment, etc.). Also requires refactoring agents to call
+=get_model(role)= per-request instead of at module import time — see
+=ai/agents/career_caddy_agent.py:185= for the current caching pattern.
 
 ** TODO omarchy theme integration
 [[file:notes.org::*Color Palette System][Omarchy integration roadmap → notes.org]]

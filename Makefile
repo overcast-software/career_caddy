@@ -65,8 +65,8 @@ pipeline-url: ## Scrape a single job URL  (usage: make pipeline-url URL=https://
 poller: ## Poll for hold scrapes against prod (pass ARGS="--engine chrome --headless")
 	cd ai && uv run caddy-poller $(ARGS)
 
-poller-local: ## Poll for hold scrapes against local dev (localhost:8000)
-	cd ai && CC_API_BASE_URL=http://localhost:8000 uv run caddy-poller $(ARGS)
+poller-local: ## Poll for hold scrapes against local dev (localhost:8000; set CC_API_TOKEN_LOCAL to override prod token)
+	cd ai && CC_API_BASE_URL=http://localhost:8000 CC_API_TOKEN=$${CC_API_TOKEN_LOCAL:-$$CC_API_TOKEN} uv run caddy-poller $(ARGS)
 
 # ── Bootstrap ──────────────────────────────────────────────────────────────
 
