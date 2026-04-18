@@ -84,6 +84,28 @@ Remaining: font adoption from under-construction.html.
 
 * Features — APPROVED (ready to work)
 
+** DONE Security: gate DjangoUserViewSet PATCH/PUT by ownership :APPROVED:SECURITY:
+CLOSED: [2026-04-18 Fri]
+[2026-04-18 api] Account-takeover-class gap: =_upsert= at
+=api/job_hunting/api/views/users.py:437= had no ownership gate, so any
+authenticated user could =PATCH /api/v1/users/{other_id}/= and overwrite
+another account's =password=, =email=, =phone=, =linkedin=, =github=,
+=address=, =links=, =first_name=, =last_name=, =onboarding=. Only
+=is_staff= / =is_active= were gated (they already return 403). Found
+during Agent Wizard review of the Ember-inspector tampering surface.
+
+Fix: added
+=if not request.user.is_staff and user.id != request.user.id: 403=
+at the top of =_upsert=, mirroring the guard =retrieve= has at line 222.
+Tests in =tests/test_user_upsert_ownership.py=: 7 cases covering PATCH
+self, PATCH other (incl. password + onboarding), PUT other, and staff
+override. Reconciles =api/SECURITY_AUDIT.md='s "5 detail actions"
+matrix claim — update/partial_update were missed in the original audit
+scope.
+
+Follow-up (not blocking; own ticket): require current-password
+re-authentication for password change, even when changing your own.
+
 ** TODO revamp scrapes/edit page                                   :APPROVED:
 [[file:notes.org::*Revamp scrapes/edit page][Considerations → notes.org]]
 Use more recent conventions.
@@ -198,6 +220,21 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO dynamic OG tags
+** TODO elicitation fix
+/home/oldbones/Pictures/screenshot-2026-04-18_09-32-36.png
+reference this picture
+elicitation fails.  when I hit confirm the first time, it didn't take me to cover-letters.  instead it prompted me again with a yes no.  I seleted yes and it still didn't take me, it did something completely wrong
+** PROJ Agent Wizard
+[[file:notes.org::*Agent Wizard][Agent Wizard]]
+/plan I got my first feedback on the website and the best thing to plan now is allowing the AI agent to help the user get set up.  There are capabilities that allow the agent to navigate to pages on behalf of the user.  There should be an endpoint the will
+inform how far along the user is to being set up.  The AI will invite the user to let it help her with missing pieces.  The first thing a user needs to do is to import a resume.  the proposed endpoint would tell the Agent this and other things that need being
+spelled out.  this will be referred to as Agent Wizard, or AW for short.  Propose other things that the agent could do to enhance the new user experience.  There needs to be a toggle button to prevent the ai from engaging in this way.  I know of at least two new
+tool, show_resume edit_resume.  The issue was that the very first resume that was imported was unsuccessful and the AI hallucinated bits and pieces.  Me and the new user reviewed it to be bad and I invited them to try another one.  the other resume imported
+beautifully and we were able to continue.  Use that experience as an example of the kinds of interactions AW  will do.  While I'm here, the end user 1. didn't know that the agent was aware of the page she was on and could be engaged with to change her asnwer
+record adn 2. when I explained this, she tried it with cover-letters.show and that tool unfortunetely didn't exist.  We have a todo regarding tooltips and it tangentally fits in to this plan in so far as we are making the webpage better to help new users get a
+footing.  I write this and I get the sense the flash message at the top is not a good way to inform the user of anything other than CRUD responses.   But if the chat bar is closed, we should have a way to inform the user that AW has guidence in that sidebar.  I'm
+thinking a little wiggle at the button, a shimmering, or some animation that will draw the attention to the new user for help.
 ** DONE sort=-posted_date puts NULLs first (Postgres default) [api]
 CLOSED: [2026-04-17 Fri]
 =/api/v1/job-posts/?sort=-posted_date= returned rows with
@@ -345,6 +382,16 @@ CLOSED: [2026-04-16 Wed]
 CLOSED: [2026-04-16 Wed]
 Changed to use question model's answers relationship.
 ** WAIT job-posts.show.questions.show.answer
+** TODO Chat behavior
+I whent to a job-posts.show page.
+I clicked the outbout link to the original job post.
+I ctrl-a ctlr-c on the page to get the contents
+I then went back to career caddy and opened up chat
+I pasted in the content and said, update this job post with the following
+It correctly filled out the data
+but it also made a job-application too.
+It should reasonably consider this scenario that a user is feeding it description data for the job-post as it is necessary for scoring, cover-letters, summaries.  It could infer this without the call to action of "update this job post"
+When it decides that this is the probable course of action it should use elicitation to confirm with the user.
 
 ** DONE scrape error — poller crashes on transient connection errors
 CLOSED: [2026-04-16 Wed]

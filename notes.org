@@ -12,6 +12,13 @@ Track repeated agent errors so patterns are visible and accountable.
 | 2 | 2026-04-15 | frontend | Jumped to coding before fully reading notes.org | "read notes, internalize the lessons" — read the full file before acting |
 | 3 | 2026-04-16 | api | Used =cd= in Bash call for frontend git status | One command per Bash call, use =-C= or absolute paths |
 
+* Scratch file location                                            :IMPORTANT:
+Throwaway scripts, smoke tests, and one-off utilities live under
+=~/Sandbox/scratch/=, NOT =/tmp/=. =/tmp/= is wiped on reboot; =~/Sandbox=
+persists. Applies to docker-cp sources, e2e smoke scripts, pasted payloads,
+generated fixtures, etc. Only use =/tmp/= for files that genuinely live for
+a single tool call (e.g. =cat <<EOF | command=).
+
 * Curriculum gap analysis [ARCHIVED 2026-04-11]
 Archived to [[file:notes_archive.org::*Curriculum gap analysis][notes_archive.org]]. Phase 2 maturity assessment; 6 gaps added to todo.org.
 
@@ -1100,8 +1107,21 @@ Phase 2 (dedicated =ChatAction= model with persistence) deferred until Phase 1 i
 ** Item 7: WebSockets — DEFERRED
 SSE handles streaming + elicitation POST-back. WebSockets would need django-channels + ASGI +
 Redis + Docker changes. Marginal benefit. Revisit only if bidirectional becomes a hard requirement.
-
-* Admin AI Model Configuration [DEFERRED — .env-based for now]
+** Agent Wizard
+:PROPERTIES:
+:ID:       160e2cb2-dcb2-4a71-bd99-2af770a715b7
+:END:
+*** plan notes
+**** Resume api response is incredibly token heavy.  Make an API endpoint to produce markdown like career-data does
+consideration for the other responses as well.
+The tool could get the json and convert it rather than the api formatting it.
+**** Onboarding status (GET) should not be called all the time.  The data should be cashed during the user session.
+***** I see onboard status as an ember model that relevant data can be injected into the chat to help AW.
+***** If an ember model, changes are pushed to the store and we don't need to use the tool to get the data, it can live in the front end and get passed through using known mechanisms
+***** Logic can hang on the model to decide what to send to chat like wether or not to chime in on a page
+**** Data structure I see is user.profile.onboarding which is a jsonb column
+****
+ * Admin AI Model Configuration [DEFERRED — .env-based for now]
 :PROPERTIES:
 :CREATED:  [2026-04-13]
 :END:
@@ -2687,6 +2707,282 @@ stub JobPost fast, let the user browse, scrape on demand.
   Run-scrape button + action
 - =CLAUDE.md= — corrected the stale =job_email_to_caddy.py= pointer to
   =~/Projects/career_caddy_automation= + =mcp.careercaddy.online/mcp=
+
+* Agent Wizard (AW)                                                :APPROVED:
+[[file:todo.org::*Agent Wizard][↑ todo.org]]
+[[file:~/.claude/plans/forgot-to-have-you-ethereal-wigderson.md][Full plan]]
+
+** Why
+First real-user feedback exposed three gaps in new-user onboarding:
+1. Chat agent is page-aware (=page_context= already flows FE→chat server)
+   but the UI gives no hint. User didn't know she could say "update this
+   answer" on =questions.show=.
+2. She tried the same trick on =cover-letters.show= and the agent had no
+   =show_cover_letter= / =edit_cover_letter= tool — failed silently.
+3. First DOCX imported with hallucinated content. Schema validation
+   passed (shape was valid) but fields were invented. Only survived
+   because a human operator reviewed and re-imported a clean DOCX.
+
+AW is the product response: chat proactively invites new users to let
+it walk them through setup, with a built-in review/retry loop on resume
+import.
+
+** Data model — single JSONB blob on Profile
+- =Profile.onboarding= (=SafeJSONField=, default ={}=) is the source of
+  truth.
+- Shape:
+  #+begin_src json
+  {
+    "wizard_enabled": true,
+    "profile_basics": false,
+    "resume_imported": false,
+    "resume_reviewed": false,
+    "first_job_post": false,
+    "first_score": false,
+    "first_cover_letter": false
+  }
+  #+end_src
+- =wizard_enabled= lives *inside* the same blob — no separate
+  BooleanField. One PATCH updates everything with one write.
+- *No new field on =Resume=.* An earlier draft added =reviewed_at=;
+  rejected because the review state is per-user onboarding, not a resume
+  attribute. =resume_reviewed= is set by the chat server after the
+  conversational review confirms extraction quality.
+
+** Session cache — Ember model + reactive service
+- =user.onboarding= is a regular Ember model =@attr('object')=. Loaded
+  once per session with the user record.
+- New =frontend/app/services/onboarding.js=:
+  - Getters: =wizardEnabled=, =checklist=, =guidanceAvailable=,
+    =nextAction=.
+  - =chimeInOnPage(routeName)= — rule table for whether AW should
+    volunteer on a given route.
+  - =snapshotForChat()= — compact JSON shipped on every chat POST.
+  - =subscribeToStore()= — on =didCreateRecord= / =didSaveRecord=:
+    - First =Resume= save → tick =resume_imported=.
+    - First =JobPost= save with =createdBy == currentUser= → tick
+      =first_job_post=.
+    - First =Score= save → tick =first_score=.
+    - First =CoverLetter= save → tick =first_cover_letter=.
+    - Profile save with first_name + last_name + email all non-empty →
+      tick =profile_basics=.
+  - =markCompleted(key)= flips the bit and PATCHes the user.
+- Chat NEVER calls a =get_onboarding_status= tool. The service's
+  snapshot is injected into the chat POST body alongside =page_context=
+  at =frontend/app/services/chat.js=. Chat server reads it from the
+  request body — zero DB round-trips per chat turn.
+
+** Markdown endpoints — token-efficient resource views
+- Resume JSON is token-heavy. Reuse =ApplicationPromptBuilder._resume_text=
+  which already renders via =templates/resume_markdown.j2=.
+- New endpoints:
+  - =GET /api/v1/resumes/{id}/markdown/=
+  - =GET /api/v1/cover-letters/{id}/markdown/=
+- *Response format*: raw =text/markdown; charset=utf-8= body — NOT
+  JSON:API. Picked over =career_data='s non-compliant ={"data": "<md>"}=
+  shape because (a) =career_data='s envelope violates JSON:API spec (a
+  bare string isn't a resource object), (b) a synthetic
+  =resume-markdown= type would pollute the Ember store with a fake
+  resource, (c) content negotiation keeps every JSON endpoint
+  spec-compliant and the markdown route honest about what it returns.
+  Error responses still use the JSON:API error envelope.
+- *Alternative considered*: render markdown inside the tool (Python).
+  Rejected because (a) the view is useful outside chat (logfire, admin
+  tooling), (b) serialization logic belongs next to the data.
+- Location: views in =api/job_hunting/api/views/markdown.py=. Cover
+  letter header is rendered inline (small); resumes reuse the existing
+  =_resume_text= helper.
+- *Follow-up*: =career_data= returns the same non-compliant shape —
+  migrate it to =text/markdown= + matching client update in a separate
+  PR.
+
+** New agent tools (register in =ai/lib/toolsets.py= → =career_caddy= scope)
+- =show_resume(resume_id)= — GETs markdown endpoint.
+- =edit_resume(resume_id, patch)= — PATCH =/resumes/{id}/=.
+- =show_cover_letter(id)= — GETs markdown endpoint.
+- =edit_cover_letter(id, patch)= — PATCH =/cover-letters/{id}/=.
+- =import_resume_from_url(url)= — wraps =POST /resumes/ingest/= (local
+  uploads still use the UI; this is for URL/programmatic handoffs).
+- =edit_profile_onboarding(patch)= — PATCHes =user.profile.onboarding=.
+  Used to flip =resume_reviewed= after review, or =wizard_enabled= when
+  the user asks AW to stop.
+- *No* =get_onboarding_status= tool — snapshot arrives in the request
+  body.
+
+** AW behavior rules (in =ai/mcp_servers/chat_server.py= system prompt)
+- If =wizard_enabled == false=: never volunteer onboarding advice.
+- If =guidance_available == true= AND incoming message is a greeting or
+  "what should I do?": open with a one-sentence invitation + first
+  incomplete step, then wait for consent.
+- After any =import_resume= flow: *always* call =show_resume=, narrate
+  what was extracted, ask "Does this look right?". This is the
+  hallucinated-import catch.
+- If user says "no, that looks wrong": suggest trying another file; do
+  not hand-fix hallucinations.
+- If user says "stop giving advice" / "stop helping":
+  1. Offer: "I can turn off the wizard, or open settings so you can
+     toggle it yourself."
+  2. "turn it off" → =edit_profile_onboarding({wizard_enabled: false})=.
+  3. "take me there" → emit navigate HTML comment to
+     =/settings/profile/edit=.
+- After the review confirms "looks right": call
+  =edit_profile_onboarding({resume_reviewed: true})=.
+
+** Attention cue
+- Shimmer + dot badge on the chat button when
+  =onboarding.guidanceAvailable && !chat.chatOpen=.
+- Tailwind keyframe =animate-shimmer= (gradient sweep L→R, ~2s) added in
+  =frontend/app/styles/app.css=. Guarded by =@media
+  (prefers-reduced-motion: no-preference)=. Reduced-motion users get the
+  dot only.
+- Wiggle rejected (motion-sickness risk); reconsider only if usability
+  testing shows shimmer is missed.
+- Flash messages deliberately *not* used — =ember-cli-flash= is CRUD
+  feedback only.
+
+** Opt-out
+- =settings/profile/edit= — append a labeled checkbox bound to
+  =user.onboarding.wizard_enabled=. Reuse existing dirty-save flow at
+  =settings/profile/edit.js:48-73=.
+- Also reachable from chat by telling AW to stop.
+
+** Rejected / deferred
+- Per-field Profile columns for each onboarding step (too much migration
+  churn; JSONB is right for this).
+- =Resume.reviewed_at= field (onboarding state, not resume state).
+- Frontend polling of onboarding endpoint every chat turn (snapshot is
+  cached + reactive).
+- Server-pushed onboarding updates for multi-device (next user fetch
+  converges; good enough for v1).
+- Heuristics inside =IngestResume= to auto-flag bad extractions
+  (deferred to the conversational review step for v1).
+- Flash channel for AW guidance (wrong UX — flashes are transient CRUD).
+- Wiggle animation.
+- =show_question= / =show_score= / =edit_answer= / =show_summary= — add
+  when the next "missing tool" moment surfaces.
+
+** Files touched (critical path)
+*** api/
+- =job_hunting/models/profile.py= — add =onboarding = SafeJSONField(...)=.
+- =job_hunting/migrations/0048_profile_onboarding.py=.
+- =job_hunting/api/serializers.py= — expose =onboarding= on
+  =UserSerializer= (embedded, read/write).
+- =job_hunting/api/views/markdown.py= — new function views.
+- =job_hunting/lib/markdown/resume_markdown.py= — new.
+- =job_hunting/lib/markdown/cover_letter_markdown.py= — new.
+- =job_hunting/urls.py= — two new routes.
+
+*** ai/
+- =ai/lib/api_tools.py= — six new tool functions.
+- =ai/lib/toolsets.py= — register in =TOOL_REGISTRY= + =career_caddy=
+  scope.
+- =ai/mcp_servers/chat_server.py= — accept =onboarding= in request body,
+  inject into system prompt, add AW behavior rules.
+
+*** frontend/
+- =frontend/app/models/user.js= — add =onboarding= object attr.
+- =frontend/app/services/onboarding.js= — new reactive service.
+- =frontend/app/services/chat.js= — inject onboarding snapshot into
+  POST.
+- =frontend/app/components/main-application.{js,hbs}= — shimmer + dot.
+- =frontend/app/controllers/settings/profile/edit.{js,hbs}= — toggle.
+- =frontend/app/styles/app.css= — =animate-shimmer= keyframe.
+
+** Verification end-to-end (hallucinated-resume repro)
+1. Fresh user. Log in. Expect shimmer + dot on chat button.
+2. Open chat. AW greets with "Want help getting set up? First step:
+   import a resume."
+3. Upload known-bad DOCX. AW calls =import_resume_from_url= or watches
+   UI-driven upload, then =show_resume=, narrates extraction, asks
+   "Does this look right?"
+4. Respond "no." AW suggests trying another file. =resume_reviewed=
+   stays false.
+5. Upload clean DOCX. AW narrates, confirms. User "yes." AW flips
+   =resume_reviewed=.
+6. Reactive service ticks other items as records are created.
+7. "Stop giving advice." AW offers toggle; user "turn it off." Flag
+   flips; shimmer disappears.
+8. Re-enable in settings. Shimmer returns until last step done.
+9. =cover-letters.show/:id=: "make this more formal." Agent calls
+   =edit_cover_letter= (previously missing). Save succeeds.
+
+** Architecture refinement — step B: dedicated onboarding sub-agent
+Original plan was one chat prompt that grew a ~100-line AW block. Under
+=openai:gpt-4o-mini= the big prompt caused: false refusals to share the
+user's own email/last-name, "barreling through all 6 steps" when only
+one was expected, false-success narration after silent no-op PATCHes,
+and generic "I'll help you fill in your name" offers when writing user
+account fields is explicitly forbidden.
+
+Fixes landed:
+1. *Model swap* — =CHAT_MODEL=anthropic:claude-haiku-4-5= (our own
+   =ai/CLAUDE.md= recommendation; =.env= hadn't overridden the compose
+   default). Haiku follows negative rules and cross-references data
+   blocks much more reliably than 4o-mini.
+2. *Agent delegation (pydantic-ai agent-as-tool pattern)* —
+   =agents/onboarding_agent.py= holds the dedicated sub-agent with its
+   own tight system prompt + 5-tool scope. Main chat exposes a single
+   =ask_onboarding_wizard(user_message)= tool
+   (=lib.toolsets.onboarding_delegation_toolset=) and returns the
+   sub-agent's output verbatim (preserving navigate markers).
+3. *Scope split* — new =main_chat= scope excludes
+   =reconcile_onboarding=, =edit_profile_onboarding=,
+   =import_resume_from_url=. Sub-agent owns those. This forces the main
+   agent to delegate for onboarding instead of doing it itself badly.
+4. *Per-turn context via deps* — =CareerCaddyDeps= now carries
+   =user_profile=, =onboarding=, =page_context=. The delegation tool
+   reads them from =ctx.deps= and passes to the sub-agent, so the
+   sub-agent's prompt can be built without re-fetching anything.
+5. *User-profile rendering* — =_fetch_user_profile= now emits every
+   field on its own line (=First name: Remi=, =Last name: (blank)=,
+   etc.) so the sub-agent can name specific missing fields instead of
+   guessing. Derived =profile_basics= is computed at read time in the
+   serializer too, so fresh users don't land with an all-false snapshot.
+6. *Cost-saving reconcile rule* — sub-agent only calls
+   =reconcile_onboarding= when a snapshot =false= key is contradicted
+   by =page_context= or a tool result, OR the user explicitly asks
+   about progress. =true= values are always trusted (no drift from
+   true→false via this layer).
+7. *Ownership gate fix* — found during Ember-inspector audit that
+   =DjangoUserViewSet._upsert= had no ownership gate; any authenticated
+   user could PATCH another user's password/email/profile. Fixed +
+   regression tests in =test_user_upsert_ownership.py=. Reconciles
+   =api/SECURITY_AUDIT.md='s "5 detail actions" claim.
+8. *Shimmer trigger* — originally driven by =guidanceAvailable=; user
+   flagged that shimmering when the chat is empty makes no sense.
+   Rewired to =chat.hasUnread= (set on SSE =done= when sidebar is
+   closed, cleared on toggle). Step C (proactive greet on route
+   change) will make this meaningful by pre-seeding an assistant
+   message.
+
+Decided NOT to do:
+- Give AW a tool to edit user account fields (=first_name=,
+  =last_name=, =email=). User said it feels intrusive. Sub-agent
+  navigates to =/settings/profile= and lets the user fill in.
+- Frontend auto-reconcile on session start. Step B's prompt-side
+  mismatch detection catches drift when it matters; avoids a per-login
+  write.
+
+Deferred to step C (separate ticket):
+- Proactive route-change greeting: when the user lands on a page where
+  AW could help, invoke the sub-agent in the background, display its
+  response as an assistant-only message in chat, trigger =hasUnread=.
+  Needs a new =/proactive-greet= endpoint on chat_server + per-route
+  debounce in =services/onboarding.js= + =SKIP= sentinel handling.
+
+Tests added this session:
+- =api/tests/test_profile_onboarding.py= (9) — JSONB default shape,
+  PATCH merge, wizard disable.
+- =api/tests/test_markdown_endpoints.py= (12) — resume + cover-letter
+  markdown, ownership gate, auth.
+- =api/tests/test_user_upsert_ownership.py= (7) — regression guard for
+  PATCH ownership.
+- =api/tests/test_onboarding_reconcile.py= (8) — reconcile behavior.
+- =ai/tests/test_tools_agent_wizard.py= (11) — AW HTTP tools.
+- =ai/tests/test_chat_agent_wizard.py= (10) — main-chat delegation
+  rule + gate.
+- =ai/tests/test_onboarding_agent.py= (17) — sub-agent scope, prompt
+  content, registration.
 
 * Scratch / Working Notes
 Ephemeral notes during active development. Prune or promote into a proper section before shipping.
