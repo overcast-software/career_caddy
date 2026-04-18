@@ -84,6 +84,239 @@ Remaining: font adoption from under-construction.html.
 
 * Features — APPROVED (ready to work)
 
+** DONE Elicitation action buttons act directly, not round-trip chat :APPROVED:
+CLOSED: [2026-04-18 Fri]
+[2026-04-18 ai+frontend] Landed as a single change this session.
+Three action shapes now supported by =ChatMessageComponent.runAction=;
+agent prompts (main chat + onboarding sub-agent) updated to prefer
+the zero-LLM variants.
+
+Shapes emitted by the agent:
+- ={"label": "...", "navigate": "/path"}= → =router.transitionTo= (no LLM turn)
+- ={"label": "...", "model": {"type": T, "id": N, "patch": {...}}}=
+  → =store.peekRecord(T, N).setProperties(patch).save()= via a
+  per-type allow-list in =message.js= (resume/cover-letter/answer/
+  job-post: favorite only + a few safe sibling fields; user:
+  onboarding sub-keys only). Unknown types / disallowed keys are
+  dropped silently.
+- ={"label": "...", "message": "..."}= → existing chat turn (legacy)
+
+Rolled out to ALL users, not just staff — per product decision this
+is the desired UX.
+
+Follow-ups (if we hit them):
+- Warning toast when an agent emits an unsupported patch so we can
+  tighten the prompts without silent drops.
+- Analytics on which action shape the agent picks most often, to
+  calibrate prompt tightness.
+
+** TODO Deep-link navigate targets into resume edit form (anchors)  :APPROVED:
+[2026-04-18 ai+frontend] Follow-on from the "no editing linked
+resources via chat" decision. When chat sends a user to
+=/resumes/{id}/edit= to fix something, it currently drops them at
+the top of a long form. Better: deep-link to the specific field.
+
+Three options (cheapest → richest):
+1. *Hash-fragment scroll* — render =id="experience-{id}"= (and similar
+   anchors for education / certification / project) on each card in
+   =resumes/edit.hbs=. Agent emits
+   ={navigate: "/resumes/39/edit#experience-128"}=; browser scrolls.
+   Minimal change; no Ember focus logic.
+2. *Query-param focus* — =?focus=experience-128.title= on the edit
+   route. Route handler expands the matching panel + calls =.focus()=
+   on the target input after render. Needs a small helper mapping
+   =resource.field= → DOM input id.
+3. *Field-level anchors* — =#experience-128-title=, =#education-77-
+   degree=, etc. Hybrid of (1) and (2). Agent already knows the
+   resource id and field name from =show_resume= markdown.
+
+Prompt surface: teach the agent "when user wants to change an
+experience field, emit
+={navigate: '/resumes/{r}/edit?focus=experience-{e}.{field}'}=";
+edit route handles the rest. No new tools.
+
+Disambiguation risk: if the user says "change my title at RHI" and
+has two Robert Half experiences, the agent still has to pick. Same
+problem as today — this TODO is about delivery, not selection.
+
+Value:
+- User edits themselves → fewer silent-overwrite bugs like the
+  OFFICE BADASS incident.
+- Deep-link IS the teaching moment; next time they know where the
+  form lives.
+- Zero new chat tools to maintain.
+
+** DONE Chat: no editing linked resume resources; disambiguate "title" :APPROVED:
+CLOSED: [2026-04-18 Fri]
+[2026-04-18 ai] Surfaced when user said "change my title in RHI to
+OFFICE BADASS" on a resume page. The agent called
+=edit_resume(resume_id=39, title="OFFICE BADASS")= — which OVERWROTE
+the resume's top-level label field. User meant the job title inside
+the Robert Half International experience (a linked record), not the
+resume's own label.
+
+Product decision: editing linked resume resources (experiences,
+educations, certifications, projects, descriptions, skills) from
+chat is DISCOURAGED. Those are structured records that belong in the
+resume form UI, where ordering / date reconciliation / company links
+work correctly. Chat should navigate the user there, not attempt
+the edit itself.
+
+Fixes landed this session:
+- =ai/lib/api_tools.py::edit_resume= docstring now hard-states
+  "top-level only; do not use for experiences". Also: disambiguate
+  before calling when the user's phrasing could mean either.
+- Main chat =SYSTEM_PROMPT= got a new "Linked resume resources are
+  NOT editable via chat" section with the same rules + a pointer
+  to use =navigate= actions to send the user to =/resumes/{id}=.
+- No new =edit_experience= tool — deliberately NOT adding one.
+
+** TODO Agent understanding of Career Data (aggregated, not a form) :APPROVED:
+[2026-04-18 ai] Hit during AW e2e: user asked AW what to do next and
+the agent said "upload or create a Resume... go to your Career Data
+page to start building your profile." Career Data is NOT a
+fill-in-the-form resource — it's a READ-ONLY aggregated view
+assembled from the user's FAVORITED resumes, cover letters, and
+Q&A answers. The user doesn't "go to Career Data and add things";
+they go to /resumes (or /cover-letters or /answers), create/edit
+there, and star the good ones.
+
+Fix landed in the main chat SYSTEM_PROMPT's App Guide entry for
+Career Data this session. Still TODO:
+- Audit other places in the codebase / docs that imply "fill in
+  Career Data" and correct. Grep for =career-data= in docs/.
+- Verify AW sub-agent prompt is consistent (it doesn't currently
+  discuss Career Data but if we expand its scope, apply the same
+  rule).
+- Consider: when the sub-agent's =snapshotForChat= says all
+  onboarding is done, the main chat has no stored "what's next?"
+  rubric and hallucinates advice. Better to define a small
+  post-onboarding progression (e.g. "you have N resumes; favorite
+  the current one so Career Data picks it up; then add a job post")
+  and embed it as an App Guide section the agent can quote.
+
+** TODO Deprecate synchronous browser-MCP scrape; poller is the one true path :APPROVED:
+[2026-04-18 api+ai] Surfaced during AW e2e. When the user asked the
+chat agent to "scrape this LinkedIn URL", the API tried a direct
+=POST http://localhost:3012/scrape_job= and failed with
+=ConnectionError= because the browser-MCP service wasn't running — we
+run hold-pollers now, not browser-MCP.
+
+The synchronous-scrape path is legacy. The hold-poller pattern is the
+supported architecture: scrape records are created with =status="hold"=,
+the poller picks them up, extracts, and updates the record. No direct
+HTTP-to-scrape-service calls needed.
+
+Tasks:
+- [ ] Find every call site that hits =localhost:3012= / the scrape
+  service directly. Likely candidates: some scrape action on the
+  ScrapeViewSet, a retry path, an extract path. Grep for =3012= and
+  =scrape_job=.
+- [ ] Replace each with the hold-poller pattern: create/update the
+  scrape with =status="hold"=, return 202, and let the poller handle
+  it. Already the path =create_scrape= takes on new scrapes; bring
+  legacy triggers into line.
+- [ ] Remove the browser-MCP SSE server from =docker-compose.yml= (or
+  flag it as optional-not-recommended). Currently lives at port 3004;
+  the 3012 call may be a different legacy listener — audit.
+- [ ] Update =ai/CLAUDE.md= to state that the hold-poller is the only
+  supported scrape path. Mark the synchronous scrape API as deprecated
+  there.
+- [ ] Update AW behavior (and main chat) so "scrape this URL" produces
+  a =create_scrape(url=..., status="hold")= + "Queued for scraping,
+  the poller will pick it up" reply. No synchronous wait, no localhost
+  call.
+- [ ] Remove legacy browser-MCP client code once no callers remain.
+
+** TODO Main chat: "intent announced, tool skipped" (systemic) :APPROVED:
+[2026-04-18 ai] Recurring pattern on haiku-4-5 in the main chat: model
+emits "I'll check X" / "I'll create Y" / "Let me look that up" — then
+the turn ends with no tool call. Step B already fixed this for
+onboarding by forcing delegation. Remaining examples seen in e2e:
+- User pasted LinkedIn job markup, AW said "I'll create the job post"
+  → no POST to =/api/v1/job-posts/=.
+- User asked "what should I do next?" with all onboarding steps done
+  (no AW block injected) → "I'll check what job posts you have"
+  → no =get_job_posts= call.
+
+Both hit the same systemic gap: the main chat prompt tells the agent
+*what* to do but doesn't force *how*. Negative-rules-in-a-big-prompt
+continues to be the weakness.
+
+Candidate fixes (pick one, not all):
+1. *Tightened tool-use directive at the top of SYSTEM_PROMPT*, similar
+   to the AW delegation rule: "When you say 'I'll check X' or 'I'll
+   create Y', you MUST have called the corresponding tool in THIS
+   turn. If you don't call it, don't announce it."
+2. *Job-post creation sub-agent* (mirrors step B): a dedicated
+   pydantic-ai agent owns the pasted-text → structured extraction →
+   create flow, with a tight prompt and 3 tools. Main chat delegates
+   via a =create_job_post_from_text= delegation tool. Worth it if we
+   expect users to paste job descriptions routinely.
+3. *Just-in-time prompt rider*: when the user message exceeds N chars
+   OR contains job-post-like keywords (title / salary / location),
+   _build_system_prompt adds a focused "MUST extract and call
+   create_job_post_with_company_check" stanza.
+
+Order of attack: try #1 first (cheap, 5-line prompt tweak). If
+pasted-text creates still skip the tool call, escalate to #2.
+
+** TODO AW: navigate on intent, don't just instruct                :APPROVED:
+[2026-04-18 ai+frontend] Hit during Agent Wizard e2e: AW says "Head
+over to Job Postings to add a job post" without emitting a navigate
+marker or a clickable link. The user still has to find the page. Two
+concrete gaps:
+
+1. When the user signals intent ("I want to add a job post", "take
+   me to my resume", "show me cover letters"), the sub-agent should
+   emit =<!-- navigate:/path -->= AND include a visible markdown
+   link — not describe where to go. The onboarding_agent.py prompt
+   already has this rule but the model skipped it here.
+
+2. Elicitation action buttons currently round-trip a chat message
+   back to the agent. "Add a job post" as an action label becomes a
+   new user turn that AW interprets, instead of navigating directly.
+   The elicitation payload should support an optional =navigate=
+   field so a button can transition the route without consuming an
+   LLM turn — cheaper and instant.
+
+Tasks:
+- [ ] Tighten =onboarding_agent.py= prompt: "When the user signals
+  intent to go somewhere OR you're describing a page they should
+  use, you MUST emit =<!-- navigate:/path -->= in the response AND
+  include the matching =[label](/path)=. Don't say 'Head over to X'
+  with no link."
+- [ ] Extend elicitation JSON schema in the main chat prompt to
+  accept ={"label": "...", "navigate": "/path"}= in addition to the
+  existing ={"label": "...", "message": "..."}= form. The frontend
+  =services/chat.js= handler should call =router.transitionTo= on
+  navigate-typed actions instead of =sendMessage=.
+- [ ] Regression test: after a "take me to X" turn, assert a
+  navigate marker is present in the sub-agent's response.
+
+** TODO Accept PDF resumes in ingest pipeline                      :APPROVED:
+[2026-04-18 ai+api] Hit during Agent Wizard e2e: AW routes the user to
+import a resume, but =POST /api/v1/resumes/ingest/= +
+=IngestResume.extract_text_from_docx= only handle DOCX. AW currently
+has to ask the user for "a DOCX URL" which is unrealistic — most
+resumes live as PDFs.
+
+Tasks:
+- [ ] Detect content type on upload (=application/pdf= vs =...document=).
+- [ ] Add a PDF text-extraction path in =IngestResume=. Options:
+  (a) =pypdf= / =pdfplumber= for text-selectable PDFs,
+  (b) =docling= (already a Camoufox dep?) for layout + OCR fallback,
+  (c) =pdf2image= + tesseract for scanned PDFs.
+  Probably (a) first with (b)/(c) as fallback when empty extraction.
+- [ ] Update =ParsedResume= / =IngestResume.process= to stream PDF
+  text into the same pydantic-ai extraction step as DOCX.
+- [ ] Frontend: accept =.pdf= in the upload input's =accept=.
+- [ ] AW sub-agent prompt: update the import step wording so it
+  doesn't suggest "DOCX only" — should be neutral ("upload a PDF or
+  DOCX").
+- [ ] Regression test: ingest a PDF fixture, assert structured
+  =ParsedResume= output matches expectation.
+
 ** DONE Security: gate DjangoUserViewSet PATCH/PUT by ownership :APPROVED:SECURITY:
 CLOSED: [2026-04-18 Fri]
 [2026-04-18 api] Account-takeover-class gap: =_upsert= at
@@ -220,6 +453,9 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO upload button for resume should change when uploading.  I think it's disabled but it should refelct that something is working.
+** TODO when resume is done importing remove the file from the upload form
+** TODO need ability to remove upload file selection.  right now requires refresh.
 ** TODO dynamic OG tags
 ** TODO elicitation fix
 /home/oldbones/Pictures/screenshot-2026-04-18_09-32-36.png
@@ -396,3 +632,6 @@ When it decides that this is the probable course of action it should use elicita
 ** DONE scrape error — poller crashes on transient connection errors
 CLOSED: [2026-04-16 Wed]
 Wrapped =poll_once()= in try/except in the main loop so transient =RemoteProtocolError= doesn't crash the poller.
+
+** TODO upload button for resume should change when uploading.  I think it's disabled but it should refelct that something is working.
+** TODO when resume is done importing remove the file from the upload form

@@ -2984,5 +2984,97 @@ Tests added this session:
 - =ai/tests/test_onboarding_agent.py= (17) — sub-agent scope, prompt
   content, registration.
 
+** Tool-call visibility in chat (staff-only, first step toward AG-UI)
+[2026-04-18 ai+frontend]
+
+*** Why
+Step B fixed onboarding delegation but haiku still occasionally emits
+"I'll check X" text without calling a tool. The user has no signal
+that the agent is actually doing anything vs. just talking. Our SSE
+was text-only; tool calls happened silently server-side.
+
+*** Reference — pydantic-ai AG-UI integration
+pydantic-ai ships an AG-UI adapter that streams a richer SSE event
+stream with explicit tool-call events. Their chat UI example renders
+each tool invocation as a visible step so users (and developers) can
+see exactly what the agent did.
+
+Docs we consulted:
+- [[https://ai.pydantic.dev/ui/ag-ui/][Pydantic AI AG-UI integration]]
+- [[https://ai.pydantic.dev/examples/ag-ui/][Pydantic AI AG-UI example]]
+- [[https://docs.ag-ui.com/concepts/events][AG-UI event types reference]]
+- [[https://docs.ag-ui.com/introduction][AG-UI protocol overview]]
+- [[https://ai.pydantic.dev/agent/][Pydantic AI agent.iter() / node.stream() API]]
+
+AG-UI event types relevant to us (shapes at
+=docs.ag-ui.com/concepts/events=):
+- Lifecycle: =RunStarted=, =RunFinished=, =RunError=, =StepStarted=,
+  =StepFinished=
+- Text: =TextMessageStart=, =TextMessageContent=, =TextMessageEnd=,
+  =TextMessageChunk=
+- Tools: =ToolCallStart=, =ToolCallArgs=, =ToolCallEnd=,
+  =ToolCallResult=, =ToolCallChunk=
+- State: =StateSnapshot=, =StateDelta=, =MessagesSnapshot=
+- Reasoning: =ReasoningStart=, =ReasoningMessageContent=, …
+
+Each event has a correlation id (=toolCallId=, =messageId=) so the
+frontend can update in-place as chunks arrive.
+
+*** What we shipped (incremental)
+Not a full AG-UI adoption — just two new event types on our existing
+handcrafted SSE so staff can see tool activity. Matches pydantic-ai's
+intent without forcing a frontend migration.
+
+Server (=ai/mcp_servers/chat_server.py=): switched =_stream_once= from
+=agent.run_stream().stream_text()= to =agent.iter()= +
+=node.stream()=. Walks the node graph:
+- =Agent.is_model_request_node(node)= → iterate =PartDeltaEvent=,
+  =PartStartEvent=. =TextPartDelta= becomes =text= SSE. Track
+  =tool_call_id= → =tool_name= from =PartStartEvent= (some models
+  carry the name there before the tool node).
+- =Agent.is_call_tools_node(node)= → iterate =FunctionToolCallEvent=
+  (emit =tool_call_start= with id/name/args) and
+  =FunctionToolResultEvent= (emit =tool_call_end= with id/name/
+  truncated content, also fire =reload= here if the tool maps to a
+  reloadable resource — earlier we ran the reload pass after the
+  stream, now it's inline right after the tool succeeds).
+
+=all_messages()= / =new_messages()= / =usage()= are read from
+=run.result= after the =async for node in run:= loop exits.
+
+Frontend:
+- =app/services/chat.js= — new SSE cases =tool_call_start= (appends to
+  the current assistant message's =toolCalls= array) and
+  =tool_call_end= (finds by id, marks done, attaches truncated
+  result). New helpers =_updateLastMessage=, =_appendToolCall=,
+  =_finishToolCall=.
+- =app/components/chat/message.{js,hbs}= — renders a tool-call
+  breadcrumb strip above the assistant bubble, gated by
+  =currentUser.user.isStaff=. Each call shows a pulsing dot (pending)
+  or check mark (done) + the tool name.
+
+*** Why staff-only for now
+User wants to validate the UX as a staff member before rolling out.
+If it reads as useful rather than noisy, we flip the gate and show
+it to everyone. Flipping is a one-line change in
+=chat/message.js::showToolCalls=.
+
+*** Deferred
+- Full AG-UI migration is queued for AFTER the onboarding Agent Wizard
+  reaches a solid place. Path: swap handcrafted SSE for
+  =AGUIAdapter.streaming_response()=, rewrite =services/chat.js= SSE
+  parser to the AG-UI event vocabulary. Payoff: compatibility with
+  CopilotKit and other AG-UI frontends; no hand-rolled protocol to
+  maintain.
+- Streaming tool-call ARGS (not just start/end) — AG-UI's
+  =ToolCallArgs= delta events. Haiku emits these via
+  =ToolCallPartDelta= in the model-request node stream, but for
+  short-arg tools the extra fidelity isn't worth the SSE bytes yet.
+- Surfacing sub-agent tool calls (the Agent Wizard's internal
+  =reconcile_onboarding= etc.) at the main-chat level. Today those
+  fire inside the nested =run_onboarding_agent= and are invisible to
+  the parent's =iter= stream. When we need nested visibility we'll
+  plumb the parent's event handler down.
+
 * Scratch / Working Notes
 Ephemeral notes during active development. Prune or promote into a proper section before shipping.
