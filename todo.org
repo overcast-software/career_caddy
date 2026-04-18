@@ -391,6 +391,17 @@ env var names, defaults, and restart instructions. Added "AI Models" link
 to the admin subnav across 9 templates. No backend work.
 [[file:notes.org::*Admin AI Model Configuration][Partial status → notes.org]]
 
+** IN_PROGRESS AG-UI chat migration [phase 1 landed]              :APPROVED:
+:PROPERTIES:
+:STARTED:  [2026-04-18 ai]
+:END:
+[[file:notes.org::*AG-UI migration — phased rollout][Plan → notes.org]]
+Phase 1 shipped [2026-04-18]: =ai/lib/elicitation_tool.py= +
+=test_elicitation_tool.py= (18 tests). =propose_actions= tool is
+defined, validated, and isolated — not yet wired into the chat agent.
+Phases 2–4 (server /chat rewrite, frontend parser, prompt edits +
+regression tests) still to do.
+
 ** TODO AI Models admin — runtime DB override (revisit)          :PENDING_APPROVAL:
 [[file:notes.org::*Admin AI Model Configuration][Full architecture → notes.org]]
 Follow-on to the read-only page shipped [2026-04-18]. DB-stored configs
@@ -461,6 +472,7 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO the flash notification text is in the center of it's div, but with a sidebar open it looks weird when the title is in the true center
 ** TODO delete resume produced :bug:
 the resume was a failed pdf import
 Error occurred:

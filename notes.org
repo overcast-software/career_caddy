@@ -3067,13 +3067,64 @@ If it reads as useful rather than noisy, we flip the gate and show
 it to everyone. Flipping is a one-line change in
 =chat/message.js::showToolCalls=.
 
-*** Deferred
-- Full AG-UI migration is queued for AFTER the onboarding Agent Wizard
-  reaches a solid place. Path: swap handcrafted SSE for
-  =AGUIAdapter.streaming_response()=, rewrite =services/chat.js= SSE
-  parser to the AG-UI event vocabulary. Payoff: compatibility with
-  CopilotKit and other AG-UI frontends; no hand-rolled protocol to
-  maintain.
+*** AG-UI migration — phased rollout [IN PROGRESS 2026-04-18]
+Approved plan: big-bang swap of server /chat + frontend parser, but
+executed in 4 phases because the combined refactor touches ~1500 lines
+across 5 files.
+
+Mapping used:
+| Custom event    | AG-UI replacement                           |
+|-----------------+---------------------------------------------|
+| text (chunks)   | TextMessageStart/Content/End (by messageId) |
+| tool_call_start | ToolCallStart + ToolCallArgs                |
+| tool_call_end   | ToolCallEnd + ToolCallResult                |
+| reload          | CustomEvent {name: "reload", value: {resource, id}} (injected post-ToolCallEnd for tools in =_TOOL_RELOAD_MAP=) |
+| done            | RunFinished (conversation_id + usage on metadata) |
+| error           | RunError                                    |
+
+pydantic-ai ships =handle_ag_ui_request(agent, request, deps=..., ...)=
+and lower-level =run_ag_ui(agent, run_input, ...)= at
+=pydantic_ai.ag_ui=. Verified present in current lock (>=1.41). Our
+request body shape stays the same server-side (={message, conversation_id,
+token, page_context}=); we translate to =RunAgentInput= server-side to
+avoid forcing the frontend to emit AG-UI's native =RunAgentInput=.
+
+**Phase 1 — LANDED [2026-04-18]**: =propose_actions= tool scaffolding.
+New =ai/lib/elicitation_tool.py= defines an =ElicitationAction= pydantic
+model (exactly-one-of navigate/model/message validator) and a no-op
+=propose_actions(ctx, actions)= tool that validates cardinality (1–3
+actions). Allow-list for the {model} shape mirrored in
+=ALLOWED_MODEL_PATCH_KEYS= as a reference (frontend is still the
+authority at save time). 18 unit tests in
+=ai/tests/test_elicitation_tool.py=. NOT yet registered in any toolset
+or referenced by the chat agent — phase 2 wires it in.
+
+**Phase 2 — TODO**: register =propose_actions= in =lib.toolsets=
+(new =elicitation_toolset()= factory already present). Rewrite
+=chat_server.py= POST /chat to build =RunAgentInput= from our existing
+body shape, call =run_ag_ui(agent, run_input, deps=CareerCaddyDeps(...))=,
+and wrap the output iterator to inject CustomEvent=reload after
+ToolCallEnd events for reload-mapped tools. Delete =_stream_once= and
+the six custom event emitters.
+
+**Phase 3 — TODO**: rewrite =frontend/app/services/chat.js= parser over
+AG-UI event vocabulary. On seeing =propose_actions= ToolCallStart/Args,
+set =message.elicitation= on the in-flight assistant message and skip
+the existing regex in =chat/message.js=. Remove =<!-- navigate:/path -->=
+HTML-comment handling (navigate now goes through =propose_actions=).
+
+**Phase 4 — TODO**: rewrite chat SYSTEM_PROMPT sections for
+"Navigation" (drop HTML comments) and "Action Buttons (Elicitation)"
+(call =propose_actions= tool instead of fenced JSON). Update
+=test_chat_agent_wizard.py= / =test_chat_followup.py= fixtures. New
+frontend unit tests in =frontend/tests/unit/services/chat-test.js=
+covering AG-UI event sequences.
+
+Rollback: revert the merge commit. Frontend parser logs and drops
+unknown events today — a partial swap would just show a stuck spinner,
+not corrupt state.
+
+*** Deferred (post-AG-UI)
 - Streaming tool-call ARGS (not just start/end) — AG-UI's
   =ToolCallArgs= delta events. Haiku emits these via
   =ToolCallPartDelta= in the model-request node stream, but for
