@@ -4,7 +4,7 @@
 :CREATED:  2026-04-07
 :END:
 
-* HOW TO USE THIS FILE (agents: read this first)
+* HOW TO USE THIS FILE (agents: read this first) :IMPORTANT:
 This is the living specification for CareerCaddy development.
 Two agents collaborate here: one in =frontend/=, one in =api/=.
 
@@ -294,28 +294,22 @@ Tasks:
 - [ ] Regression test: after a "take me to X" turn, assert a
   navigate marker is present in the sub-agent's response.
 
-** TODO Accept PDF resumes in ingest pipeline                      :APPROVED:
-[2026-04-18 ai+api] Hit during Agent Wizard e2e: AW routes the user to
-import a resume, but =POST /api/v1/resumes/ingest/= +
-=IngestResume.extract_text_from_docx= only handle DOCX. AW currently
-has to ask the user for "a DOCX URL" which is unrealistic — most
-resumes live as PDFs.
+** DONE Accept PDF resumes in ingest pipeline                      :APPROVED:
+CLOSED: [2026-04-18 Fri]
+[2026-04-18 api+ai+frontend] Added =pypdf>=5.0.0= to =api/pyproject.toml=.
+New =IngestResume.extract_text_from_pdf= uses =pypdf.PdfReader= and the
+new =_extract_text= dispatcher routes by extension so =process()= handles
+both. Ingest endpoint accepts =.pdf= in addition to =.docx=. Frontend hint
++ AW sub-agent + =chat_server= SYSTEM_PROMPT + =import_resume_from_url=
+all updated from "DOCX only / PDF pending" to "DOCX or PDF". 4 new unit
+tests in =test_ingest_resume_pdf.py= stub =sys.modules['pypdf']= so tests
+run without the real dep. 24 ingest tests pass, ruff clean.
 
-Tasks:
-- [ ] Detect content type on upload (=application/pdf= vs =...document=).
-- [ ] Add a PDF text-extraction path in =IngestResume=. Options:
-  (a) =pypdf= / =pdfplumber= for text-selectable PDFs,
-  (b) =docling= (already a Camoufox dep?) for layout + OCR fallback,
-  (c) =pdf2image= + tesseract for scanned PDFs.
-  Probably (a) first with (b)/(c) as fallback when empty extraction.
-- [ ] Update =ParsedResume= / =IngestResume.process= to stream PDF
-  text into the same pydantic-ai extraction step as DOCX.
-- [ ] Frontend: accept =.pdf= in the upload input's =accept=.
-- [ ] AW sub-agent prompt: update the import step wording so it
-  doesn't suggest "DOCX only" — should be neutral ("upload a PDF or
-  DOCX").
-- [ ] Regression test: ingest a PDF fixture, assert structured
-  =ParsedResume= output matches expectation.
+Initially tried =docling= (user's original choice since camoufox depends
+on it), but =docling= pulls =torch + transformers= (~2GB) — unacceptable
+for a text-extraction task. Swapped to =pypdf= (pure Python). If we later
+need OCR for scanned PDFs, revisit with a lazy/optional heavy backend.
+Note: container needs rebuild to pick up pypdf.
 
 ** DONE Security: gate DjangoUserViewSet PATCH/PUT by ownership :APPROVED:SECURITY:
 CLOSED: [2026-04-18 Fri]
@@ -453,16 +447,45 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO delete resume produced :bug:
+the resume was a failed pdf import
+Error occurred:
+
+- While rendering:
+  {{outlet}} for -top-level
+    -top-level
+      {{outlet}} for application
+        application
+          main-application
+            {{outlet}} for resumes
+              resumes
+                {{outlet}} for resumes.edit
+                  resumes.edit
+                    route-layout
+                      builder/section
+                        experiences/list
 ** TODO upload button for resume should change when uploading.  I think it's disabled but it should refelct that something is working.
 ** TODO when resume is done importing remove the file from the upload form
 ** TODO need ability to remove upload file selection.  right now requires refresh.
 ** TODO dynamic OG tags
-** TODO elicitation fix
-/home/oldbones/Pictures/screenshot-2026-04-18_09-32-36.png
-reference this picture
-elicitation fails.  when I hit confirm the first time, it didn't take me to cover-letters.  instead it prompted me again with a yes no.  I seleted yes and it still didn't take me, it did something completely wrong
-** PROJ Agent Wizard
-[[file:notes.org::*Agent Wizard][Agent Wizard]]
+** DONE elicitation fix
+CLOSED: [2026-04-18 Fri]
+Screenshot bug: clicking "Confirm" re-prompted instead of navigating to
+cover-letters. Addressed in 9d92a19 — elicitation actions now act
+directly via =navigate= / =model= / =message= shapes (see DONE item
+"Elicitation action buttons act directly, not round-trip chat").
+** DONE PROJ Agent Wizard
+CLOSED: [2026-04-18 Fri]
+[2026-04-18 api+ai+frontend] Step A+B landed across dd7df3d + 9d92a19.
+Profile.onboarding JSONB + =/onboarding/= endpoint drives a dedicated
+pydantic-ai sub-agent with a 5-tool surface. Main chat delegates
+onboarding questions; Ember =onboarding= service threads the snapshot
+into chat + advances reactively on record saves. Unread-driven shimmer
+on the chat button. Account-takeover fix on =DjangoUserViewSet= PATCH/PUT
+landed in the same review.
+[[file:notes.org::*Agent Wizard][Agent Wizard — architecture + deferred items]]
+Deferred: step C proactive greet, current-password re-auth on password
+change (own SECURITY ticket).
 /plan I got my first feedback on the website and the best thing to plan now is allowing the AI agent to help the user get set up.  There are capabilities that allow the agent to navigate to pages on behalf of the user.  There should be an endpoint the will
 inform how far along the user is to being set up.  The AI will invite the user to let it help her with missing pieces.  The first thing a user needs to do is to import a resume.  the proposed endpoint would tell the Agent this and other things that need being
 spelled out.  this will be referred to as Agent Wizard, or AW for short.  Propose other things that the agent could do to enhance the new user experience.  There needs to be a toggle button to prevent the ai from engaging in this way.  I know of at least two new
