@@ -485,6 +485,9 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO toolbar list of candidates
+*** [ ] filter stubs - explination of stubs
+
 ** DONE when the scrape finishes reload the scrape.job-posts
 CLOSED: [2026-04-19 Sun]
 [2026-04-19 frontend] runScrape's pollable onComplete now calls
