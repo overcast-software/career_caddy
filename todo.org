@@ -493,14 +493,12 @@ and it must resolve that before calling =get_job_posts(id=...)=. Likely
 add a one-liner under "Page-Aware Data Access" or tighten the score
 tools' descriptions.
 
-** TODO /job-posts list sort: add secondary tiebreak by -created_at (or -id) [api]
-[2026-04-18] Flagged when the automation created ~6 posts via LinkedIn
-email at 16:33 PT and they didn't appear on page 1 of /job-posts. Root
-cause: list sorted =-posted_date= only, and same-day posts tie with no
-secondary key, so Postgres returns ties in undefined (index/id-random)
-order. New inserts end up scattered across pages. Fix: add =-created_at=
-(or =-id=) as a secondary =order_by= in =api/job_hunting/api/views/jobs.py=
-=JobPostViewSet.get_queryset= / list sort.
+** DONE /job-posts list sort: deterministic -id tiebreak [api]
+CLOSED: [2026-04-18 Fri]
+[2026-04-18 api] =JobPostViewSet.list= and =JobApplicationViewSet.list=
+append =-id= as implicit final tiebreak when the user's =sort= param
+doesn't include it. Fixes fresh inserts scattering across pages when
+many rows share =posted_date=.
 
 ** TODO the flash notification text is in the center of it's div, but with a sidebar open it looks weird when the title is in the true center
 ** TODO delete resume produced :bug:
@@ -524,178 +522,6 @@ Error occurred:
 ** TODO when resume is done importing remove the file from the upload form
 ** TODO need ability to remove upload file selection.  right now requires refresh.
 ** TODO dynamic OG tags
-** DONE elicitation fix
-CLOSED: [2026-04-18 Fri]
-Screenshot bug: clicking "Confirm" re-prompted instead of navigating to
-cover-letters. Addressed in 9d92a19 — elicitation actions now act
-directly via =navigate= / =model= / =message= shapes (see DONE item
-"Elicitation action buttons act directly, not round-trip chat").
-** DONE PROJ Agent Wizard
-CLOSED: [2026-04-18 Fri]
-[2026-04-18 api+ai+frontend] Step A+B landed across dd7df3d + 9d92a19.
-Profile.onboarding JSONB + =/onboarding/= endpoint drives a dedicated
-pydantic-ai sub-agent with a 5-tool surface. Main chat delegates
-onboarding questions; Ember =onboarding= service threads the snapshot
-into chat + advances reactively on record saves. Unread-driven shimmer
-on the chat button. Account-takeover fix on =DjangoUserViewSet= PATCH/PUT
-landed in the same review.
-[[file:notes.org::*Agent Wizard][Agent Wizard — architecture + deferred items]]
-Deferred: step C proactive greet, current-password re-auth on password
-change (own SECURITY ticket).
-/plan I got my first feedback on the website and the best thing to plan now is allowing the AI agent to help the user get set up.  There are capabilities that allow the agent to navigate to pages on behalf of the user.  There should be an endpoint the will
-inform how far along the user is to being set up.  The AI will invite the user to let it help her with missing pieces.  The first thing a user needs to do is to import a resume.  the proposed endpoint would tell the Agent this and other things that need being
-spelled out.  this will be referred to as Agent Wizard, or AW for short.  Propose other things that the agent could do to enhance the new user experience.  There needs to be a toggle button to prevent the ai from engaging in this way.  I know of at least two new
-tool, show_resume edit_resume.  The issue was that the very first resume that was imported was unsuccessful and the AI hallucinated bits and pieces.  Me and the new user reviewed it to be bad and I invited them to try another one.  the other resume imported
-beautifully and we were able to continue.  Use that experience as an example of the kinds of interactions AW  will do.  While I'm here, the end user 1. didn't know that the agent was aware of the page she was on and could be engaged with to change her asnwer
-record adn 2. when I explained this, she tried it with cover-letters.show and that tool unfortunetely didn't exist.  We have a todo regarding tooltips and it tangentally fits in to this plan in so far as we are making the webpage better to help new users get a
-footing.  I write this and I get the sense the flash message at the top is not a good way to inform the user of anything other than CRUD responses.   But if the chat bar is closed, we should have a way to inform the user that AW has guidence in that sidebar.  I'm
-thinking a little wiggle at the button, a shimmering, or some animation that will draw the attention to the new user for help.
-** DONE sort=-posted_date puts NULLs first (Postgres default) [api]
-CLOSED: [2026-04-17 Fri]
-=/api/v1/job-posts/?sort=-posted_date= returned rows with
-=posted_date = NULL= ahead of real dates — Postgres defaults to NULLs
-first on DESC. Switched the sort in both list views in =jobs.py= to
-=F(field).desc(nulls_last=True)= / =.asc(nulls_last=True)= so empty
-dates always fall to the end.
-** DONE Login-wall false positive on slow-rendering pages [ai]
-CLOSED: [2026-04-17 Fri]
-=scrape_page= returned =login_wall_detected= on pages that just
-hadn't finished swapping in real content yet. Added a 3× 3s retry
-around =_detect_login_wall= in =ai/mcp_servers/browser_server.py=
-before giving up — matches the existing loading-state retry pattern.
-** DONE Lightweight JobPost from email + run-scrape on-demand [api+frontend]
-CLOSED: [2026-04-17 Fri]
-[[file:~/.claude/plans/hazy-herding-river.md][Full plan]]
-Automation repo (=~/Projects/career_caddy_automation=) can now POST minimal
-JobPosts ({title, link}) without scraping up-front. User browses
-=/job-posts=, spots a "needs scrape" badge on posts with no description,
-opens one, clicks *Run scrape* which creates a Scrape with
-=status="hold"= tied to the JobPost (and its Company if present). The
-hold-poller completes it and the extractor fills company/description.
-API: duplicate-link POST now returns the existing post with 200 instead
-of the earlier 409 — automation can retry idempotently. Scrape hold
-branch honors an explicit =relationships.job-post= and inherits the
-linked post's company when none supplied. Frontend: =needsScrape= getter
-on =job-post= model (description-based), badge in list, Run-scrape
-button+action on =job-posts.show=. CLAUDE.md: corrected stale
-=job_email_to_caddy.py= reference to point at
-=career_caddy_automation= + =mcp.careercaddy.online/mcp=.
-** DONE Adaptive ScrapeProfile: record failures + auto-demote Tier 0 [api]
-CLOSED: [2026-04-17 Fri]
-Migration 0047 adds =failure_count= and =tier0_miss_count= to ScrapeProfile.
-=_update_scrape_profile= now runs in a =finally= in =parse_scrape= and takes
-=success= + =tier0_hit= — failures average 0.0 into =success_rate= instead of
-silently recording 1.0. =_try_tier0_extraction= returns =(data, attempted)= so
-misses (selectors ran but didn't yield title+company) bump =tier0_miss_count=.
-Auto-demotes =preferred_tier= from =auto= → ="1"= once =tier0_miss_count >= 5=
-and miss ratio >= 50%. New fields surfaced in ScrapeProfileSerializer. 7
-unit tests in =TestUpdateScrapeProfile=; 275 full-suite tests pass.
-** TODO I moved from chat where I told it to scrape to a pending scrape at scrape.show and spinner didn't fire
-** DONE Logfire instrumentation for chat_server [ai+infra]
-CLOSED: [2026-04-17 Fri]
-chat_server.py never called =logfire.configure= / =instrument_pydantic_ai=,
-and docker-compose.prod.yml wasn't passing =LOGFIRE_TOKEN= to the chat
-service — so chat runs were dark in logfire. Added a gated configure +
-instrument block (mirrors browser_server) and forwarded =LOGFIRE_TOKEN=
-to the chat container.
-
-** DONE scrape_and_score MCP tool [ai]
-CLOSED: [2026-04-17 Fri]
-Composite tool: POST /scrapes (pending, falls back to hold on 501) → poll
-to terminal status → resolve job_post_id from relationships → POST /scores
-(optional resume_id) → return scores_url at /job-posts/:id/scores.
-Registered via pydantic-ai toolset filtering: added to TOOL_REGISTRY and the
-=scoring= scope (inherited by =all=, so chat agent gets it; kept out of the
-=career_caddy= scope). Not exposed on either MCP server. 6 unit tests.
-
-** DONE Add cancel button to resume edit page [frontend]
-CLOSED: [2026-04-16 Wed]
-
-** DONE /resumes index: add application/score counts via meta tag [api+frontend]
-CLOSED: [2026-04-16 Wed]
-Slim mode returns =meta= block with counts. Application serializer merges resource-level =meta= into attributes. 271 tests pass.
-
-** DONE Hydrate slim resume on edit transition [frontend]
-CLOSED: [2026-04-16 Wed]
-Convention: "hydration" = transitioning from a slim-loaded record to a full record.
-Fixed by passing =@model={{record.id}}= in =<LinkTo>= (forces model hook) + =reload: true= in edit route.
-
-** DONE Add =updated_at= timestamp to ScrapeProfile [api+frontend]
-CLOSED: [2026-04-16 Wed]
-=updated_at= surfaced in scrape-profiles index table and show page stats.
-Added =updating_profile= scrape status in pipeline between extraction and completion.
-Chat server now creates scrapes with =status="hold"= (poller picks them up).
-
-** DONE Document chat-scrape hold-by-default behavior
-CLOSED: [2026-04-16 Wed]
-Added note to root CLAUDE.md explaining hold-by-default and need for running poller.
-
-** DONE Agent-derived CSS selectors for scrapes [ai+api]
-CLOSED: [2026-04-16 Wed]
-Browser agent is now profile-aware. Reads =css_selectors= before scraping, uses selectors for
-blocked/authenticated detection, discovers job_data selectors from live DOM, writes findings back.
-Schema: ={"blocked": {...}, "authenticated": {...}, "job_data": {...}}=. Login data stays in =sites.yml=.
-[[file:~/.claude/plans/whimsical-juggling-cherny.md][Full plan]]
-
-** DONE Summaries carousel: add button when no summaries exist [frontend]
-CLOSED: [2026-04-16 Wed]
-Added named =:empty= block to carousel component. Resume edit shows link to job-posts page with guidance text.
-
-** DONE "Cannot remove a resource that is not present" navigating back to /resumes [frontend]
-CLOSED: [2026-04-16 Wed]
-Fixed by switching resumes index from =findAll('resume', { reload: true })= to =query('resume', { slim: true })=.
-Slim mode avoids relationship reconciliation that caused the error.
-Repro: resume edit → settings/appearance → back to /resumes index.
-Error at =index.js:22= in resumes index route model hook.
-Likely the same async hasMany proxy issue seen earlier with =projects= (was =async: false=, fixed to =async: true=).
-May need to investigate other relationships or the =findAll('resume', { reload: true })= interaction with stale store state.
-
-** DONE Fix invalid job-post dates + summary jobPost ID error [api+frontend]
-CLOSED: [2026-04-16 Wed]
-API: backfill =posted_date= from =created_at= on create/update when null. Data migration for existing records.
-Frontend: =moment-format= falls back to =createdAt= in list/compact. Form no longer shows phantom "today" date.
-Summary controller uses =modelFor= instead of =peekRecord= to reliably get parent jobPost.
-
-** DONE Snippet dark mode + layout overhaul [frontend]
-CLOSED: [2026-04-16 Wed]
-Snippet inputs now have dark mode classes. Changed from side-by-side to label+remove stacked left, textarea right.
-Dividers between snippets, =+ Add= button inline with last Remove.
-
-** DONE Settings profile route restructure [frontend]
-CLOSED: [2026-04-16 Wed]
-Split =/settings= profile view/edit into =/settings/profile= (read-only) and =/settings/profile/edit= (form).
-Edit button is now a =<LinkTo>= to the edit route. =/settings= redirects to =/settings/profile= temporarily.
-
-** DONE caddy ai chat is at the top
-:PROPERTIES:
-:STARTED:  [2026-04-15 frontend]
-:END:
-CLOSED: [2026-04-15 Tue]
-Replaced :has() flex chain with absolute positioning via @mainClass="caddy-fairway".
-Added @noSubnav, bottom padding for fixed footer.
-** DONE flash error in dark mode had light div and light text unreadable
-CLOSED: [2026-04-16 Wed]
-Replaced hardcoded light colors in flash alert variants with theme-aware CSS vars (--danger-surface, --warning-surface, --success-surface etc).
-** DONE As staff, I need a nuclear button for job-posts that deletes every child relation (including quetions and their answers).
-CLOSED: [2026-04-16 Wed]
-API: =DELETE /job-posts/{id}/nuclear/= staff-only endpoint deletes all children (questions+answers, scores, scrapes, cover letters, applications, summaries) then the job post.
-Frontend: amber "Nuclear" button with warning icon on job-posts edit form, staff-only. Double confirm dialog.
-** DONE when deleting a question.  it stays on the same page and the question is not really gone.  it should redirect back using the algorithm made to swim up the breadcrumbs to the correct index
-CLOSED: [2026-04-16 Wed]
-Added confirm dialog + =router.transitionTo('questions')= after successful destroyRecord in questions/show controller.
-** DONE when POSTing a new job-post, if the url is already there don't 500.  send back an error message
-CLOSED: [2026-04-16 Wed]
-API: pre-check for duplicate link before save, returns 409 with detail message.
-Frontend: job-posts/new controller now extracts =error.errors[0].detail= for flash messages.
-** DONE AI answer polling is acting weird.  it will continue to say polling even when the answer is there.
-CLOSED: [2026-04-16 Wed]
-=askAI= now transitions to =questions.show.answers.show= (which has =startPollingIfPending=) instead of the answers index.
-Answers index route now uses =question.answers= relationship instead of =store.query= with filter.
-*** DONE it never started polling was in `/questions/answers`
-CLOSED: [2026-04-16 Wed]
-*** DONE pressing show answers envokes /api/v1/answers/?filter[question_id]=8 and not questions.answers (/questions/8/answers)
-CLOSED: [2026-04-16 Wed]
-Changed to use question model's answers relationship.
 ** WAIT job-posts.show.questions.show.answer
 ** TODO Chat behavior
 I whent to a job-posts.show page.
@@ -714,3 +540,4 @@ Wrapped =poll_once()= in try/except in the main loop so transient =RemoteProtoco
 
 ** TODO upload button for resume should change when uploading.  I think it's disabled but it should refelct that something is working.
 ** TODO when resume is done importing remove the file from the upload form
+* Bugs 🐛
