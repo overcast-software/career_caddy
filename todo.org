@@ -485,6 +485,11 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** DONE when the scrape finishes reload the scrape.job-posts
+CLOSED: [2026-04-19 Sun]
+[2026-04-19 frontend] runScrape's pollable onComplete now calls
+=this.model.reload()= so title/description/salary reflect freshly
+parsed values without a page refresh.
 ** DONE Sources report — stacked bar per hostname on /reports/sources [api+frontend]
 CLOSED: [2026-04-19 Sun]
 [2026-04-19] Second report page under /reports/. Backend
@@ -539,8 +544,41 @@ never rendered. Fix: =this.api.baseUrl= (absolute) +
 =cache: 'no-store'= to prevent 304 revalidation against an earlier
 empty-list response.
 
+** DONE Track how a job-post was created (provenance)
+CLOSED: [2026-04-19 Sun]
+[2026-04-19 api+frontend] =JobPost.source= + =Scrape.source= CharField
+(default ='manual'=, values: manual/email/paste/scrape/chat/import).
+Pre-save hook on each ingest path sets it; sankey filter-bar + job-post
+form expose it as a dropdown; reports rollup by provenance.
+
+** DONE Clickable sankey/sources charts + public application flow [api+frontend]
+CLOSED: [2026-04-19 Sun]
+[2026-04-19] Sankey nodes (stub/scored/unscored/applied/interview/
+offer/ghosted/rejected/withdrew/accepted/declined/no_application)
+and sources-bar hostname rows are now clickable. They route to
+=/job-posts?bucket|hostname|scored|stub=...= via new filter[...]
+query params on =JobPostViewSet.list=:
+- =filter[hostname]= (exact =(direct)= matches null/empty link)
+- =filter[source]= / =filter[stub]= / =filter[scored]=
+- =filter[bucket]= resolves to the same Status-name sets that drive
+  the sankey, with =ghosted= additionally checking the 30-day
+  staleness cutoff
+=stub= threshold uses Length-approximation SQL-side; canonical
+word-count definition still lives in
+=application_flow._is_thin_description=.
+=/reports/application-flow= is now public: anonymous visitors see
+the global aggregate sankey (scope=all, user_id=None), Mine/Global
+toggle hides when unauthed, clickthroughs bounce through auth guard
+so no per-user data leaks. =Exclude stubs= checkbox added to the
+filter bar.
+
 ** TODO caddy should store the original path of the resume for reference (but not actually link)
-** TODO Run scrape should transition you job-post.show.scrapes
+** DONE Run scrape should transition you job-post.show.scrapes
+CLOSED: [2026-04-19 Sun]
+[2026-04-19 frontend] After queuing the scrape, =runScrape= calls
+=router.transitionTo('job-posts.show.scrapes', this.model)= so the
+user lands on the tab that'll render the new row as soon as the
+poller writes it.
 ** TODO liquid fire
 https://github.com/ember-animation/liquid-fire
 ** DONE 404 page with mini-golf game [frontend]
