@@ -485,6 +485,62 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** DONE Sources report — stacked bar per hostname on /reports/sources [api+frontend]
+CLOSED: [2026-04-19 Sun]
+[2026-04-19] Second report page under /reports/. Backend
+=lib/services/source_flow.py= rolls up JobPosts by URL hostname ×
+outcome bucket (reuses =application_flow= bucket map). Frontend
+=components/reports/sources-stacked-bar= renders via =d3-scale= +
+=d3-selection=. Shared palette extracted to
+=components/reports/colors.js= so sankey + stacked bar stay in sync.
+Application Flow / Sources subnav on both report pages. 8 api tests.
+
+** DONE parse_scrape force flag unifies re-parse paths [api]
+CLOSED: [2026-04-19 Sun]
+[2026-04-19] Prod bug: Run Scrape from /job-posts/show and manual
+Parse on /scrapes/show both bailed silently because
+=scrape.job_post_id= was already set. Added =force=True= to
+=parse_scrape= and =process_evaluation= — skips the early-bail AND
+overwrites non-None extracted fields on the linked post (company
+preserved). =reextract= delegates to =parse_scrape(force=True)=;
+=_run_reextract_async= deleted. Full workflow documented in
+notes.org under 'Scrape → Parse → JobPost workflow (post-refactor)'.
+
+** DONE Triage reflects status on JobApplication + optional note [api]
+CLOSED: [2026-04-19 Sun]
+Mirrors latest triage onto =JobApplication.status= cache; accepts
+optional =note= on the =JobApplicationStatus= row.
+
+** DONE JobPost PATCH hotfix: drop read-only computed attrs [api]
+CLOSED: [2026-04-19 Sun]
+Frontend echoed =active_application_status= back in PATCH payload;
+=setattr= on the @property crashed with 'no setter'. Pop computed
+read-only keys in =_upsert_django=. Regression test added.
+
+** DONE Scrapes list: search filter + default sort with tiebreak [api]
+CLOSED: [2026-04-19 Sun]
+=ScrapeViewSet.list= honors =filter[query]=. Default sort
+=scraped_at DESC nulls-last, -id=; explicit sort params get =-id= tiebreak.
+
+** DONE Spinner + polling for Run Scrape and Re-extract [api+frontend]
+CLOSED: [2026-04-19 Sun]
+Reextract endpoint switched to async (returns Scrape(status=pending),
+spawns daemon thread). Frontend controllers use =spinner.begin= +
+=pollable.poll= so the global spinner runs until the scrape reaches
+terminal; JobPost reloads in place.
+
+** DONE Screenshots on prod — absolute API URL [frontend]
+CLOSED: [2026-04-19 Sun]
+Root cause: relative =/api/v1/scrapes/:id/screenshots/= resolved to the
+frontend origin in prod (careercaddy.online), served =index.html= as SPA
+fallback, =json.parse= threw into the silent catch, Screenshots row
+never rendered. Fix: =this.api.baseUrl= (absolute) +
+=this.api.headers()=. Also added =Cache-Control: no-store= + fetch
+=cache: 'no-store'= to prevent 304 revalidation against an earlier
+empty-list response.
+
+** TODO caddy should store the original path of the resume for reference (but not actually link)
+** TODO Run scrape should transition you job-post.show.scrapes
 ** TODO liquid fire
 https://github.com/ember-animation/liquid-fire
 ** DONE 404 page with mini-golf game [frontend]
