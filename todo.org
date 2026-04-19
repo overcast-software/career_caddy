@@ -485,6 +485,8 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO liquid fire
+https://github.com/ember-animation/liquid-fire
 ** DONE 404 page with mini-golf game [frontend]
 CLOSED: [2026-04-18 Sat]
 [2026-04-18 frontend] Catch-all =not-found= route on
