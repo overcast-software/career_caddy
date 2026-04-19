@@ -3278,5 +3278,83 @@ fields, preserve company.
   =from decimal import Decimal, InvalidOperation= at the top of the
   module.
 
+* Sources report — viz options for job-posts by hostname
+Second report page under =/reports/=, complementing the application-flow
+sankey. Surfaces per-source attrition: *"which job boards actually
+convert?"*. Hostname (from =urlparse(link)=, =www.= stripped,
+lowercased) is the cleanest grouping key — deterministic, no LLM
+variance like company. Posts with no link → synthetic =(direct)= row.
+
+Shared infra for both viz options:
+- Bucket map reused from =api/job_hunting/lib/services/application_flow.py=
+  (=BUCKETS=, =STAGE_BUCKETS=, =TERMINAL_BUCKETS=, =GHOST_AFTER_DAYS=).
+  Single source of truth; no duplication.
+- Per-post outcome: (1) no application → =no_application=; (2) else
+  latest status-history bucket, with stage + logged_at >
+  GHOST_AFTER_DAYS → =ghosted=.
+- New backend service =api/job_hunting/lib/services/source_flow.py=:
+  =build_sources(job_posts_qs, user_id)= returns a rollup keyed by
+  hostname with bucket counts.
+- New endpoint =GET /api/v1/reports/sources/?scope=mine|all= (staff-only
+  for =all=). Mirrors =application_flow_report=.
+- New route =/reports/sources= with =scope= query-param toggle and the
+  usual Mine/Global subnav.
+- Shared palette at =frontend/app/components/reports/colors.js= so the
+  sankey and any sources chart stay in sync when bucket colors change
+  (refactor out of =application-flow-sankey.js=).
+- Subnav on /reports: Application Flow ↔ Sources toggle in the
+  =:subnav= slot of both sub-templates (no /reports index page).
+- Branch: =feature/reports-sources= on api + frontend + parent.
+
+** Option A — Horizontal stacked bar per hostname
+Each row a hostname; bar length = total posts; segments colored by
+outcome bucket (applied / interview / offer / accepted / declined /
+rejected / withdrew / ghosted / vetted_bad / no_application). Top-15 by
+volume, tail collapses into =Other=.
+
+- Component: =frontend/app/components/reports/sources-stacked-bar.{js,hbs}=
+  using =d3-scale= (new; ~10KB tree-shaken) + =d3-selection= (already
+  in deps).
+- SVG: =W=720, rowHeight=28=, height scales with row count.
+  =scaleLinear= X axis, row label left-aligned, segment tooltip
+  (=applied — 12 posts (15%)=).
+- Uses =on-render= modifier (=frontend/app/modifiers/on-render.js=).
+- Pro: humans compare bar lengths with high precision → sharp decision
+  surface for "kill LinkedIn, focus on Wellfound".
+
+** Option B — Circle packing (2-level hierarchy)
+=d3.rollup= + =d3.pack= over =(hostname, outcomeBucket)=. Outer circles
+= hostnames sized by total posts; inner circles = outcome buckets
+within each source sized by count and colored by bucket.
+
+- Sub-variants:
+  - B1: leaves = bucket totals. Fewer circles; same info as stacked
+    bar, rearranged.
+  - B2: leaves = individual posts (each a small dot, colored by
+    outcome, tooltip reveals title/score). Explorable; clicking a dot
+    could =router.transitionTo('job-posts.show', post.id)=.
+- Pro: "where does my volume live?" at a glance; B2 doubles as a map of
+  specific posts.
+- Con: area comparison is weaker than length; quantitative decisions
+  are harder to read.
+
+** Open decision
+User leaning: sources signal matters, hostname is deterministic, company
+too noisy (LLM variance). Choice of stacked bar vs circle packing not
+finalized — may build both (sankey+sources) as a suite.
+
+Verification plan (applies to whichever viz lands first):
+- Backend test =test_sources_report.py= ~6 cases: empty, no-app,
+  ghosted, multi-outcome same host, top-15+Other, staff 403/200.
+- Smoke: =make up=; visit =/reports/sources=; scope toggle; add a
+  post with no link → =(direct)= row appears; lint + =make ci= clean.
+
+Out of scope (follow-ups):
+- Title axis (Senior/Staff × role-stem) as sibling chart or heatmap —
+  deferred pending regex-vs-LLM-bucket decision.
+- Time window filter (last 30/90 days).
+- Click-through row/dot → filtered =/job-posts= list (API already
+  honors =filter[link]= exact match; would need a contains variant).
+
 * Scratch / Working Notes
 Ephemeral notes during active development. Prune or promote into a proper section before shipping.
