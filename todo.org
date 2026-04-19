@@ -485,6 +485,34 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO Canonicalize tracker URLs on scrape ingest [api]
+[2026-04-18] Same root cause as the automation-side dedup bug: marketing
+emails (and, crucially, user-pasted links from those emails) use
+SendGrid-style click trackers — e.g. =url9751.alerts.jobot.com/ls/click?upn=…=,
+=click.ziprecruiter.com=, LinkedIn =/comm/…= with =trackingId/refId=,
+Mailgun =email.mg.…=. Each link is unique per recipient but redirects to
+the same destination, so =filter[link]= dedup on the raw string misses
+them. Three real examples observed: two distinct tracker URLs → same
+job, one tracker URL → 404 (dead; we'd still create a post).
+
+When the API receives a scrape / job-post create request:
+1. If the link's host matches a known tracker pattern, resolve it with
+   a HEAD + follow-redirects (3s timeout). Store the resolved URL as
+   canonical.
+2. Strip tracking query params from the resolved URL (=utm_*=,
+   =trackingId=, =refId=, =gclid=, =fbclid=, =midToken=, =otpToken=,
+   =lipi=, =trk*=, =eid=, =otpToken=).
+3. Dedup on the canonical URL, not the submitted URL. Keep the original
+   in a =source_link= column so we can debug where the post came from.
+4. If the tracker returns 4xx/5xx, reject the scrape with a clear error
+   rather than silently creating a dead post.
+
+Coordinate with the automation-side fix (=src/agents/url_extractor.py=)
+so both produce the same canonical form — otherwise the dedup still
+breaks when an email link and a user-pasted link reach the API through
+different paths.
+
+** TODO remove console.log
 ** DONE Proactive chat nudge when onboarding incomplete + user idle [frontend]
 CLOSED: [2026-04-18 Sat]
 [2026-04-18 frontend] New =services/idle-nudge.js= subscribes to
