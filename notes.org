@@ -3356,5 +3356,217 @@ Out of scope (follow-ups):
 - Click-through row/dot → filtered =/job-posts= list (API already
   honors =filter[link]= exact match; would need a contains variant).
 
+* Hold Poller — obstacle resolution + probation-based graduation
+:PROPERTIES:
+:CREATED:  [2026-04-19]
+:END:
+
+Extends [[*Hold Poller, Screenshots, Multi-Model Pipeline][Hold Poller, Screenshots, Multi-Model Pipeline]] and
+[[*Domain Scrape Profiles — learning loop for scrape cost reduction][Domain Scrape Profiles — learning loop for scrape cost reduction]].
+
+** Motivation
+The hold poller routinely hit =login_wall_detected= on LinkedIn URLs that
+were actually authenticated — the page was just a "Welcome Back / Continue
+as Doug" account chooser, or a "See more" button was truncating the job
+body. Multiple failure modes that are trivial for a human (or vision model)
+but opaque to simple text detection.
+
+Approach: keep cheap/deterministic paths fast, reserve LLM calls for
+genuinely novel obstacles, and *graduate* repeat obstacles into
+deterministic selectors via a probation gate so the LLM only pays for
+first-contact.
+
+** Data home — all new state lives in =ScrapeProfile.css_selectors=
+No migration. =css_selectors= is a =JSONField=; top-level keys carry
+per-host config in addition to the original job_data selectors.
+
+| Key                           | Shape           | Purpose                                                     |
+|-------------------------------+-----------------+-------------------------------------------------------------|
+| =job_data=                    | ={field: sel}=  | Original — discovered selectors for title/desc/etc.         |
+| =ready_selector=              | string          | Wait-for-selector after =domcontentloaded= (SPA settle).    |
+| =post_nav_wait_ms=            | int (≤30000)    | Fixed sleep after navigation when no ready_selector is set. |
+| =interaction_hints=           | free-text       | Obstacle-agent playbook for this host.                      |
+| =obstacle_click_selector=     | string          | Graduated selector that clears the known obstacle.          |
+| =_ready_selector_candidate=   | ={sel, matches}= | Probation state for ready_selector.                         |
+| =_obstacle_click_candidate=   | ={sel, matches}= | Probation state for obstacle_click_selector.                |
+
+** Pipeline (chronological) — what fires in what order
+In =mcp_servers/browser_server.py= =scrape_page()=:
+
+1. =page.goto(..., wait_until="domcontentloaded")=
+2. =asyncio.sleep(1)= + =wait_for_load_state("networkidle", timeout=15s)=
+3. *Post-nav settle* (new):
+   - if =ready_selector= is set → =wait_for_selector(timeout=10s)=
+   - elif =post_nav_wait_ms= is set → =asyncio.sleep(min(ms, 30000)/1000)=
+   - else → default =asyncio.sleep(4)=
+4. *Expand truncations* (new): =_try_expand_truncations(page)=
+   clicks any "See more / Show more / Read more" button whose *own text*
+   contains "more". Selectors tried: =button.jobs-description__footer-button=,
+   =button.show-more-less-html__button=, =button[aria-label*='see more' i]=,
+   =button[aria-label*='show more' i]=, =:has-text= fallbacks.
+5. Read body text, run 5× =_is_still_loading= loop.
+6. Screenshot → SCREENSHOT_DIR.
+7. Profile-selector check: blocked / authenticated / job_data matched.
+   - blocked → return =blocked_page_detected=.
+8. *Login-wall handling* — tiered:
+   a. =_detect_login_wall(content)= fires on <200-word pages with
+      strong signals (="sign in to discover"=, ="logging you in"=, etc.) or
+      ≥2 weak signals (="sign in"=, ="welcome back"=, ="continue as"=, etc.).
+   b. If "continue as" is in the content OR =obstacle_click_selector= is
+      set → =_try_rememberme_reauth(page, profile_selector=...)=. The
+      graduated selector is *prepended* to the candidate list so it runs
+      first; falls through to hardcoded candidates
+      (=[data-tracking-control-name*='rememberme']=, =.btn__primary--large=,
+      =:has-text('Continue as')=, etc.).
+   c. 3× 3s wait loop re-reading body.
+   d. *Obstacle agent* (if wall persists AND =interaction_hints= present).
+9. =_discover_job_selectors=.
+10. Return result with optional =candidate_ready_selector=,
+    =obstacle_click_winning=, =discovered_selectors=.
+
+** The obstacle agent — =agents/obstacle_agent.py=
+Per-call pydantic-ai =Agent= with =deps_type=_PageDeps= (wraps the live
+Playwright Page). Created fresh per scrape — no shared state.
+
+*** Model selection
+- env =OBSTACLE_AGENT_MODEL= (first priority)
+- fallback: =get_model("browser_scraper")= → =BROWSER_SCRAPER_MODEL= env →
+  =CADDY_DEFAULT_MODEL= env → =openai:gpt-4o-mini=.
+
+*** Tool surface — intentionally tiny
+| Tool                   | Purpose                                   |
+|------------------------+-------------------------------------------|
+| =try_click(selector)=  | Click; rejects disallowed actions.        |
+| =get_text()=           | Re-read =body.inner_text= to confirm.     |
+
+NO =fill=, NO =submit=, NO navigation. Keeps blast radius minimal while
+still solving click-the-right-button class obstacles.
+
+*** Safety rails
+- =DISALLOWED_ACTION_WORDS=: =sign out=, =logout=, =cancel=, =close=,
+  =dismiss=, =back=. Checked on *both* the selector string AND the
+  element's =inner_text= before clicking.
+- =max_clicks=3= — stops runaway agents.
+- Page text truncated to 4KB before being handed to the model.
+
+*** Return contract
+=run_obstacle_agent()= → ={resolved: bool, actions: [selectors], note: str}=.
+=resolved= means *at least one click landed*; the *caller* must re-check
+=_detect_login_wall(content)= to confirm the obstacle actually cleared.
+
+** Probation gate — graduating agent knowledge into deterministic selectors
+Shared helper in =scripts/hold_poller.py=: =_apply_probation_gate(...)=.
+
+Flow: candidate must be observed in *N consecutive* successful scrapes
+before it's promoted from =_X_candidate= to =X= in =css_selectors=. A
+different candidate resets the counter to 1 (not zero — the new
+observation already counts as match #1).
+
+Two concrete applications:
+
+| Candidate field                | Graduated field            | N | Source                                              |
+|--------------------------------+----------------------------+---+-----------------------------------------------------|
+| =_ready_selector_candidate=    | =ready_selector=           | 2 | first matching entry in =_JOB_SELECTOR_CANDIDATES["title"]= |
+| =_obstacle_click_candidate=    | =obstacle_click_selector=  | 2 | last action in agent's =actions= list, iff =_detect_login_wall(content_after)= clears |
+
+Bare-tag candidates (=h1=, =div=) are rejected upstream in
+=scrape_page= — they match too promiscuously and would falsely harden
+on login walls.
+
+Threshold constants: =READY_SELECTOR_PROBATION_THRESHOLD=,
+=OBSTACLE_CLICK_PROBATION_THRESHOLD= (both default 2).
+
+Once graduated, repeat obstacles skip the LLM entirely —
+=_try_rememberme_reauth= tries the graduated selector *first*.
+
+** Cost model
+| Scenario                                 | Per-scrape LLM calls                       |
+|------------------------------------------+--------------------------------------------|
+| Golden path (no obstacle)                | 0 (poller skips extractor LLM anyway)      |
+| Known obstacle, graduated                | 0 (deterministic click)                    |
+| Known obstacle, in probation             | 1 obstacle-agent call per scrape           |
+| Novel obstacle on a hinted host          | 1 obstacle-agent call                      |
+| Novel obstacle, no hints                 | 0 — returns =login_wall_detected= as before |
+
+With Haiku at obstacle-agent model: ~$0.001 per invocation. Two probation
+scrapes → ~$0.002 to harden a new obstacle permanently.
+
+** Operator setup — activating this for LinkedIn
+Edit the =linkedin.com= =ScrapeProfile.css_selectors= (via admin or API):
+#+begin_src json
+{
+  "post_nav_wait_ms": 4000,
+  "interaction_hints": "If shown 'Welcome Back' or an account chooser, click the option for 'Doug Headley' (or any button labelled 'Continue as Doug'). If the job description has a 'See more' / 'Show more' button, click it. Never sign in, sign up, or create an account. Never click Cancel or Back."
+}
+#+end_src
+
+Optional env on the poller host:
+#+begin_src sh
+export OBSTACLE_AGENT_MODEL=anthropic:claude-haiku-4-5
+#+end_src
+
+Existing bad data to clean out if present:
+- =job_data.title = "h1"= — came from scraping a login wall pre-fix
+- =_ready_selector_candidate = {selector: "h1", matches: 1}= — ditto
+
+** Proxy support — SOCKS5 / HTTP via env
+Both engines read proxy config from env in =lib/browser/engine.py=
+=_get_proxy_config()=. Applied at browser-launch time (Camoufox:
+=AsyncCamoufox(proxy=...)=; Chromium: =pw.chromium.launch(proxy=...)=).
+
+| Env var                   | Example                         |
+|---------------------------+---------------------------------|
+| =BROWSER_PROXY_SERVER=    | =socks5://localhost:1080=       |
+| =BROWSER_PROXY_USERNAME=  | (optional)                      |
+| =BROWSER_PROXY_PASSWORD=  | (optional)                      |
+| =BROWSER_PROXY_BYPASS=    | =*.internal,localhost=          |
+
+*Caveat — Chromium does not honor auth on SOCKS proxies.*
+Chromium-side limitation, not Playwright's. With =--engine chrome= +
+authed SOCKS5, a warning logs and the credentials are ignored; the
+server is still used but unauthenticated. Firefox / Camoufox handle
+SOCKS5 auth natively, so the default engine Just Works.
+
+Workarounds for Chrome-engine hosts (e.g. ARM/Pi via =--engine chrome=):
+1. Use an HTTP proxy instead (Chromium supports HTTP-proxy auth fine).
+2. Run a local proxy-chain, e.g. =gost -L=http://:8080
+   -F=socks5://user:pass@localhost:1080=, then point
+   =BROWSER_PROXY_SERVER= at =http://localhost:8080=.
+
+** URL unwrapping — tracker/shortener layer
+Upstream of everything else: =lib/url_unwrap.py= =unwrap_url(url)= runs in
+the poller right after fetching =attrs.get("url")=. Pulls the real
+target out of common tracker params (=url=, =u=, =redirect=,
+=destination=, =q=, …), handles urlencoded and base64 targets,
+recursive up to depth 5. Pure string parse — no network, so Pi-hole
+never sees the tracker host.
+
+Known unhandled: opaque shorteners (=bit.ly=, =lnkd.in=) that don't
+embed the target in the query string. Would need a HEAD+follow-redirects
+pass against a non-Pi-hole resolver; deferred.
+
+** Files touched
+- =ai/lib/url_unwrap.py= (new) + =ai/tests/test_url_unwrap.py= (new, 10 tests)
+- =ai/agents/obstacle_agent.py= (new)
+- =ai/mcp_servers/browser_server.py= — expanded login-wall signals;
+  =_try_expand_truncations=; =_try_rememberme_reauth= (w/ profile
+  selector arg); post-nav settle; candidate_ready_selector emission;
+  obstacle agent invocation; obstacle_click_winning emission.
+- =ai/scripts/hold_poller.py= — =unwrap_url= call; =_apply_probation_gate=
+  helper; ready_selector + obstacle_click_selector gates in
+  =_update_profile_from_results=.
+
+** Not yet done / open questions
+- Opaque URL shorteners (see above).
+- Agent "self-reflection" memory: right now only the *winning selector*
+  graduates; the agent's prose =note= is discarded. Could feed prior
+  =note=\s back into the next run's prompt for the same host to help
+  it avoid dead ends. Deferred — start simple.
+- Metrics: no counter yet for "obstacle agent invoked / resolved /
+  graduated". Worth adding to logfire spans.
+- Unit tests: obstacle agent behavior is only integration-testable
+  (needs a live page). Probation-gate helper is pure and *should*
+  get unit tests — not yet written.
+
 * Scratch / Working Notes
 Ephemeral notes during active development. Prune or promote into a proper section before shipping.
