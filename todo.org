@@ -481,6 +481,17 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** DONE Paste-to-JobPost form (/job-posts/paste) [api+frontend]
+CLOSED: [2026-04-18 Fri]
+[2026-04-18] For job sites that block browser scraping (LinkedIn,
+Greenhouse behind login). Backend: =POST /api/v1/scrapes/from-text/=
+creates a Scrape with =job_content=<text>=, =status='pending'=, kicks
+off the existing =parse_scrape= daemon. Frontend: =/job-posts/paste=
+route with a textarea + Ctrl-A/C helper text, polls via the =pollable=
+service, auto-navigates to the created JobPost. Cross-link in the
+subnav between =/paste= and =/scrape= so users can switch approaches.
+5 backend tests + lint clean.
+
 ** TODO Chat: "take me to that job-post" confuses score_id with job_post_id [ai]
 [2026-04-18] User asked for highest score, agent correctly reported
 score 38 with a propose_actions button "Go to Score #38" (AG-UI working).
