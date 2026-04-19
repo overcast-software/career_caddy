@@ -58,7 +58,7 @@ See [[file:notes.org::*Curriculum gap analysis][notes.org: Curriculum gap analys
 ** TODO Add handover documentation convention for stuck agents
 [[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
 
-* IN_PROGRESS [0/3]
+* IN_PROGRESS [2/2]
 
 ** IN_PROGRESS We want to increase code coverage in testing
 :PROPERTIES:
@@ -66,16 +66,20 @@ See [[file:notes.org::*Curriculum gap analysis][notes.org: Curriculum gap analys
 :END:
 #+NOTE: API agent owns this. Ongoing; more coverage can be added incrementally.
 
-** IN_PROGRESS MCP exposure at mcp.careercaddy.online                      :APPROVED:
+** DONE IN_PROGRESS MCP exposure at mcp.careercaddy.online :APPROVED:
+CLOSED: [2026-04-18 Sat 20:52]
 :PROPERTIES:
 :STARTED:  [2026-04-10 ai+api]
 :END:
 [[file:notes.org::*MCP deployment at mcp.careercaddy.online][Architecture → notes.org]]
-*** TODO Configure Caddy reverse proxy + DNS for =mcp.careercaddy.online= [product-owner]
-*** WAIT OAuth 2.0 support for in-app chat (Phase 2)
+*** YES Configure Caddy reverse proxy + DNS for =mcp.careercaddy.online= [product-owner]
+CLOSED: [2026-04-18 Sat 20:51]
+*** YES OAuth 2.0 support for in-app chat (Phase 2)
+CLOSED: [2026-04-18 Sat 20:52]
 *** saved browser credentials is a major security vulnerability even for properly exposed MCP.
 
-** IN_PROGRESS fonts and buttons from "under construction"                 :APPROVED:
+** NO IN_PROGRESS fonts and buttons from "under construction" :APPROVED:
+CLOSED: [2026-04-18 Sat 20:52]
 :PROPERTIES:
 :STARTED:  [2026-04-11 frontend]
 :END:
@@ -481,6 +485,25 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** DONE Proactive chat nudge when onboarding incomplete + user idle [frontend]
+CLOSED: [2026-04-18 Sat]
+[2026-04-18 frontend] New =services/idle-nudge.js= subscribes to
+=routeDidChange=. On chime-eligible pages (gated by
+=onboarding.chimeInOnPage=) with the chat sidebar closed and
+=hasUnread= clear, arms a 30s idle timer (5s on empty onboarding-relevant
+indexes: =resumes/cover-letters/job-posts/answers .index=). User
+activity (=pointermove/keydown/scroll/touchstart=) resets it; on fire,
+flips =chat.hasUnread=true= so the footer button shimmers via the
+existing =aw-shimmer= class. Zero LLM cost. Booted from
+=routes/application.js= alongside =session.startActivityWatch()=.
+10 unit tests in =tests/unit/services/idle-nudge-test.js=.
+[[file:notes.org::*Proactive chat nudge for idle onboarding users][Plan → notes.org]]
+Plan file: =~/.claude/plans/frolicking-zooming-shell.md=.
+
+Follow-ups:
+- Auto-=sendMessage= synthetic prompt to pre-generate AW reply.
+- localStorage memory so dismissed shimmers don't re-fire on next visit.
+
 ** DONE Paste-to-JobPost form (/job-posts/paste) [api+frontend]
 CLOSED: [2026-04-18 Fri]
 [2026-04-18] For job sites that block browser scraping (LinkedIn,
@@ -529,9 +552,18 @@ Error occurred:
                     route-layout
                       builder/section
                         experiences/list
-** TODO upload button for resume should change when uploading.  I think it's disabled but it should refelct that something is working.
-** TODO when resume is done importing remove the file from the upload form
-** TODO need ability to remove upload file selection.  right now requires refresh.
+** DONE Upload form: working state, auto-clear, manual Remove [frontend]
+CLOSED: [2026-04-18 Fri]
+[2026-04-18 frontend] All three closed together in =UploadForm=:
+- Button label becomes "Uploading…" with a small spinner while
+  =@uploading= is true (import controller threads =isUploading=).
+- On successful import (or on error during upload), the controller
+  uses the =fileQueue= service to remove the file from the queue so
+  the stale filename doesn't linger.
+- New Remove button next to Upload lets users drop their selection
+  without a page refresh.
+- Per-instance =@queueName= so multiple forms on a page (or across
+  routes) don't collide on a global "resumes" queue name.
 ** TODO dynamic OG tags
 ** WAIT job-posts.show.questions.show.answer
 ** TODO Chat behavior
@@ -549,6 +581,4 @@ When it decides that this is the probable course of action it should use elicita
 CLOSED: [2026-04-16 Wed]
 Wrapped =poll_once()= in try/except in the main loop so transient =RemoteProtocolError= doesn't crash the poller.
 
-** TODO upload button for resume should change when uploading.  I think it's disabled but it should refelct that something is working.
-** TODO when resume is done importing remove the file from the upload form
 * Bugs 🐛

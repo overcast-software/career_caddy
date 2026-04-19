@@ -3141,5 +3141,57 @@ state.
   the parent's =iter= stream. When we need nested visibility we'll
   plumb the parent's event handler down.
 
+* Proactive chat nudge for idle onboarding users
+[2026-04-18 frontend] Shipped this session. Plan at
+=~/.claude/plans/frolicking-zooming-shell.md=.
+
+Goal: first-time users with incomplete onboarding who don't know chat
+exists never see AW guidance. Fix: light the existing =aw-shimmer= on
+the footer chat button when they sit idle on a page where AW could
+help. No LLM call — the shimmer is the entire nudge; opening chat then
+takes the existing =snapshotForChat= path.
+
+Implementation: =services/idle-nudge.js=.
+- Subscribes to =router.routeDidChange=, started from
+  =routes/application.js= alongside =session.startActivityWatch()=.
+- Per route change: tear down previous timer; if
+  =onboarding.chimeInOnPage(name)= is true and =chat.sidebarOpen= /
+  =chat.hasUnread= are both false, arm a timer.
+- Adaptive delay: =IDLE_MS = 30_000= default, =EMPTY_INDEX_MS = 5_000=
+  when the route is one of =resumes.index / cover-letters.index /
+  job-posts.index / answers.index= AND =store.peekAll(model).length === 0=.
+  Empty index = strongest "I don't know what to do" signal.
+- Activity listeners (=pointermove/keydown/scroll/touchstart=) reset
+  the timer while it's armed; attached only while a timer is live to
+  avoid per-frame work on engaged users.
+- Fires once per route visit. Re-arms on next eligible navigation.
+- Existing =main-application.js::toggleChat()= already calls
+  =chat.markRead()= when the sidebar opens, which clears the shimmer.
+
+Schema: no changes to =user.onboarding= JSON. =wizard_enabled= and the
+per-step booleans already provide everything needed via
+=onboarding.chimeInOnPage=.
+
+Reused, didn't add:
+- =onboarding.chimeInOnPage(routeName)= had no callers — was dormant
+  scaffolding waiting for this exact use case.
+- =chat.hasUnread= → =aw-shimmer= class binding in
+  =components/main-application.hbs:51= unchanged.
+- =data-test-aw-attention= attribute on the button (set in plan B
+  earlier) is the recommended hook for any acceptance test that wants
+  to assert the shimmer state.
+
+Follow-ups (not in this PR):
+- Auto-=sendMessage= variant: when the timer fires, optionally
+  pre-generate an AW reply with a synthetic "user idle on {route},
+  offer guidance" prompt. Burns tokens; only worth it if shimmer
+  engagement is low.
+- Per-route localStorage memory so a dismissed shimmer doesn't re-fire
+  on every revisit. Skipped for now — once-per-visit + sidebar-open
+  clearing is probably enough.
+- Honor =prefers-reduced-motion= at the trigger level too. The CSS
+  already gates the animation; only the dot badge appears in
+  reduced-motion mode, which is the intended behavior.
+
 * Scratch / Working Notes
 Ephemeral notes during active development. Prune or promote into a proper section before shipping.
