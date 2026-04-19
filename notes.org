@@ -3099,30 +3099,36 @@ authority at save time). 18 unit tests in
 =ai/tests/test_elicitation_tool.py=. NOT yet registered in any toolset
 or referenced by the chat agent — phase 2 wires it in.
 
-**Phase 2 — TODO**: register =propose_actions= in =lib.toolsets=
-(new =elicitation_toolset()= factory already present). Rewrite
-=chat_server.py= POST /chat to build =RunAgentInput= from our existing
-body shape, call =run_ag_ui(agent, run_input, deps=CareerCaddyDeps(...))=,
-and wrap the output iterator to inject CustomEvent=reload after
-ToolCallEnd events for reload-mapped tools. Delete =_stream_once= and
-the six custom event emitters.
+**Phase 2 — LANDED [2026-04-18]**: AG-UI server swap (chat_server.py
+commit c05a958). run_ag_ui replaces _stream_once; reload preserved as
+CustomEvent; session_meta CustomEvent carries conversation_id + usage.
+propose_actions now registered on the chat agent's toolsets.
 
-**Phase 3 — TODO**: rewrite =frontend/app/services/chat.js= parser over
-AG-UI event vocabulary. On seeing =propose_actions= ToolCallStart/Args,
-set =message.elicitation= on the in-flight assistant message and skip
-the existing regex in =chat/message.js=. Remove =<!-- navigate:/path -->=
-HTML-comment handling (navigate now goes through =propose_actions=).
+**Phase 3 — LANDED [2026-04-18]**: frontend parser rewrite (commit
+797a30d). services/chat.js consumes AG-UI events; propose_actions tool
+args parsed on TOOL_CALL_END and attached as =message.elicitation=;
+chat/message.js drops ELICITATION_RE. NAVIGATE_RE kept for onboarding
+sub-agent passthrough until its prompt migrates.
 
-**Phase 4 — TODO**: rewrite chat SYSTEM_PROMPT sections for
-"Navigation" (drop HTML comments) and "Action Buttons (Elicitation)"
-(call =propose_actions= tool instead of fenced JSON). Update
-=test_chat_agent_wizard.py= / =test_chat_followup.py= fixtures. New
-frontend unit tests in =frontend/tests/unit/services/chat-test.js=
-covering AG-UI event sequences.
+**Phase 4 — LANDED [2026-04-18]**: SYSTEM_PROMPT migration (commit
+aa75f66). Navigation + Action Buttons sections now teach the agent to
+call propose_actions; Answering Questions, profile-update hint aligned.
+Smoke-tested live: "take me to my resumes" produces streaming text +
+propose_actions({label:'Go to Resumes', navigate:'/resumes'}).
+
+Known follow-ups (not blocking merge):
+- Onboarding sub-agent still emits =<!-- navigate:/... -->= markers in
+  its output; the main agent echoes those verbatim and the frontend's
+  NAVIGATE_RE catches them. Migrating the sub-agent to call
+  =propose_actions= would let us drop NAVIGATE_RE entirely.
+- No frontend unit tests yet for =services/chat.js= AG-UI parser. Add
+  next time we touch the file.
+- Chat "take me to that job-post" confuses score_id with job_post_id
+  (filed in todo.org) — prompt fix, not protocol.
 
 Rollback: revert the merge commit. Frontend parser logs and drops
-unknown events today — a partial swap would just show a stuck spinner,
-not corrupt state.
+unknown events — a partial swap shows a stuck spinner, not corrupt
+state.
 
 *** Deferred (post-AG-UI)
 - Streaming tool-call ARGS (not just start/end) — AG-UI's

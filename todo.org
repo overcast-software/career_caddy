@@ -391,16 +391,25 @@ env var names, defaults, and restart instructions. Added "AI Models" link
 to the admin subnav across 9 templates. No backend work.
 [[file:notes.org::*Admin AI Model Configuration][Partial status → notes.org]]
 
-** IN_PROGRESS AG-UI chat migration [phase 1 landed]              :APPROVED:
+** DONE AG-UI chat migration                                     :APPROVED:
+CLOSED: [2026-04-18 Fri]
 :PROPERTIES:
 :STARTED:  [2026-04-18 ai]
 :END:
-[[file:notes.org::*AG-UI migration — phased rollout][Plan → notes.org]]
-Phase 1 shipped [2026-04-18]: =ai/lib/elicitation_tool.py= +
-=test_elicitation_tool.py= (18 tests). =propose_actions= tool is
-defined, validated, and isolated — not yet wired into the chat agent.
-Phases 2–4 (server /chat rewrite, frontend parser, prompt edits +
-regression tests) still to do.
+[[file:notes.org::*AG-UI migration — phased rollout][Implementation → notes.org]]
+All 4 phases landed 2026-04-18 on feature/ag-ui-migration:
+- Phase 1 (on main already): =propose_actions= tool + 18 tests
+- Phase 2 (ai c05a958): server /chat rewrite to =run_ag_ui=; reload
+  as AG-UI CustomEvent; =session_meta= CustomEvent carries
+  conversation_id + usage; =_stream_once= and 6 custom events deleted
+- Phase 3 (frontend 797a30d): =services/chat.js= parser over AG-UI
+  vocabulary; propose_actions args → =message.elicitation=;
+  =chat/message.js= drops ELICITATION_RE
+- Phase 4 (ai aa75f66): SYSTEM_PROMPT now teaches =propose_actions=
+  calls instead of fenced JSON + HTML comment navigate markers
+Smoke-tested: "take me to my resumes" renders a Go-to-Resumes button
+that navigates without a follow-up LLM turn. 46 chat tests still green.
+Follow-ups (non-blocking) tracked in notes.org.
 
 ** TODO AI Models admin — runtime DB override (revisit)          :PENDING_APPROVAL:
 [[file:notes.org::*Admin AI Model Configuration][Full architecture → notes.org]]
@@ -472,6 +481,27 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO Chat: "take me to that job-post" confuses score_id with job_post_id [ai]
+[2026-04-18] User asked for highest score, agent correctly reported
+score 38 with a propose_actions button "Go to Score #38" (AG-UI working).
+Then user said "take me to that job-post" — agent called
+=get_job_posts(id=38)=, got nothing back, and replied "the job post may
+have been deleted." Wrong: 38 is the SCORE id; the related job post is a
+different id reachable via the score's =job_post_id= relationship.
+Prompt fix: teach the agent that scores have a =job_post_id= relation
+and it must resolve that before calling =get_job_posts(id=...)=. Likely
+add a one-liner under "Page-Aware Data Access" or tighten the score
+tools' descriptions.
+
+** TODO /job-posts list sort: add secondary tiebreak by -created_at (or -id) [api]
+[2026-04-18] Flagged when the automation created ~6 posts via LinkedIn
+email at 16:33 PT and they didn't appear on page 1 of /job-posts. Root
+cause: list sorted =-posted_date= only, and same-day posts tie with no
+secondary key, so Postgres returns ties in undefined (index/id-random)
+order. New inserts end up scattered across pages. Fix: add =-created_at=
+(or =-id=) as a secondary =order_by= in =api/job_hunting/api/views/jobs.py=
+=JobPostViewSet.get_queryset= / list sort.
+
 ** TODO the flash notification text is in the center of it's div, but with a sidebar open it looks weird when the title is in the true center
 ** TODO delete resume produced :bug:
 the resume was a failed pdf import
