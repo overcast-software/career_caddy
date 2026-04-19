@@ -485,6 +485,134 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** DONE 404 page with mini-golf game [frontend]
+CLOSED: [2026-04-18 Sat]
+[2026-04-18 frontend] Catch-all =not-found= route on
+=app/router.js= renders an "Out of Bounds" page with a 256×192
+canvas mini-golf game (3 procedural holes, mouse aim + hold-to-charge,
+sand + walls, hole-attraction sink). New =on-insert= modifier replaces
+the ad-hoc =getElementById= pattern for components that need DOM refs.
+Branch =feature/404-golf=.
+
+** DONE Paste page accepts URL; edit page has re-extract from paste
+CLOSED: [2026-04-18 Sat]
+[2026-04-18 api+frontend] Branches:
+=feature/job-post-reextract= (api), =feature/job-post-paste-edit=
+(frontend + parent).
+- Paste page (=/job-posts/paste=): optional URL input above the
+  textarea. URL submission redirects to =/job-posts/scrape= with
+  =?url== query param so the existing browser-scrape flow takes over.
+- Edit page (=/job-posts/{id}/edit=): "Re-extract from paste" textarea
+  + button. Calls =POST /api/v1/job-posts/{id}/reextract/= which
+  runs the AI extractor on pasted text and merges non-None fields
+  onto the existing JobPost. Company is intentionally preserved.
+  Persists a Scrape with =job_post= linked for provenance. 7 tests.
+- Future: 3rd submission mode on paste (URL+text together) would POST
+  to =from-text/= with both =text= and =link= so the JobPost gets the
+  URL as link and the parser fills the rest. Not wired yet.
+
+** DONE Default nav sidebar closed; chat doesn't persist open [frontend]
+CLOSED: [2026-04-18 Sat]
+[2026-04-18 frontend] Two defaults bugs:
+- Nav sidebar previously =!= 'false'= so first-time visitors landed
+  with sidebar open. Flipped to =='true'=.
+- Chat sidebar persisted open across reloads via =cc:chat-open=. Now
+  always starts closed; toggle still works within the session.
+Merged into =feature/job-post-paste-edit= so it ships with the rest.
+
+** TODO This is the jinja markup  for the word template
+audit it for completeness against the resume json:api response.
+*** head
+{{ header.name }}
+{{header.title }}
+{{HEADER.EMAIL}} * {{HEADER.PHONE}}
+*** Body
+{% if summary %}
+Summary
+{{ summary }}
+{% endif %}
+{% if skills %}
+Skills
+{% if skills.language_skills %}
+Languages: {{ skills.language_skills }}
+{%- endif -%}
+{% if skills.database_skills %}
+Databases: {{ skills.database_skills }}
+{%- endif -%}
+{% if skills.framework_skills %}
+Frameworks: {{ skills.framework_skills }}
+{%- endif -%}
+{% if skills.tool_skills %}
+Platforms: {{ skills.tool_skills }}
+{%- endif -%}
+{% if skills.security_skills %}
+Security: {{ skills.security_skills }}
+{%- endif -%}
+{%- endif -%}
+{% if experiences %}
+Experience
+{% for experience in experiences %}
+	{% if experience.date_range %}{{ experience.date_range }}{% endif %}
+{% if experience.company %} — {{ experience.company }}{% endif %}{% if experience.location %} — {{ experience.location }}{% endif %}
+{% if experience.summary %}
+{{ experience.summary }}  {# This should use "RP Summary" style #}
+{%- endif -%}
+{% for d in experience.descriptions %}
+    • {{ d }}
+{%- endfor -%}
+{% endfor %}
+{% endif %}
+{% if certifications %}
+Certifications
+{% for cert in certifications %}
+{{ cert.title }}{% if cert.issuer %} — {{ cert.issuer }}{% endif %}{% if cert.issue_date %} — {{ cert.issue_date }}{% endif %}
+{% if cert.content %}{{ cert.content }}{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if educations %}
+Education
+{% for edu in educations %}
+{{ edu.institution }}{% if edu.degree %} — {{ edu.degree }}{% endif %}{% if edu.major %} — {{ edu.major }}{% endif %}{% if edu.minor %} — Minor: {{ edu.minor }}{% endif %}{% if edu.issue_date %} — {{ edu.issue_date }}{% endif %}
+{% endfor %}
+{% endif %}
+{% if projects %}
+Projects
+{% for proj in projects %}
+{% for bullet in proj.description %}
+    • {{ bullet }}  {# This should use "RP Bulleted List" style #}
+{%- endfor -%}
+{% endfor %}
+{% endif %}
+
+** TODO Canonicalize tracker URLs on scrape ingest [api]
+[2026-04-18] Same root cause as the automation-side dedup bug: marketing
+emails (and, crucially, user-pasted links from those emails) use
+SendGrid-style click trackers — e.g. =url9751.alerts.jobot.com/ls/click?upn=…=,
+=click.ziprecruiter.com=, LinkedIn =/comm/…= with =trackingId/refId=,
+Mailgun =email.mg.…=. Each link is unique per recipient but redirects to
+the same destination, so =filter[link]= dedup on the raw string misses
+them. Three real examples observed: two distinct tracker URLs → same
+job, one tracker URL → 404 (dead; we'd still create a post).
+
+When the API receives a scrape / job-post create request:
+1. If the link's host matches a known tracker pattern, resolve it with
+   a HEAD + follow-redirects (3s timeout). Store the resolved URL as
+   canonical.
+2. Strip tracking query params from the resolved URL (=utm_*=,
+   =trackingId=, =refId=, =gclid=, =fbclid=, =midToken=, =otpToken=,
+   =lipi=, =trk*=, =eid=, =otpToken=).
+3. Dedup on the canonical URL, not the submitted URL. Keep the original
+   in a =source_link= column so we can debug where the post came from.
+4. If the tracker returns 4xx/5xx, reject the scrape with a clear error
+   rather than silently creating a dead post.
+
+Coordinate with the automation-side fix (=src/agents/url_extractor.py=)
+so both produce the same canonical form — otherwise the dedup still
+breaks when an email link and a user-pasted link reach the API through
+different paths.
+
+** TODO remove console.log
 ** DONE Proactive chat nudge when onboarding incomplete + user idle [frontend]
 CLOSED: [2026-04-18 Sat]
 [2026-04-18 frontend] New =services/idle-nudge.js= subscribes to
