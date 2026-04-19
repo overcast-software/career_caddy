@@ -3193,5 +3193,90 @@ Follow-ups (not in this PR):
   already gates the animation; only the dot badge appears in
   reduced-motion mode, which is the intended behavior.
 
+* Scrape → Parse → JobPost workflow (post-refactor)                 :IMPORTANT:
+As of [2026-04-19], the parse pipeline has a `force` flag that unifies
+the three user-initiated re-parse paths with the original first-pass
+pipeline. This entry is the single reference for how a Scrape turns into
+a JobPost and when fields get overwritten.
+
+** Actors
+- =Scrape= — raw capture (html and/or job_content). Has =status= column
+  (=pending|hold|running|authenticating|login_failed|scraping|extracting|completed|failed|success=)
+  and an append-only =scrape_statuses= audit log via =_log_scrape_status=.
+- =JobPost= — structured extraction. =link= is unique; =company= FK is
+  preserved once set (we never reassign on re-parse).
+- =parse_scrape(scrape_id, user_id=None, sync=False, force=False)= —
+  single entry point in =api/job_hunting/lib/parsers/job_post_extractor.py=.
+  Default: spawns a daemon thread; if scrape already has =job_post_id=
+  and =force=False=, bails out (idempotency). =force=True= always runs.
+- =JobPostExtractor.parse(scrape, user, force)= — Tier 0 (CSS selectors
+  from ScrapeProfile) first, then =analyze_with_ai= (LLM). Returns True
+  on success.
+- =process_evaluation(..., force)= — the merge policy:
+  - =force=True AND scrape.job_post_id set= → fetch THAT post, overwrite
+    non-None extracted fields (title, description, salary_min/max,
+    posted_date, extraction_date, location, remote). =company= left
+    alone. This is the re-parse path.
+  - otherwise: look up JobPost by =scrape.url= (unique link), else
+    get_or_create by (title, company). Fill only previously-None fields.
+
+** Entry points (how a Scrape becomes a parse job)
+| Trigger                                | Force? | Typical path                                                       |
+|----------------------------------------+--------+--------------------------------------------------------------------|
+| Hold-poller writes =status=completed=    | depends | =ScrapeViewSet.partial_update= → =_maybe_trigger_extraction(pk, force=_reparse_force(pk))=. =_reparse_force= returns True iff =scrape.job_post_id= is already set (→ user re-ran a scrape on an existing post). |
+| =/scrapes/from-text/=                    | False  | Creates =Scrape(status=pending)=, calls =parse_scrape(sync=False)=. First-pass flow: find-or-create the JobPost. |
+| =/scrapes/{id}/parse/= (manual button)   | *True* | User said "do it now"; always overwrite with fresh extraction.     |
+| =/job-posts/{id}/reextract/= (paste)     | *True* | Creates =Scrape(status=pending, job_post=obj)=, calls =parse_scrape(force=True)=. Merges into the existing post. |
+| =/job-posts/{id}/show= Run scrape button | via poller | Creates =Scrape(status=hold, job_post=obj)=. Poller picks it up; when it writes =completed=, =_reparse_force= sees =job_post_id= set → =force=True=. |
+
+** Status lifecycle inside =parse_scrape._run=
+1. =pending= (or whatever status the caller set before invoking).
+2. =extracting= — logged as soon as =parse_scrape= starts real work.
+3. =updating_profile= — ScrapeProfile success/failure counters tick.
+4. =completed= OR =failed= — terminal. Frontend pollable stops.
+
+** Frontend polling (=services/pollable.js=)
+Three UI surfaces kick off a scrape and poll for terminal:
+- =/job-posts/paste= controller — text-only paste; polls the from-text
+  scrape; onComplete navigates to the new =/job-posts/{id}=.
+- =/job-posts/:id/show::runScrape= — creates =Scrape(status=hold)= then
+  =pollable.poll(scrape)= with spinner.begin; scrape reaches terminal,
+  spinner ends, flash fires. =_reparse_force= above ensures a re-scrape
+  of an already-linked post still merges fields.
+- =/job-posts/:id/edit::reextractFromPaste= — POST to =/reextract/=
+  returns the pending Scrape, frontend polls; onComplete reloads the
+  JobPost via =store.findRecord(..., {reload: true})= so form fields
+  refresh in place.
+
+** Why the force flag exists (the bug it fixed)
+Before [2026-04-19], =parse_scrape= early-bailed when =scrape.job_post_id=
+was already set, and =process_evaluation= only filled previously-None
+fields on merge. That broke two user stories:
+1. Re-running a scrape from =/job-posts/show= — the poller wrote
+   =completed= but the auto-parse did nothing because the scrape already
+   had a =job_post_id= from its =Scrape.objects.create(jobPost=this.model)=
+   call.
+2. Manual Parse on =/scrapes/show= — the =parse= action called
+   =parse_scrape= which bailed for the same reason; even when it didn't
+   bail, the merge policy kept old descriptions around.
+Both cases now route through =force=True= → overwrite non-None fresh
+fields, preserve company.
+
+** Known edge cases
+- =_reparse_force= fires on ANY transition to =completed= on a linked
+  scrape, including a poller re-run triggered by status edits from the
+  UI. If that ever feels too aggressive, tighten the check to "status
+  transitioned from non-terminal to =completed=" rather than "current
+  status is =completed=".
+- =title= is special: it's a =get_or_create= lookup key on the cold path
+  so it doesn't live in =job_defaults=. The force branch handles it
+  explicitly. Anyone adding new overwrite-on-force fields should put
+  them in =job_defaults= AND check whether they're also used as lookup
+  keys downstream.
+- =_to_decimal_safe= helper in =views/jobs.py= was deleted with the
+  old =_run_reextract_async=. If you reintroduce it, import
+  =from decimal import Decimal, InvalidOperation= at the top of the
+  module.
+
 * Scratch / Working Notes
 Ephemeral notes during active development. Prune or promote into a proper section before shipping.
