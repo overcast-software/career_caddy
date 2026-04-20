@@ -3595,5 +3595,48 @@ Why not change now: the refactor just landed (PR #37). Revisit when
 payload size becomes a real concern or when we add bulk-select across
 rows (bulk would multiply the payload cost).
 
+* Row stagger-in animation — rollout candidates [2026-04-20]
+Keyframe + =.stagger-rows= helper registered in =frontend/app/styles/app.css=
+(search for =@keyframes stagger-in=). Each direct child of a
+=.stagger-rows= container fades in from 8px below with a 40ms
+cascading delay (first 9 rows explicit, 10+ capped at 360ms).
+
+Currently applied on:
+- =components/scores/list.hbs= =<tbody>= — proof of concept on the
+  scores tab of =/job-posts/:id=.
+
+Where else it'd naturally fit (all of these render a list or table
+that would read well with the cascade; wire by adding =stagger-rows=
+to the =<tbody>= or top-level list container):
+
+=<tbody>= lists (drop =stagger-rows= on the tbody):
+- =components/job-posts/list.hbs= — job-posts index
+- =components/answers/list.hbs=
+- =components/companies/list.hbs=
+- =components/cover-letters/list.hbs=
+- =components/experiences/list.hbs=
+- =components/questions/list.hbs=
+- =components/scrapes/list.hbs=
+- =components/summaries/list.hbs=
+- =components/users/list.hbs=
+
+Non-table containers that'd also benefit:
+- Sidebar chat messages (=components/chat/panel.hbs= — wrap the message
+  list in a =stagger-rows= so new sessions cascade in).
+- =/reports/sources= row list if we ever move off the stacked bar
+  into a tabular drill-down.
+- =/docs/*= skill/feature cards — if any are added as grids.
+
+Rollout caveats:
+- The animation runs on every mount of the parent. For
+  =<InfinityLoader>=-backed lists, appended pages remount? Verify
+  before rolling out — we don't want rows 1–20 to re-animate every
+  time the user scrolls. (If they do, scope =stagger-rows= to only
+  the first page and strip it from infinity-appended pages.)
+- Lists inside modals animate every open, which is probably fine.
+- Respect =prefers-reduced-motion=: the current rule doesn't — add
+  a =@media (prefers-reduced-motion: reduce)= block that sets
+  =animation: none= on =.stagger-rows > *= before rolling out widely.
+
 * Scratch / Working Notes
 Ephemeral notes during active development. Prune or promote into a proper section before shipping.
