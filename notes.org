@@ -3667,3 +3667,63 @@ Files likely in scope:
 - api/job_hunting/api/views/reports.py — build_flow buckets + link gen
 - frontend/app/components/reports/application-flow-chart.{js,hbs} —
   d3-sankey node layout may need column hinting for new hub
+
+* Scrape soft-fail + 301 link rewrite [2026-04-20]
+:PROPERTIES:
+:branches-future: api:feature/scrape-soft-fail-markers, api:feature/scrape-301-link-rewrite
+:END:
+
+** Problem
+Scrape returns HTTP 200 but the page body says 'Expired Job' / 'this
+posting has been filled' / etc. Scraper happily extracts nothing
+useful, produces a stub JobPost, the hold-poller keeps retrying or
+scoring runs against garbage.
+
+Example: sendgrid email link redirects to hiring.cafe/viewjob/... →
+page renders 'Expired Job' with 200 OK.
+
+** Part A — soft-fail markers per hostname
+Add jsonb field to scrape_profile:
+
+  soft_fail_markers = models.JSONField(default=list, blank=True)
+  # List of regex or literal strings. If any match the extracted body,
+  # flip scrape.status='failed' with error_reason='expired'.
+
+Django's JSONField on Postgres is jsonb by default (since 3.1), so GIN
+index on the field is available if we ever need to search across
+profiles for 'who has this marker'.
+
+Analyzer agent populates markers semi-automatically:
+- First encounter: human-in-the-loop via scrape_profile admin edit
+  page. Seed generic list ('expired', 'no longer available',
+  'position filled') but require manual confirmation to avoid
+  blacklisting real descriptions that mention those words.
+- Repeat hostname + short body + contains red-flag phrase → queue
+  for human review, not auto-add.
+
+Extractor check runs post-extraction; if marker hits, scrape fails
+soft and the post isn't enriched.
+
+** Part B — 301 link rewrite
+The email contained a sendgrid click-tracker URL:
+  https://u52508838.ct.sendgrid.net/ls/click?upn=... → 301 →
+  https://hiring.cafe/viewjob/mm42v3y01518rygq
+
+We currently store the sendgrid URL as job_post.link. When the user
+clicks 'Run scrape' later it hits sendgrid again, which may 301 again
+or expire outright.
+
+Solution: on successful scrape, if the final URL (after redirect
+chain) differs from the originally stored link, UPDATE
+job_post.link to the canonical final URL. Scraper already knows the
+final URL — just plumb it into the Scrape row's  field and, on
+first successful extraction, write it back to the JobPost.
+
+Note: avoid clobbering link if JobPost was manually edited. A
+'link_canonical' attribute might make more sense than overwriting
+the user-supplied link. TBD.
+
+** Out of scope for now
+- Upstream: tracking 'dead lead from email' signal back to the email
+  ingestor so repeated expired results from the same sender don't
+  keep re-entering the pipeline.
