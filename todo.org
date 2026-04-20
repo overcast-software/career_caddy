@@ -87,6 +87,10 @@ CLOSED: [2026-04-18 Sat 20:52]
 Remaining: font adoption from under-construction.html.
 
 * Features — APPROVED (ready to work)
+** TODO Sankey — vetted hub grouping (d3 aggregator pattern)
+CONCEPT: Vetted Good / Vetted Bad / Unvetted as hub node, like 'Thermal generation' in https://observablehq.com/@d3/sankey/2.
+BRANCH: api:feature/sankey-vetted-hub
+SEE: notes.org :: Sankey — vetted hub grouping [2026-04-20]
 
 ** DONE Elicitation action buttons act directly, not round-trip chat :APPROVED:
 CLOSED: [2026-04-18 Fri]

@@ -3640,3 +3640,30 @@ Rollout caveats:
 
 * Scratch / Working Notes
 Ephemeral notes during active development. Prune or promote into a proper section before shipping.
+
+* Sankey — vetted hub grouping [2026-04-20]
+:PROPERTIES:
+:branch:   api:feature/sankey-vetted-hub
+:pattern:  d3 hub/aggregator (e.g. "Thermal generation" in https://observablehq.com/@d3/sankey/2)
+:END:
+Mirror the pattern from feature/sankey-scored-unscored-hub but group on
+vetting status instead of scoring status. Adds a mid-column aggregator
+so "Vetted Good", "Vetted Bad", and "Unvetted" read as grouped flows
+rather than individual terminal buckets.
+
+Conceptually: vetting = triage-stage classification, same role that
+"Thermal generation" plays in the d3 energy sankey — a hub node that
+collapses multiple upstream flows into a named group before splitting
+downstream.
+
+Open questions:
+- Hub placement: before or after the scored/unscored hub? Likely after
+  (score happens first, vetting second).
+- Unvetted bucket: should it be a hub child or bypass the hub entirely?
+- Do we combine with feature/sankey-scored-unscored-hub or stack both
+  hubs into a single chart (2 aggregator columns)?
+
+Files likely in scope:
+- api/job_hunting/api/views/reports.py — build_flow buckets + link gen
+- frontend/app/components/reports/application-flow-chart.{js,hbs} —
+  d3-sankey node layout may need column hinting for new hub
