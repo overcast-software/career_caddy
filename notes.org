@@ -3568,5 +3568,32 @@ pass against a non-Pi-hole resolver; deferred.
   (needs a live page). Probation-gate helper is pure and *should*
   get unit tests — not yet written.
 
+* job-posts.index — includes vs metadata for busy/has-score flags [2026-04-20]
+=/job-posts= currently fetches with =include=company,scrapes,scores= so
+=JobPost.isWorking= / =activeScrape= / =activeScore= / =hasAnyScore=
+getters can walk the hasMany relationships in the model. This bloats
+the JSON:API payload (every scrape + score row sideloaded for every
+post in the page) but keeps the client logic simple — the model
+getters just read the relationship arrays and check status against
+the shared =TERMINAL= set in =services/pollable=.
+
+Past pattern (see the 2026-04-16 Company show refactor) was to expose
+=meta= counts on the list endpoint instead, e.g. on Company show:
+=meta.scores=, =meta.questions=, =meta.scrapes=. The frontend reads
+=.attributes.meta.scores= instead of =.scores.length=, no sideload.
+
+Preferred direction (deferred — not changing the current include yet):
+- API =JobPostViewSet.list= adds per-row =meta= with =active_scrape_status=
+  (null / "pending" / "running" / etc), =active_score_status=, and
+  =score_count= — three ints/strings per row.
+- Frontend model getters switch to reading =this.meta?.active_scrape_status=
+  et al. instead of walking hasMany.
+- Drop =scrapes,scores= from the include. Payload shrinks dramatically
+  on paginated lists.
+
+Why not change now: the refactor just landed (PR #37). Revisit when
+payload size becomes a real concern or when we add bulk-select across
+rows (bulk would multiply the payload cost).
+
 * Scratch / Working Notes
 Ephemeral notes during active development. Prune or promote into a proper section before shipping.
