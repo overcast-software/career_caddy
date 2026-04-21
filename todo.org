@@ -489,6 +489,7 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO look at todo.
 ** TODO user dropdown int settings.ai-spend is white on white
 ** TODO looking for work is a full time job.
 ** TODO /settings/profile
@@ -818,3 +819,10 @@ CLOSED: [2026-04-16 Wed]
 Wrapped =poll_once()= in try/except in the main loop so transient =RemoteProtocolError= doesn't crash the poller.
 
 * Bugs 🐛
+** TODO answers/new favorite toggle lost on save [frontend] :bug:
+[2026-04-20] On =/answers/new=, toggling the favorite star before hitting
+Save doesn't persist — the new Answer lands with =favorite=false=. Likely
+the toggle mutates a property not tracked by the save payload, or the
+controller creates the record before the toggle value is read. Check
+=controllers/answers/new.js= + =components/answers/form.*= for how
+=favorite= is threaded into the create call.
