@@ -491,6 +491,7 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO I'm not seeing sources coming through.
 ** TODO wrong position for additional dialogue window
 
 /home/oldbones/Pictures/screenshot-2026-04-21_00-17-58.png
