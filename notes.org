@@ -701,9 +701,18 @@ Archived to [[file:notes_archive.org::*SPA analytics with Plausible][notes_archi
 Approve for superuser-gated debug use, or defer until post-alpha?
 APPROVED There may be many screenshots, not just the final one.  Puting in an image path is my choice with `/api/v1/scrapes/{id}/screenshots` (plural)
 
-** Agent logfire
+** Agent logfire [DONE 2026-04-20]
 https://pydantic.dev/docs/logfire/integrations/llms/pydanticai/
 https://pydantic.dev/docs/logfire/integrations/web-frameworks/django/
+
+*** [2026-04-20] Django API instrumented (api PR #38, squash =23c6cf6=)
+- =api/pyproject.toml= — added =logfire[django,httpx]=.
+- =api/job_hunting/logfire_setup.py= — =setup_logfire(service_name)= helper, silent no-op when =LOGFIRE_TOKEN= is unset. Attaches =LogfireLoggingHandler= to root logger so =logger.info(...)= flows to logfire. Best-effort =instrument_django= + =instrument_openai= + =instrument_anthropic= + =instrument_httpx=.
+- =api/job_hunting/settings.py= — invokes =setup_logfire("career_caddy_api")= after =LOGGING= dict so handler piggy-backs on the existing dictConfig.
+- Compose-side token plumbing already landed in parent =f74fcaa=.
+- =ai/= submodule was already wired (=career_caddy_agent.py=, =browser_server.py=, etc. — same =LOGFIRE_TOKEN= guard pattern).
+- Scope note: went with the existing =feature/logfire-everywhere= branch rather than a from-scratch minimal Django-only patch. Swept in two unrelated-but-ready commits: Claude 4.x pricing entries + =/settings/ai-spend= newest-first ordering.
+
 ** make doctor
 It would be nice to audit the needs for running an application for a user trying to set things up.
 Make a clear plan how to bring this feature about.
