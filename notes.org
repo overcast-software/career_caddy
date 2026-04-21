@@ -4526,3 +4526,52 @@ CC_AUTOSCORE_DAILY_COST_CAP_USD=2.00
   ingest after a scrape) the =filter[has_score]= check still says "no
   score" and the daemon re-queues. Dedup on "job_post has any score," not
   on the scrape row.
+
+* Subnav: inline render instead of in-element portal [2026-04-21]   :IMPORTANT:
+:PROPERTIES:
+:CREATED:  [2026-04-21]
+:END:
+
+Removed =#subnav-portal= indirection. =RouteLayout= now renders
+=<Menus::SubnavBar>= directly; =main-application.hbs= lost its portal
+=<div>= and CSS lost the =:not(:last-child) { display: none }= dedup hack
+(audited — no nested =RouteLayout= users, so the hack was unused in
+practice).
+
+** Why
+Portal rendering via ~{{#in-element}}~ runs =on-insert= modifiers *before*
+the inserted node is attached to the live DOM in Firefox. Any
+=ResizeObserver= attached that way read a zero-height =getBoundingClientRect=
+and never corrected itself. Inline render mounts the bar in-place, so
+modifiers fire against a live element in every browser.
+
+** Other wins
+- =@noSubnav= now means "no DOM," not "empty portal taking 0 height."
+- Scroll-padding flow: =Menus::SubnavBar= writes =--subnav-h= on =<html>=
+  via ResizeObserver; =app.css= sets =scroll-padding-top: var(--subnav-h, 4.5rem)=
+  on both =html= AND =.course-main= (the actual scroll container —
+  html/body are =100vh; overflow:hidden=, so scrolling happens inside
+  =.course-main=, not on the document). Anchor jumps + =scrollIntoView=
+  both clear the sticky bar exactly.
+
+** Future guard
+If anyone ever nests =<RouteLayout>= inside another =<RouteLayout>=, they
+need =@noSubnav={{true}}= on the inner one or we'll render two bars
+stacked. Comment left in =route-layout.hbs= noting this.
+
+** Related change: career-data structured response
+=GET /api/v1/career-data/= now returns a typed =sections= array alongside
+the markdown =data= blob:
+
+#+begin_example
+  sections: [
+    {type: "resumes",       items: [{id, title, subtitle, markdown}]},
+    {type: "qas",           items: [{id, question_id, question, answer}]},
+    {type: "cover_letters", items: [{id, job, company, created_at, content}]},
+  ]
+#+end_example
+
+Frontend renders per-item sub-cards with stable anchor ids (=resume-<id>=,
+=qa-<id>=, =cl-<id>=). The subnav anchor-nav observes those ids and shows
+the specific item title as you scroll. "data" blob stays — chat +
+copy-to-clipboard consume it unchanged.

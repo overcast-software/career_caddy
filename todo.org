@@ -491,8 +491,47 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO wrong position for additional dialogue window
+
+/home/oldbones/Pictures/screenshot-2026-04-21_00-17-58.png
+** DONE spinner on cover-letter polling https://careercaddy.online/job-posts/967/cover-letters
+CLOSED: [2026-04-21 Tue]
+[2026-04-21 frontend] Route now calls =pollable.pollIfPending= for each
+pending cover letter on setup; list component shows an inline spinner
++ "Generating…" in the Actions column while =isPending= is true.
+Handles the page-reload-mid-generation case.
+
+** DONE career-data has navigatiable anchors for different sections.
+CLOSED: [2026-04-21 Tue]
+[2026-04-21 api+frontend] /career-data reworked end-to-end:
+- Backend =/api/v1/career-data/= adds a typed =sections= array
+  (resumes / qas / cover_letters) alongside the markdown =data= blob.
+  Each item carries a stable DB id (=resume-39=, =qa-128=, =cl-77=).
+- Frontend renders per-item sub-cards (CareerData::ResumeCards /
+  QaCards / CoverLetterCards). No markdown regex-splitting.
+- Subnav anchor-nav widget shows item-level labels as you scroll
+  (resume title, truncated question, "Cover · <company>"). Fixed
+  width so prev/next buttons stay on target.
+- Subnav rendered inline per route (portal removed, no nested-dup
+  hack); scroll-padding-top on html + .course-main so anchor jumps
+  clear the sticky bar. Firefox-safe (portal timing was the bug).
+- resume_markdown.j2 cleaned: single =## Name= heading, italic
+  metadata line, h4 sub-headings per experience/project. Prompt
+  fidelity strictly improved (the old 4-space indent had been
+  rendering each resume as a code block for any markdown-aware
+  consumer — see de2815d).
+
+** DONE scrape and score is finishing and flashmessages is showing up null with link to (in this case) https://careercaddy.online/job-posts?search=Crossing%20Hurdles
+CLOSED: [2026-04-21 Tue]
+[2026-04-21 frontend] =pollable._flashLink= now bails early on a
+falsy message instead of rendering =<a>null</a>= as a sticky banner.
+Callers that deliberately suppress the navigated-away flash (e.g.
+scrape+score chains handling their own messaging in onComplete) no
+longer leak a null.
+
 ** TODO asking ai to answer from jp.show.questions.show didn't do polling :bug:
-** TODO filters for job posts.
+** DONE filters for job posts.
+CLOSED: [2026-04-21 Tue 00:19]
 it's pretty immature now, but I'm seeing utility in fleshing out simple thing.
 I also want to revisit the underconstruction pages buttons, since the filter indication badges look bad.
 #+NOTE: [2026-04-20 frontend+api] Shipped:
