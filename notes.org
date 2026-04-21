@@ -3736,3 +3736,253 @@ the user-supplied link. TBD.
 - Upstream: tracking 'dead lead from email' signal back to the email
   ingestor so repeated expired results from the same sender don't
   keep re-entering the pipeline.
+
+* Tooltip audit [2026-04-20]                                       :IMPORTANT:
+:PROPERTIES:
+:CREATED:  [2026-04-20]
+:END:
+
+Catalog of every button-like UI element, keyed so the product owner can
+approve which deserve a =title= tooltip. Implementation pass after approval
+just adds HTML =title=/=aria-label= attributes — no CSS, no components.
+
+** Priority key
+| Letter | Meaning               | Typical criteria                                               |
+|--------+-----------------------+----------------------------------------------------------------|
+| *S*    | Strongly recommended  | icon-only; destructive scope unclear; jargon label; mode toggle |
+| *M*    | Maybe — nice to have  | literal label but async side effect or non-obvious context      |
+| *N*    | Skip                  | Save/Cancel/Delete/+New/Back; plain tabs; nav links             |
+
+Rows already tagged =covered= have an existing =title= or =aria-label= — listed
+for wording-consistency audit only, no proposal needed.
+
+To approve: change the letter to =YES=, tweak proposed text, or strike the
+whole row. When done, ping the agent to execute the implementation pass.
+
+** Auth & Onboarding
+- =templates/login.hbs:42= — "Sign in" (submit) · *N*
+- =templates/login.hbs:46= — "Try Demo" (=this.tryDemo=) · *M*
+  - Proposed: "Explore Career Caddy with a seeded demo account — no signup required."
+- =templates/signup.hbs:115= — "Create account" (submit, aria-label) · *N* (covered)
+- =templates/signup.hbs:152= — "Join waiting list" (submit, aria-label) · *N* (covered)
+- =templates/setup.hbs:69= — first-user setup submit · *N*
+- =templates/forgot-password.hbs:44= · =reset-password.hbs:64= · =accept-invite.hbs:90= — submits · *N*
+
+** Job Posts
+- =templates/job-posts/index.hbs:11= — "+ New Job Post" LinkTo · *N*
+- =templates/job-posts/index.hbs:27,41,55,68,82= — "×" filter-chip clears (aria-label each) · *N* (covered)
+- =templates/job-posts/index.hbs:91,101= — "Hide stubs" (title just landed) · *N* (covered)
+- =templates/job-posts/new.hbs:3= — "scrape" LinkTo · *M*
+  - Proposed: "Paste a job URL and let the browser fetch the description for you."
+- =templates/job-posts/new.hbs:49= — "Save" · *N*
+- =templates/job-posts/new.hbs:51= — "Create and apply" (=createAndApply=) · *S*
+  - Proposed: "Save the job post and immediately create a Job Application in Interested status."
+- =templates/job-posts/new.hbs:56= — "Create and score" (=createAndScore=) · *S*
+  - Proposed: "Save the job post and immediately run AI scoring against your Career Data."
+- =templates/job-posts/new.hbs:63= — "Delete" · *N*
+- =templates/job-posts/show.hbs:58= — "Run scrape" (=runScrape=) · *S*
+  - Proposed: "Queue a fresh scrape of the job URL. The poller will pick it up and re-extract title, description, and salary."
+- =templates/job-posts/show.hbs:66= — "Copy Description" (dynamic) · *M*
+  - Proposed: "Copy the full job description — useful for pasting into the AI chat."
+- =templates/job-posts/show.hbs:72= — "Edit" LinkTo · *N*
+- =templates/job-posts/show.hbs:99= — "Collapse" / "Expand" (=toggleDescription=) · *N*
+- =components/job-posts/item.hbs:3= — Copy (dynamic) · *M*
+  - Proposed: "Copy this job's details for pasting elsewhere."
+- =components/job-posts/form.hbs:73,74= — "Save" / "Cancel" · *N*
+- =components/job-posts/form.hbs:104= — "Re-extract from paste" (=reextractFromPaste=) · *S*
+  - Proposed: "Paste a new description above, then hit this to re-run AI extraction — fills empty fields, preserves the linked Company."
+- =components/job-posts/form.hbs:124= — "Delete post only" (=submitDelete=) · *S*
+  - Proposed: "Delete this Job Post. Its Scores, Scrapes, Applications, Questions, and Summaries are kept."
+- =components/job-posts/form.hbs:131= — "Nuclear — delete everything" (title, staff) · *N* (covered)
+- =components/job-posts/compact.hbs:24= — "delete" · *N*
+- =components/job-posts/triage-actions.hbs:5,34= — Vetted Good/Bad (compact, icon-only, title+aria-label) · *N* (covered)
+- =components/job-posts/triage-actions.hbs:78,91= — Vetted Good/Bad (expanded, text visible) · *M*
+  - Proposed: "Vet this post so the sankey and reports can show your pipeline fairly. Good = worth applying; Bad = known dead-end."
+
+** Job Applications
+- =templates/job-applications/index.hbs:11= — "+New Application" LinkTo · *N*
+- =templates/job-applications/new.hbs:99= — "Save" · *N*
+- =components/job-applications/edit.hbs:101,103= — "Save" / "Cancel" · *N*
+- =templates/job-applications/show.hbs:11= — "Delete" · *N*
+- =components/job-applications/status-log.hbs:40,64= — "⋮" / "✕" (title each) · *N* (covered)
+
+** Scrapes
+- =templates/scrapes/index.hbs:11= — "+ New Scrape" LinkTo · *N*
+- =templates/job-posts/show/scrapes.hbs:2= — "New Scrape" (=createScrape=) · *S*
+  - Proposed: "Queue another scrape attempt for this job. Useful if the previous attempt failed or the posting changed."
+- =components/scrapes/form.hbs:59= — "Submit and process" (submit) · *M*
+  - Proposed: "Create the scrape and run it immediately through the browser pipeline."
+- =components/scrapes/form.hbs:61= — "Submit and hold for external service" (=submitHold=) · *S*
+  - Proposed: "Create the scrape in hold status — the poller on your workstation/Pibu will pick it up and run it with a real browser session. Use this for sites that block headless (LinkedIn, Greenhouse)."
+- =components/scrapes/form.hbs:65,69= — "Save" / "Delete" · *N*
+- =templates/scrapes/show.hbs:12= — "Retry Scrape" (=retryScrape=) · *S*
+  - Proposed: "Run this scrape again from scratch — overwrites any captured content."
+- =templates/scrapes/show.hbs:17= — "Queue Scrape" (=queueScrape=) · *S*
+  - Proposed: "Set this scrape back to hold so the poller can try again."
+- =templates/scrapes/show.hbs:22= — "Parse Scrape" (=parseScrape=) · *S*
+  - Proposed: "Re-run the AI extractor on the stored HTML — updates the linked Job Post without re-scraping."
+
+** Scores
+- =components/scores/form.hbs:97= — "Score with AI" (submit) · *M*
+  - Proposed: "Score this job against your selected resume (or Career Data if none picked). Runs async — watch the spinner."
+- =templates/job-posts/show/scores.hbs:14= — "Score Resume" (=scoreResume=) · *S*
+  - Proposed: "Score a specific resume against this job. Without a resume, scoring falls back to your Career Data aggregate."
+
+** Resumes
+- =templates/resumes/index.hbs:5= — "+ New Resume" LinkTo · *N*
+- =templates/resumes/index.hbs:6= — "Import Resume" LinkTo · *M*
+  - Proposed: "Upload a .docx or .pdf resume and let AI parse it into structured experiences, skills, and education."
+- =templates/resumes/import.hbs:5= — "Back to Resumes" LinkTo · *N*
+- =templates/resumes/edit.hbs:9,14= — "Save" / "Cancel" · *N*
+- =templates/resumes/edit.hbs:20= — "Preview" LinkTo · *N*
+- =templates/resumes/edit.hbs:25= — "Clone" (=cloneResume=) · *M*
+  - Proposed: "Duplicate this resume — tailor the copy for a specific job without losing the original."
+- =templates/resumes/edit.hbs:30= — "Export" (=exportToWord=) · *M*
+  - Proposed: "Download as a .docx rendered from the Word template."
+- =templates/resumes/edit.hbs:32= — "Stack" / "Split" layout toggle · *S*
+  - Proposed: "Toggle between stacked (single column) and split (builder on left, preview on right) layouts."
+- =templates/resumes/edit.hbs:72= — "Delete" · *N*
+- =templates/resumes/edit.hbs:119= — "+" add experience · *S*
+  - Proposed: "Add a work experience."
+- =templates/resumes/edit.hbs:132= — "+" add project · *S*
+  - Proposed: "Add a project."
+- =templates/resumes/edit.hbs:156= — "+" add certification · *S*
+  - Proposed: "Add a certification."
+- =templates/resumes/edit.hbs:180= — "+" add education · *S*
+  - Proposed: "Add an education entry."
+- =templates/resumes/show.hbs:9,20,25,30= — Save / Clone / Export / Delete (duplicates of edit) — same proposals
+- =templates/resumes/new.hbs:28,41= — "+" add experience / certification — same proposals as edit
+
+** Resume Builder — Experiences / Descriptions / Builder
+- =components/experiences/editor/form.hbs:7= — collapsible experience header · *M*
+  - Proposed: "Click to expand this experience for editing."
+- =components/experiences/editor/form.hbs:42= — "✕" (title=Delete experience) · *N* (covered)
+- =components/descriptions/editor/form.hbs:14,36= — "✓" / "✕" (title+aria-label) · *N* (covered)
+- =components/builder/section.hbs:6= — section expand/collapse · *M*
+  - Proposed: "Expand this section to edit its items."
+
+** Cover Letters
+- =templates/cover-letters/index.hbs:3= — "New Cover Letter" LinkTo · *N*
+- =components/cover-letters/form.hbs:15= — "Save" · *N*
+- =templates/cover-letters/show.hbs:7= — "export to docx" (=exportToDocx=) · *M*
+  - Proposed: "Download this cover letter as a .docx using the Word template."
+
+** Questions & Answers
+- =templates/questions/index.hbs:11= — "+ New Question" LinkTo · *N*
+- =templates/questions/show.hbs:27,32= — New question / Delete question · *N*
+- =components/questions/form.hbs:119= — "★" lone-answer favorite (title+aria-label) · *N* (covered)
+- =components/questions/form.hbs:134,139,146= — Save / Cancel / Delete · *N*
+- =components/questions/inline-answer.hbs:90= — "Cancel" · *N*
+- =templates/questions/show/answers/index.hbs:4= — "New Answer" LinkTo · *N*
+- =templates/answers/index.hbs:11= — "+ New Answer" · *N*
+- =templates/answers/show.hbs:13= — Copy (dynamic) · *M*
+  - Proposed: "Copy the answer text to paste into the application form."
+- =templates/answers/edit.hbs:10= — Delete Answer · *N*
+- =components/answers/form.hbs:72= — submit · *N*
+- =templates/job-posts/show/questions/index.hbs:73= — edit icon · *S*
+  - Proposed: "Edit this question."
+- =templates/job-posts/show/questions/index.hbs:78= — delete icon · *S*
+  - Proposed: "Delete this question. Associated answers are kept as orphans."
+- =templates/job-posts/show/questions/index.hbs:88= — start-answer icon · *S*
+  - Proposed: "Create a new answer draft for this question."
+- =templates/job-applications/show/questions/index.hbs:4= — "New" LinkTo · *N*
+
+** Summaries
+- =templates/job-posts/show/summaries.hbs:11= — "+" add summary · *S*
+  - Proposed: "Generate a new AI summary for this job against your Career Data."
+- =templates/summaries/edit.hbs:7= — "View" LinkTo · *N*
+- =templates/summaries/edit.hbs:39= — "★" active toggle (title dynamic) · *N* (covered)
+- =templates/summaries/edit.hbs:42,46= — "Save" / "Delete" · *N*
+
+** Cover Letter — Job Application Context
+- =templates/job-posts/show/cover-letters.hbs:14= — Create Cover Letter · *S*
+  - Proposed: "Generate a new AI cover letter for this job using your selected resume + Career Data."
+
+** Favorites
+- =templates/favorites.hbs:8= — filter-mode toggle · *S*
+  - Proposed: "Switch between showing only your starred items and showing all items."
+- =templates/favorites.hbs:18,25,32= — tabs Resumes / Cover Letters / Answers · *N*
+- =components/buttons/favorite.hbs:3= — "★" star toggle (title dynamic) · *N* (covered)
+
+** Companies
+- =templates/companies/index.hbs:10= — "+ New Company" LinkTo · *N*
+- =components/companies/form.hbs:20= — "save" · *N*
+- =components/companies/fast-create.hbs:8= — inline create · *M*
+  - Proposed: "Create this company inline so you don't leave the job-post form."
+- =templates/companies/show/answers.hbs:3= — "+ New Question" LinkTo · *N*
+
+** Chat
+- =components/chat/panel.hbs:13= — "Smarter" toggle (title dynamic) · *N* (covered)
+- =components/chat/panel.hbs:50= — "Clear" · *S*
+  - Proposed: "Clear the current conversation. History resets; the agent won't remember earlier turns."
+- =components/chat/panel.hbs:55= — close chat icon (title+aria-label) · *N* (covered)
+- =components/chat/panel.hbs:132= — send arrow · *S*
+  - Proposed: "Send message (⌘+Enter)."
+- =components/main-application.hbs:48= — "Chat with AI" (title dynamic) · *N* (covered)
+- =components/chat/sidebar.hbs:6= — close chat icon (aria-label only) · *M*
+  - Proposed: add =title="Close chat"= to match the panel's close button.
+
+** Settings
+- =templates/settings/profile/index.hbs:13= — "Edit" LinkTo · *N*
+- =templates/settings/profile/index.hbs:54,70,101= — Copy LinkedIn / GitHub / Snippet (dynamic "Copy"/"Copied!") · *M*
+  - Proposed: "Copy this value to your clipboard."
+- =templates/settings/profile/edit.hbs:115= — "Remove" link · *N*
+- =templates/settings/profile/edit.hbs:121,140= — "+ Add" / "+ Add Snippet" · *M*
+  - Proposed: "Add a free-form labeled snippet — useful for stashing cover-letter prompts, preferred phrasing, or reference URLs."
+- =templates/settings/profile/edit.hbs:167,173= — "Save" / "Cancel" · *N*
+- =templates/settings/appearance.hbs:32= — dark-mode toggle switch · *S*
+  - Proposed: "Toggle dark mode. The setting is per-device."
+- =templates/settings/appearance.hbs:55= — accent-palette swatches · *S*
+  - Proposed: per-swatch =title= with palette name, e.g. "Indigo — default accent."
+- =templates/settings/data.hbs:22= — Export data · *S*
+  - Proposed: "Download an .xlsx with all your companies, job posts, applications, resumes, and answers."
+- =templates/settings/ai-spend.hbs:22= — Refresh · *N*
+- =templates/settings/ai-spend.hbs:115,134,153= — Period / Group by / Days toggles · *N*
+
+** Admin
+- =templates/admin/users/index.hbs:15= — New user LinkTo · *N*
+- =templates/admin/users/new.hbs:78,82= — "Create User" / "Cancel" · *N*
+- =templates/admin/users/show.hbs:74,78= — "Save Changes" / "Cancel" · *N*
+- =templates/admin/invitations.hbs:87= — "Resend" (=resendInvitation=) · *M*
+  - Proposed: "Send the invitation email again — the existing token is reused."
+- =templates/admin/invitations.hbs:92= — "Revoke" (=revokeInvitation=) · *S*
+  - Proposed: "Invalidate this invitation's token. The recipient can no longer accept."
+- =templates/admin/invitations.hbs:98= — "Resend" (expired, same as :87) · *M*
+- =templates/admin/waitlist.hbs:58= — Invite entry · *M*
+  - Proposed: "Promote this waitlist entry to an Invitation — sends signup email."
+- =templates/admin/waitlist.hbs:63= — Delete entry · *N*
+- =templates/admin/scrape-profiles/show.hbs:147= — "Save" · *N*
+
+** Reports
+- =templates/reports/activity.hbs:7,13= · =reports/sources.hbs:7,13= · =reports/application-flow.hbs:8,14= — Mine / Global tabs · *N*
+- =components/reports/filter-bar.hbs:34= — preset window buttons · *N*
+- =components/reports/filter-bar.hbs:45= — "Custom" · *N*
+
+** Shared
+- =components/top-bar.hbs:3= — hamburger icon · *S*
+  - Proposed: "Toggle sidebar."
+- =components/top-bar.hbs:38= — logout icon (title=Logout) · *N* (covered)
+- =components/panel/navigation.hbs:4= — Expand / Collapse · *M*
+  - Proposed: "Collapse the sidebar to icon-only mode (more screen for the main panel)."
+- =components/panel/card.hbs:20= — caret toggle · *N*
+- =components/upload-form.hbs:24= — file-select button · *M*
+  - Proposed: "Pick a .docx or .pdf to import."
+- =components/menus/subnav-search.hbs:4= — search icon (aria-label) · *N* (covered)
+- =components/sidebar.hbs:40,140= — go-to-job-posts / go-to-reports (nav) · *N*
+- =components/sidebar.hbs:742= — copy-to-clipboard on sidebar item · *M*
+  - Proposed: "Copy this title to clipboard."
+- =components/games/mini-golf.hbs:33,43= — Restart / Next hole (404 mini-golf) · *N*
+
+** Summary counts
+- Total inventoried: ~140
+- Already has tooltip (title or aria-label): ~30
+- *S* (strongly recommended): ~28 new tooltips proposed
+- *M* (maybe): ~20 proposed
+- *N* (skip): the rest
+
+** Execution plan (after approval)
+1. For each approved row, add =title="<proposed>"= to the button, preserving any existing =aria-label=.
+2. For icon-only buttons that lack =aria-label=, add both; keep the =title= and =aria-label= strings identical so screen readers and sighted hover match.
+3. Lint: =ember-template-lint= + =prettier=.
+4. Ship as a single frontend PR titled =feat: tooltip coverage (wave 1)=.
+

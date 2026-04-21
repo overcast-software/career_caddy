@@ -354,6 +354,8 @@ Queue button sets scrape to =hold= for poller pickup. Status notes on all transi
 CLOSED: [2026-04-16 Wed]
 Tested locally: queue scrape 59, poller scraped + uploaded screenshot, clicked filename in UI, image displayed.
 
+* Feature sorting tables
+
 * Features — PENDING APPROVAL
 
 ** TODO tool tips — where could they be useful? :PENDING_APPROVAL:APPROVED:
@@ -466,6 +468,29 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO filters for job posts.
+it's pretty immature now, but I'm seeing utility in fleshing out simple thing.
+I also want to revisit the underconstruction pages buttons, since the filter indication badges look bad.
+#+NOTE: [2026-04-20 frontend+api] Shipped:
+- =JobPosts::FiltersMenu= popover in subnav (Hide Vetted Bad, Stubs
+  tri-state, Scoring tri-state, Source dropdown)
+- API =filter[exclude_vetted_bad]= (latest-status aware; re-appears
+  when a newer status is logged)
+- =FilterPill= component — unified slate rounded-full pill matching
+  =frontend/under-construction.html= aesthetic; replaced the 6
+  per-color rectangular chips on =/job-posts=
+
+** TODO Subnav control sizing is inconsistent [frontend]
+[2026-04-20] =/job-posts= subnav stacks =Search= (input), =Filters= (compact
+HyperUI-style dropdown trigger =px-2.5 py-1 text-xs= bordered), and
+=+ New Job Post= (app =.btn=, taller + bigger text). Heights don't line
+up. Same mismatch will land anywhere else we add more subnav controls
+(applications, scrapes, resumes). Decide:
+- unify on =.btn= height with a =.btn.ghost= variant for non-primary
+  actions like Filters, OR
+- downsize =.btn= on list/index pages to match the compact control.
+Pick one and roll out so subnav reads as a single bar. Blocks clean
+filter-menu rollout beyond job-posts.
 ** DONE user dropdown int settings.ai-spend is white on white
 CLOSED: [2026-04-20 Mon]
 [2026-04-20 frontend] =ai-spend.hbs= user =<select>= was using an
