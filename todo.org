@@ -422,6 +422,29 @@ CLOSED: [2026-04-20 Mon 20:55]
 ** TODO Reactive Resume plugin resumerx :PENDING_APPROVAL:
 [[file:notes.org::*Reactive Resume as a PDF-render plugin][Plugin architecture + scope → notes.org]]
 
+** TODO Graduate auto-score from automation into ai/ [api+ai]
+[2026-04-20] Port =career_caddy_automation/scripts/score_posts.py= to
+=ai/scripts/score_poller.py= so every user — not just the owner — gets
+their job-posts auto-scored once scrapes complete. Email stays out of
+core: notmuch + anything email-shaped lives only in
+=career_caddy_automation/=. Also ports =url_extractor= to =ai/lib/= and
+has the paste/scrape endpoints call it (closes the Inbox
+"Canonicalize tracker URLs on scrape ingest" TODO). Ships behind
+=CC_AUTOSCORE_ENABLED= (server) + =Profile.auto_score= (per-user) +
+server-enforced daily cost cap. One PR.
+[[file:notes.org::*Canonical auto-score in ai/][Full plan → notes.org]]
+
+** TODO Reactive Resume MVP spike [api]
+[2026-04-20] Pre-plugin round-trip proof on =feature/rxresume-mvp=.
+Steps: (1) =api/rxresume-dev.yml= compose brings up rxresume +
+postgres + minio + chromium on localhost:3333; (2) manual API-key
+issue from the rxresume UI; (3) =rxresume_mapper.py= converts
+=Resume.to_export_context()= to rxresume JSON; (4) =rxresume_client.py=
+import→print→delete round-trip; (5) =?format=pdf= on existing
+=/resumes/:id/export/=. Frontend deferred. Not merging to main —
+feeds the eventual plugin PR.
+[[file:notes.org::*Reactive Resume — MVP spike][Full plan → notes.org]]
+
 * Features — Open TODOs
 
 ** DONE Ember Engines extension points for private website layer [frontend]
@@ -468,6 +491,7 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO asking ai to answer from jp.show.questions.show didn't do polling :bug:
 ** TODO filters for job posts.
 it's pretty immature now, but I'm seeing utility in fleshing out simple thing.
 I also want to revisit the underconstruction pages buttons, since the filter indication badges look bad.
@@ -665,8 +689,46 @@ CLOSED: [2026-04-18 Sat]
   always starts closed; toggle still works within the session.
 Merged into =feature/job-post-paste-edit= so it ships with the rest.
 
-** TODO This is the jinja markup  for the word template
-audit it for completeness against the resume json:api response.
+** DONE Audit jinja word template against resume export context
+CLOSED: [2026-04-20 Mon]
+[2026-04-20 api] Audit written to notes.org :: "Resume Word-export
+jinja audit [2026-04-20]". TL;DR: five gaps — =HEADER.EMAIL= referenced
+but not in context; Experience.title and Project.title/dates never
+rendered; two template-styling notes ("RP Summary" / "RP Bulleted
+List"); one dormant string mismatch in =Resume.tool_skills= (dead
+code, no callers). Three follow-up TODOs queued below.
+[[file:notes.org::*Resume Word-export jinja audit][Full audit]]
+
+** TODO Include email in Resume.to_export_context().header [api]
+[2026-04-20] =resume_export.docx= jinja prints =({{HEADER.EMAIL}})= but
+=Resume.to_export_context()= builds =header = {name, title, phone}=
+(no email). =HEADER.EMAIL= renders empty in the exported Word doc.
+Trivial: add =self.user.email= to the header dict in
+=api/job_hunting/models/resume.py= around line 137.
+
+** TODO Add title + date_range to docx template Experience/Project blocks [api]
+[2026-04-20] =Experience.to_export_dict()= already emits =title= and
+=date_range= but the current =api/templates/resume_export.docx= drops
+them — every experience shows company + location with no job title.
+Same on Projects: =Project.to_export_dict()= emits =title= but the
+template only iterates =proj.description= bullets, so each project is
+a nameless bullet list. Manual Word-template edit: add
+={{ experience.title }}= and ={{ proj.title }}= placeholders (with the
+correct paragraph styles — "RP Summary" for experience summary,
+"RP Bulleted List" for project bullets, as flagged by jinja comments).
+
+** TODO Retire unused Resume.tool_skills / *_skills properties [api]
+[2026-04-20] =Resume.tool_skills= calls =skills_by_type("Tools/Platform")=
+(plural) but canonical enum is =Tool/Platform= (singular). No callers
+in the repo (docx export uses =to_export_value= + a separate
+=key_mapping=, which works). Either delete
+=tool_skills=/=language_skills=/=database_skills=/=framework_skills=/=security_skills=
+properties on =models/resume.py= or fix the string — prefer deletion
+unless a caller appears.
+
+** REFERENCE Jinja markup for the word template
+Source transcription of =api/templates/resume_export.docx=. Kept for audit
+reference — see DONE entry above + notes.org audit.
 *** head
 {{ header.name }}
 {{header.title }}
@@ -866,6 +928,7 @@ flooding Logfire with noise that drowns out the interesting spans. Filter
 them out at the =instrument_django()= level — either skip the span for the
 healthcheck path or drop it via a span processor. Same likely applies to
 Caddy/k8s probes hitting the endpoint.
+** TODO exclude scrape polling request from logfire
 
 ** TODO answers/new favorite toggle lost on save [frontend] :bug:
 [2026-04-20] On =/answers/new=, toggling the favorite star before hitting

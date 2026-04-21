@@ -2311,6 +2311,23 @@ Codename: =caddy_automation=. Folder: =career_caddy_automation/=.
 email_classifier_agent.py, gateway.py deleted; agent_factory stripped; job_email_to_caddy.py
 now URL-only). A2A orchestrator, hold_poller, discover_sites, manual_login all in standalone project.
 
+#+NOTE: [2026-04-20 automation] Email pipeline now auto-creates ~Scrape(status=hold)~
+records and runs a separate scoring daemon. Implications for the API side:
+- Expect more traffic on ~POST /api/v1/scrapes/~ (email pipeline, not just manual UI
+  creation). Gated by ~CADDY_AUTO_SCRAPE=1~ on the automation side; default off.
+- Automation-side client calls ~GET /api/v1/scrapes/?filter[job_post_id]=<id>~ to
+  skip duplicates. This filter *must* work — confirm it's supported in the scrapes
+  view. If it silently ignores unknown filters, the dedup becomes a no-op and the
+  table will fill with duplicate hold scrapes.
+- New ~caddy-score~ daemon POSTs to ~/api/v1/scores/~ for every job-post whose
+  scrape reaches ~completed~. Score-generation is LLM-backed and expensive —
+  watch cost. Server-side pre-filters (e.g. skip posts with empty ~job_content~)
+  would help; today the automation only filters on "has no score yet" via
+  ~GET /api/v1/scores/?filter[job_post_id]=~.
+- No API shape change requested yet. If ~POST /api/v1/scores/~ returns useful
+  usage/cost metadata in its response body, the automation side will start logging
+  it — mention in a reply note if that's worth adding.
+
 ** Goal
 Separate personal automation (email pipeline, browser scraping) from the Career Caddy product.
 The =ai/= directory ships with Career Caddy. Personal automation lives in its own repo that
@@ -3986,3 +4003,526 @@ whole row. When done, ping the agent to execute the implementation pass.
 3. Lint: =ember-template-lint= + =prettier=.
 4. Ship as a single frontend PR titled =feat: tooltip coverage (wave 1)=.
 
+
+* Resume Word-export jinja audit [2026-04-20]                      :IMPORTANT:
+:PROPERTIES:
+:CREATED:  [2026-04-20]
+:END:
+
+Audit of the jinja markup captured in =todo.org= (Inbox, under "This is the
+jinja markup for the word template") against the context dict that
+=lib/services/resume_export_service.py= actually renders. Template file on
+disk: =api/templates/resume_export.docx= (binary; the jinja in todo.org is the
+transcribed copy of what's inside).
+
+** Context source chain
+=ResumeExportService.render_docx()= → =build_context()= → =Resume.to_export_context()=
+→ post-processes =skills= into a dict grouped by skill_type → flattens the
+grouped dict into top-level keys via =key_mapping= (Language → language_skills,
+etc.).
+
+Top-level keys in the rendered context:
+- =header=, =HEADER= — both point to the same dict =({name, title, phone})=
+- =summary=
+- =experiences=  (list of dict)
+- =educations=   (list of dict)
+- =certifications= (list of dict)
+- =projects=     (list of dict)
+- =skills=       (dict {language_skills, database_skills, framework_skills, tool_skills, security_skills} — post-processed)
+- =language_skills=, =database_skills=, =framework_skills=, =tool_skills=, =security_skills= — duplicated at top level so =skills.language_skills= and plain =language_skills= both work
+
+** Gaps found
+
+*** GAP 1: header.email / HEADER.EMAIL referenced but not in context
+The jinja prints =({{HEADER.EMAIL}} * {{HEADER.PHONE}})= but
+=Resume.to_export_context()= builds =header = {name, title, phone}= — email is
+never added. Result: =HEADER.EMAIL= renders as empty, the " * " separator
+shows with nothing to its left.
+
+Fix: include =self.user.email= in the header dict. The User model already
+carries the email.
+
+*** GAP 2: Experience job title never rendered
+=Experience.to_export_dict()= produces =title=, =start_date=, =end_date=,
+=date_range=, =company=, =location=, =summary=, =descriptions=. The jinja
+only uses =date_range=, =company=, =location=, =summary=, and =descriptions=
+— the job title is silently dropped.
+
+This is user-visible on the exported Word doc: every experience block shows a
+company but no job title. A resume bullet like
+  "2022 – Present — Acme — Austin, TX"
+instead of
+  "Senior Platform Engineer — Acme — Austin, TX (2022 – Present)".
+
+Fix: add =({{ experience.title }})= (or equivalent) to the jinja experience
+header line. No data-model change needed.
+
+*** GAP 3: Project title + dates never rendered
+=Project.to_export_dict()= produces =title=, =start_date=, =end_date=,
+=is_active=, =description= (list). The jinja only iterates =proj.description=
+for bullets — the project's name/title and dates are dropped. Every project
+shows up as a naked bullet list.
+
+Fix: add =({{ proj.title }})= (and optionally the date_range) to the Projects
+section header.
+
+*** GAP 4: Experience.summary uses "RP Summary" paragraph style
+The jinja comment =({# This should use "RP Summary" style #})= flags that the
+experience summary paragraph should be rendered with a specific Word
+paragraph style ("RP Summary"), which docxtpl can't set from template
+expression alone — needs a styled run/paragraph in the .docx template itself.
+This is a template-authoring task, not a data-shape bug; noted here so the
+owner knows the intent.
+
+Same for projects: =({# This should use "RP Bulleted List" style #})= on the
+bullet loop.
+
+*** GAP 5: Skill-type string mismatch (dormant)
+=Resume.tool_skills= property calls =self.skills_by_type("Tools/Platform")=
+(plural "Tools"), but the canonical enum in =ingest_resume.SkillTag= is
+=TOOL_PLATFORM = "Tool/Platform"= (singular), and the docx export's
+=key_mapping= uses the singular form too. Nothing currently reads
+=Resume.tool_skills= (no other callers in the repo), so this is dead code
+rather than a visible bug. Either delete the unused =tool_skills= /
+=language_skills= / etc. properties on =Resume=, or fix the string so the
+property actually returns Tool/Platform skills.
+
+*** Non-gap: certifications / educations are fully covered
+The jinja fields =({title, issuer, issue_date, content})= and =({institution,
+degree, major, minor, issue_date})= match =to_export_dict()= exactly. No
+changes needed there.
+
+** Recommended follow-ups (one TODO each, backend-only)
+
+1. Add =email= to =Resume.to_export_context().header= so =HEADER.EMAIL=
+   renders. Trivial. Probably a few lines in =resume.py=.
+2. Update =api/templates/resume_export.docx= so the Experience block prints
+   the job title and the Project block prints the project title + dates.
+   This is a manual Word-template edit — touch the .docx in Word / LibreOffice,
+   add ={{ experience.title }}= and ={{ proj.title }}= placeholders with the
+   right paragraph styles, commit the updated binary.
+3. Retire =Resume.tool_skills= / =language_skills= / =database_skills= /
+   =framework_skills= / =security_skills= properties (no callers) OR fix the
+   =Tools/Platform= → =Tool/Platform= string mismatch. Low priority — pick
+   deletion unless a caller appears.
+
+
+* Reactive Resume — MVP spike [2026-04-20]                         :IMPORTANT:
+:PROPERTIES:
+:CREATED:  [2026-04-20]
+:END:
+
+Pre-plugin, pre-subdomain MVP. Purpose: prove the round-trip (Career Caddy
+resume → rxresume JSON → rxresume PDF bytes → download) on localhost before
+sinking work into the full =cc-rxresume-plugin= architecture
+[[file:notes.org::*Reactive Resume as a PDF-render plugin][above]].
+
+Branch: =api:feature/rxresume-mvp= (API changes only — single feature
+flag on the frontend to try this instead of docx).
+
+** Step 1 — Spin up rxresume locally
+
+Add a =rxresume-dev= compose file (not touching =docker-compose.yml= or
+=docker-compose.prod.yml=). Located at =api/rxresume-dev.yml= so it lives
+with the spike branch and can be thrown away when the plugin repo takes over.
+
+#+begin_src yaml
+# api/rxresume-dev.yml  — transient dev stack, NOT production-wired
+services:
+  rxresume-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rxresume
+      POSTGRES_PASSWORD: rxresume
+      POSTGRES_DB: rxresume
+    volumes:
+      - rxresume_db:/var/lib/postgresql/data
+
+  rxresume-minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: rxresume
+      MINIO_ROOT_PASSWORD: rxresume-super-secret
+    volumes:
+      - rxresume_minio:/data
+    ports: ["9000:9000", "9001:9001"]
+
+  rxresume-chrome:
+    image: ghcr.io/browserless/chromium:latest
+    environment:
+      TIMEOUT: 10000
+      CONCURRENT: 10
+      TOKEN: rxresume-chrome-token
+      EXIT_ON_HEALTH_FAILURE: true
+
+  rxresume:
+    image: amruthpillai/reactive-resume:latest
+    depends_on: [rxresume-db, rxresume-minio, rxresume-chrome]
+    ports: ["3333:3000"]
+    environment:
+      # Core — see https://docs.rxresu.me/self-hosting
+      PORT: 3000
+      NODE_ENV: production
+      PUBLIC_URL: http://localhost:3333
+      STORAGE_URL: http://localhost:9000/default
+      # Auth / signing
+      ACCESS_TOKEN_SECRET: change-me-access
+      REFRESH_TOKEN_SECRET: change-me-refresh
+      # DB
+      DATABASE_URL: postgresql://rxresume:rxresume@rxresume-db:5432/rxresume
+      # Storage (minio, S3-compatible)
+      STORAGE_ENDPOINT: rxresume-minio
+      STORAGE_PORT: 9000
+      STORAGE_REGION: us-east-1
+      STORAGE_BUCKET: default
+      STORAGE_ACCESS_KEY: rxresume
+      STORAGE_SECRET_KEY: rxresume-super-secret
+      STORAGE_USE_SSL: "false"
+      # Chrome (for PDF printing)
+      CHROME_TOKEN: rxresume-chrome-token
+      CHROME_URL: ws://rxresume-chrome:3000
+      CHROME_IGNORE_HTTPS_ERRORS: "true"
+
+volumes:
+  rxresume_db:
+  rxresume_minio:
+#+end_src
+
+Bring it up:
+#+begin_src bash
+docker compose -f api/rxresume-dev.yml up -d
+# First boot: minio needs its bucket created — open http://localhost:9001,
+# login rxresume / rxresume-super-secret, create bucket "default".
+# (Or add a sidecar `mc` container that mkbucket-s on boot — skip for MVP.)
+#+end_src
+
+** Step 2 — Create a service account + API key
+
+Reactive Resume's API key is per-user, issued from the UI:
+1. Visit http://localhost:3333 → sign up (local-only; email verification is
+   off in dev).
+2. Settings → Developer → API Keys → Generate.
+3. Copy the key into a local dev env file — NOT committed:
+   #+begin_src bash
+   echo 'RXRESUME_BASE_URL=http://localhost:3333' >> api/.env.local
+   echo 'RXRESUME_API_KEY=<paste>' >> api/.env.local
+   #+end_src
+
+Document this step in =api/README.md= on the branch, not in core docs.
+
+** Step 3 — Data mapping
+
+Career Caddy =Resume.to_export_context()= ([[file:api/job_hunting/models/resume.py][resume.py:135]]) already gives us
+almost everything. Build a pure mapping function:
+=api/job_hunting/lib/services/rxresume_mapper.py=
+
+#+begin_src python
+"""Map a Career Caddy Resume to Reactive Resume's JSON schema.
+
+rxresume's import format is documented at
+https://docs.rxresu.me/meta/structure — main sections we fill:
+  basics { name, headline, email, phone, location }
+  sections.{summary, skills, experience, education, certifications,
+            projects}
+"""
+from job_hunting.models import Resume
+
+
+def to_rxresume_json(resume: Resume) -> dict:
+    ctx = resume.to_export_context()
+    header = ctx["header"]
+    basics = {
+        "name": header.get("name") or "",
+        "headline": header.get("title") or "",
+        "email": getattr(resume.user, "email", "") or "",
+        "phone": header.get("phone") or "",
+        "location": "",  # TODO: plumb from Profile when available
+    }
+    summary = {"name": "Summary", "content": ctx.get("summary", "")}
+
+    experience = {
+        "name": "Experience",
+        "items": [
+            {
+                "position": e.get("title") or "",
+                "company": e.get("company") or "",
+                "location": e.get("location") or "",
+                "date": e.get("date_range") or "",
+                "summary": e.get("summary") or "",
+                "highlights": e.get("descriptions") or [],
+            }
+            for e in ctx["experiences"]
+        ],
+    }
+
+    education = {
+        "name": "Education",
+        "items": [
+            {
+                "institution": e.get("institution") or "",
+                "studyType": e.get("degree") or "",
+                "area": e.get("major") or "",
+                "date": e.get("issue_date") or "",
+            }
+            for e in ctx["educations"]
+        ],
+    }
+
+    certifications = {
+        "name": "Certifications",
+        "items": [
+            {
+                "name": c.get("title") or "",
+                "issuer": c.get("issuer") or "",
+                "date": c.get("issue_date") or "",
+                "summary": c.get("content") or "",
+            }
+            for c in ctx["certifications"]
+        ],
+    }
+
+    projects = {
+        "name": "Projects",
+        "items": [
+            {
+                "name": p.get("title") or "",
+                "date": "",
+                "highlights": p.get("description") or [],
+            }
+            for p in ctx["projects"]
+        ],
+    }
+
+    # Skills: rxresume expects items with {name, level, keywords[]}.
+    # Our skills come out of build_context as a grouped dict.
+    skills_items = []
+    for skill in ctx.get("skills", []) or []:
+        if isinstance(skill, dict):
+            skills_items.append(
+                {"name": skill.get("text") or "", "level": "", "keywords": []}
+            )
+
+    return {
+        "basics": basics,
+        "sections": {
+            "summary": summary,
+            "skills": {"name": "Skills", "items": skills_items},
+            "experience": experience,
+            "education": education,
+            "certifications": certifications,
+            "projects": projects,
+        },
+        "metadata": {
+            "template": "azurill",  # default; per-resume override later
+            "page": {"format": "letter", "margin": 18},
+            "locale": "en-US",
+        },
+    }
+#+end_src
+
+Contract-test against =GET {RXRESUME_BASE_URL}/api/resume/schema= in a unit
+test (cached copy if the service is down).
+
+** Step 4 — Client
+
+=api/job_hunting/lib/services/rxresume_client.py= — thin httpx wrapper.
+
+#+begin_src python
+import httpx
+from django.conf import settings
+
+
+class RxResumeClient:
+    def __init__(self, base_url: str | None = None, api_key: str | None = None, timeout: float = 10.0):
+        self.base_url = (base_url or settings.RXRESUME_BASE_URL).rstrip("/")
+        self.api_key = api_key or settings.RXRESUME_API_KEY
+        self._client = httpx.Client(
+            base_url=self.base_url,
+            headers={"x-api-key": self.api_key},
+            timeout=timeout,
+        )
+
+    def import_resume(self, data: dict) -> str:
+        r = self._client.post("/api/resume/import", json={"data": data})
+        r.raise_for_status()
+        return r.json()["id"]
+
+    def print_pdf(self, resume_id: str) -> bytes:
+        r = self._client.get(f"/api/resume/print/{resume_id}")
+        r.raise_for_status()
+        return r.content
+
+    def delete(self, resume_id: str) -> None:
+        # best-effort cleanup; ignore failures
+        try:
+            self._client.delete(f"/api/resume/{resume_id}")
+        except Exception:
+            pass
+
+    def render(self, data: dict) -> bytes:
+        rxid = self.import_resume(data)
+        try:
+            return self.print_pdf(rxid)
+        finally:
+            self.delete(rxid)
+#+end_src
+
+** Step 5 — Export endpoint surface
+
+Extend the existing =/api/v1/resumes/:id/export/= action (not a new
+endpoint) with =?format=pdf=:
+
+#+begin_src python
+# api/job_hunting/api/views/resumes.py — inside export action
+elif format_param == "pdf":
+    from job_hunting.lib.services.rxresume_client import RxResumeClient
+    from job_hunting.lib.services.rxresume_mapper import to_rxresume_json
+
+    client = RxResumeClient()
+    pdf = client.render(to_rxresume_json(obj))
+    response = HttpResponse(pdf, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="resume-{obj.id}.pdf"'
+    return response
+#+end_src
+
+Feature-flag by checking =getattr(settings, "RXRESUME_BASE_URL", None)= —
+return 501 if unconfigured. No plugin registry yet; that arrives with the
+full =cc-rxresume-plugin= when we graduate the spike.
+
+** Step 6 — Frontend (optional for MVP)
+
+=export-resume-to-word.js= already falls back to =?format=md=. Add a third
+shape: call =?format=pdf= first, on 501 or 5xx, fall back to docx, then md.
+Or skip the frontend entirely for the spike — =curl= is enough to prove
+round-trip. Defer UI plumbing until rxresume is on =resume.careercaddy.online=.
+
+** Acceptance criteria for the spike
+
+1. =docker compose -f api/rxresume-dev.yml up= boots a working
+   =localhost:3333= rxresume that accepts a manually-generated API key.
+2. =curl -H "Authorization: Bearer $CC_JWT" http://localhost:8000/api/v1/resumes/1/export/?format=pdf -o /tmp/r.pdf=
+   produces a readable PDF for a seeded resume.
+3. A single pytest round-trip test that mocks =httpx.Client= and asserts the
+   payload shape (no live rxresume dependency).
+4. Docs: =api/README.md= on the branch gets an "rxresume (spike)" section
+   covering steps 1–2 so the next developer can repro.
+
+** What we explicitly defer
+
+- =djp= plugin extraction.
+- =cc-rxresume-plugin= repo.
+- Subdomain / reverse-proxy work.
+- Per-user rxresume accounts / OAuth / theme-picker UI.
+- Production deploy — the spike branch never merges to main; it proves the
+  approach and feeds the eventual plugin PR.
+
+** Timebox
+
+Spike budget: 1–2 focused sessions. If we can't stand up steps 1–3 in that
+window, revisit whether rxresume is the right renderer (alternatives:
+WeasyPrint + HTML template, Typst, a hand-rolled Puppeteer service). The
+spike output is either a working PDF or a concrete "why not" document.
+
+
+
+* Canonical auto-score in ai/ [2026-04-20]                         :IMPORTANT:
+:PROPERTIES:
+:CREATED:  [2026-04-20]
+:END:
+
+Graduate the /scoring/ half of the automation-repo pipeline into =ai/= as a
+product feature. Email stays out of core entirely — Career Caddy itself
+does not do email. Users who want email-driven scraping run
+=career_caddy_automation/= locally (notmuch, IMAP, forward-to-a-script,
+whatever they prefer), or build their own pipeline on top of the API.
+Core only sees =Scrape(status=hold)= records; it does not care where they
+came from.
+
+** What moves in (canonical) vs stays out (personal)
+
+*** In =ai/= — canonical for all users
+| New file | Purpose |
+|----------+---------|
+| =ai/scripts/score_poller.py= | Port of =score_posts.py= — daemon; per-user cost cap; dedup via =filter[job_post_id]= |
+| =ai/lib/url_extractor.py= | Pure-Python URL canonicalization + tracker unwrap (port from automation =agents/url_extractor.py=); used by the existing manual paste/scrape endpoints — not by anything email-shaped |
+| =docker-compose= addition | =score-poller= service |
+
+*** Stays in =career_caddy_automation/= — personal / reference
+| File | Why personal |
+|------+--------------|
+| =scripts/tag_emails.py= | notmuch CLI; requires local Maildir |
+| =scripts/process_tagged.py= | notmuch + Camoufox browser |
+| =mcp_servers/email_server.py= | notmuch search/tag tools |
+| /any other email-shaped thing/ | Core does not do email, period |
+
+** Auto-score daemon (=ai/scripts/score_poller.py=)
+
+Mirrors =hold_poller.py= shape. Loop:
+1. =GET /api/v1/scrapes/?filter[status]=completed&filter[has_score]=false&per_page=N=
+2. For each row, extract =job_post_id= from the relationship envelope
+3. =POST /api/v1/scores/= with ={job_post_id}=
+4. Respect per-run =--limit= (default 5) and =--interval= (default 30 min)
+5. Per-user daily cost cap: before calling, =GET /api/v1/ai-spend/today/= —
+   abort if over budget; log + emit a user-visible flash on next login
+
+Gated by =CC_AUTOSCORE_ENABLED=1= on the service; per-user opt-in via a
+=auto_score= bool on =Profile= (see API changes). Skipped posts are
+counted, not retried silently — the user should see "12 posts skipped
+this week: daily cap hit" in an admin/settings view.
+
+** Shared URL extractor (=ai/lib/url_extractor.py=)
+
+Port =career_caddy_automation/src/agents/url_extractor.py= verbatim — already
+pure-Python (httpx + regex, no LLM dep). Canonicalizes tracker URLs, strips
+=utm_*= / =trackingId= / =gclid= / etc. The existing manual paste + scrape
+endpoints call it on whatever URL the user submitted. Closes the Inbox TODO
+"Canonicalize tracker URLs on scrape ingest."
+
+This module is deliberately /not/ shaped around email. URL in → canonical
+URL out. Anything that feeds it URLs (paste page, chat scrape tool,
+=career_caddy_automation/=) benefits equally.
+
+** API changes needed
+
+1. =GET /api/v1/scrapes/?filter[has_score]=false= — join to =Score= via
+   =job_post_id=, filter posts without a score. ~20 lines in
+   =ScrapeViewSet.list=.
+2. =Profile.auto_score= boolean (default =false=, opt-in). One migration,
+   one serializer attr, one checkbox on =/settings/profile=.
+3. Per-user daily AI-spend endpoint =GET /api/v1/ai-spend/today/= — already
+   have usage rows, just a convenience aggregator for the cost cap.
+
+No email webhook, no inbound parse handler, no =inbox+<token>@...= address.
+
+** Config surface
+
+*** Server (=.env=)
+#+begin_example
+CC_AUTOSCORE_ENABLED=1
+CC_AUTOSCORE_INTERVAL_MINUTES=30
+CC_AUTOSCORE_LIMIT_PER_RUN=5
+CC_AUTOSCORE_DAILY_COST_CAP_USD=2.00
+#+end_example
+
+*** Per-user (=/settings/profile=)
+- [x] Auto-score my job posts when scraping completes
+
+** Branch
+
+=api:feature/autoscore=. One feature, one PR. Ships behind
+=CC_AUTOSCORE_ENABLED=0= by default; staff flip it on for dogfooding first.
+
+** What could go wrong
+
+- /Cost blowout/ — the daily cost cap is the only safeguard. Must be
+  server-enforced, not just honored by the daemon. Wire the cap into
+  =ScoreViewSet.create= as a pre-check so any consumer (automation repo,
+  daemon, future UI button) is bound by it.
+- /Silent skips/ — users deserve to see "we skipped 12 posts this week
+  because of X"; log to a visible place (flash on login, or a small widget
+  on =/settings/profile=).
+- /Dedup edge cases/ — if a post acquires a second scrape (re-scrape, paste
+  ingest after a scrape) the =filter[has_score]= check still says "no
+  score" and the daemon re-queues. Dedup on "job_post has any score," not
+  on the scrape row.
