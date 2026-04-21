@@ -25,3 +25,43 @@ CLOSED: [2026-04-15 Tue]
 :ARCHIVE_TODO: DONE
 :END:
 Added =update_answer()= to =api_tools.py= (content, favorite). Registered in =toolsets.py= (=all= + =career_caddy= scopes).
+
+* IN_PROGRESS We want to increase code coverage in testing
+:PROPERTIES:
+:STARTED:  [2026-04-08 api]
+:ARCHIVE_TIME: 2026-04-20 Mon 20:52
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: IN_PROGRESS
+:ARCHIVE_CATEGORY: todo
+:END:
+#+NOTE: API agent owns this. Ongoing; more coverage can be added incrementally.
+
+* DONE IN_PROGRESS MCP exposure at mcp.careercaddy.online :APPROVED:
+CLOSED: [2026-04-18 Sat 20:52]
+:PROPERTIES:
+:STARTED:  [2026-04-10 ai+api]
+:ARCHIVE_TIME: 2026-04-20 Mon 20:52
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: IN_PROGRESS
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[[file:notes.org::*MCP deployment at mcp.careercaddy.online][Architecture → notes.org]]
+** YES Configure Caddy reverse proxy + DNS for =mcp.careercaddy.online= [product-owner]
+CLOSED: [2026-04-18 Sat 20:51]
+** YES OAuth 2.0 support for in-app chat (Phase 2)
+CLOSED: [2026-04-18 Sat 20:52]
+** saved browser credentials is a major security vulnerability even for properly exposed MCP.
+
+* NO IN_PROGRESS fonts and buttons from "under construction" :APPROVED:
+CLOSED: [2026-04-18 Sat 20:52]
+:PROPERTIES:
+:STARTED:  [2026-04-11 frontend]
+:ARCHIVE_TIME: 2026-04-20 Mon 20:52
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: IN_PROGRESS
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: NO
+:END:
+[[file:notes.org::*Fonts and buttons from "under construction" page][Considerations → notes.org]]
+Remaining: font adoption from under-construction.html.

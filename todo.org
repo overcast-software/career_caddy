@@ -58,33 +58,7 @@ See [[file:notes.org::*Curriculum gap analysis][notes.org: Curriculum gap analys
 ** TODO Add handover documentation convention for stuck agents
 [[file:notes.org::*Curriculum gap analysis][↑ gap analysis]]
 
-* IN_PROGRESS [2/2]
-
-** IN_PROGRESS We want to increase code coverage in testing
-:PROPERTIES:
-:STARTED:  [2026-04-08 api]
-:END:
-#+NOTE: API agent owns this. Ongoing; more coverage can be added incrementally.
-
-** DONE IN_PROGRESS MCP exposure at mcp.careercaddy.online :APPROVED:
-CLOSED: [2026-04-18 Sat 20:52]
-:PROPERTIES:
-:STARTED:  [2026-04-10 ai+api]
-:END:
-[[file:notes.org::*MCP deployment at mcp.careercaddy.online][Architecture → notes.org]]
-*** YES Configure Caddy reverse proxy + DNS for =mcp.careercaddy.online= [product-owner]
-CLOSED: [2026-04-18 Sat 20:51]
-*** YES OAuth 2.0 support for in-app chat (Phase 2)
-CLOSED: [2026-04-18 Sat 20:52]
-*** saved browser credentials is a major security vulnerability even for properly exposed MCP.
-
-** NO IN_PROGRESS fonts and buttons from "under construction" :APPROVED:
-CLOSED: [2026-04-18 Sat 20:52]
-:PROPERTIES:
-:STARTED:  [2026-04-11 frontend]
-:END:
-[[file:notes.org::*Fonts and buttons from "under construction" page][Considerations → notes.org]]
-Remaining: font adoption from under-construction.html.
+* IN_PROGRESS [0/0]
 
 * Features — APPROVED (ready to work)
 ** TODO Sankey — vetted hub grouping (d3 aggregator pattern)
@@ -382,10 +356,10 @@ Tested locally: queue scrape 59, poller scraped + uploaded screenshot, clicked f
 
 * Features — PENDING APPROVAL
 
-** TODO tool tips — where could they be useful?                    :PENDING_APPROVAL:
+** TODO tool tips — where could they be useful? :PENDING_APPROVAL:APPROVED:
 [[file:notes.org::*Tooltips][Considerations → notes.org]]
 
-** TODO Tackling deprecations                                      :PENDING_APPROVAL:
+** TODO Tackling deprecations :PENDING_APPROVAL:APPROVED:
 [[file:notes.org::*Tackling Ember deprecations][Considerations → notes.org]]
 
 ** TODO Ian Finnis letter                                          :PENDING_APPROVAL:
@@ -419,7 +393,7 @@ Smoke-tested: "take me to my resumes" renders a Go-to-Resumes button
 that navigates without a follow-up LLM turn. 46 chat tests still green.
 Follow-ups (non-blocking) tracked in notes.org.
 
-** TODO AI Models admin — runtime DB override (revisit)          :PENDING_APPROVAL:
+** WAIT AI Models admin — runtime DB override (revisit) :PENDING_APPROVAL:
 [[file:notes.org::*Admin AI Model Configuration][Full architecture → notes.org]]
 Follow-on to the read-only page shipped [2026-04-18]. DB-stored configs
 + 30s TTL cache in AI service + live admin UI. Don't start until there's
@@ -428,19 +402,22 @@ experiment, etc.). Also requires refactoring agents to call
 =get_model(role)= per-request instead of at module import time — see
 =ai/agents/career_caddy_agent.py:185= for the current caching pattern.
 
-** TODO omarchy theme integration
+** NO omarchy theme integration
+CLOSED: [2026-04-20 Mon 20:55]
 [[file:notes.org::*Color Palette System][Omarchy integration roadmap → notes.org]]
 
-** TODO use omarchy to set theme
+** NO use omarchy to set theme
+CLOSED: [2026-04-20 Mon 20:55]
 publicity stunt
 
-** PROJ caddy_automation: standalone toolkit + MCP verification   :APPROVED:
+** DONE caddy_automation: standalone toolkit + MCP verification :APPROVED:
+CLOSED: [2026-04-20 Mon 20:55]
 [[file:notes.org::*Standalone Career Caddy Automation Toolkit (caddy_automation)][Architecture → notes.org]]
 
 ** PROJ Electron desktop app feasibility                          :PENDING_APPROVAL:
 [[file:notes.org::*Electron Desktop App — Feasibility Study][Architecture + trade-offs → notes.org]]
 
-** TODO Reactive Resume plugin                                    :PENDING_APPROVAL:
+** TODO Reactive Resume plugin resumerx :PENDING_APPROVAL:
 [[file:notes.org::*Reactive Resume as a PDF-render plugin][Plugin architecture + scope → notes.org]]
 
 * Features — Open TODOs
@@ -469,7 +446,7 @@ CLOSED: [2026-04-16 Wed]
 [[file:notes.org::*Refactor: views.py][Plan → notes.org]]  [[file:~/.claude/plans/resilient-jumping-glade.md][Full plan]]
 Split 8269-line monolith into 17-file =views/= package. No mixin extraction, no inheritance changes.
 =__init__.py= re-exports everything — =urls.py= unchanged. 271 tests pass, ruff clean.
-** TODO Flash/highlight main content area on chat reload [frontend]
+** WAIT Flash/highlight main content area on chat reload [frontend]
 ** DONE Adopt PollableController across all pollable show routes [frontend]
 CLOSED: [2026-04-15 Tue]
 Enhanced PollableController with hooks, created PollableListController. Migrated 6 controllers. 13 unit tests.
@@ -489,14 +466,35 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
-** TODO look at todo.
-** TODO user dropdown int settings.ai-spend is white on white
-** TODO looking for work is a full time job.
-** TODO /settings/profile
-edit button font is too dark for indigo them
-should be like submit and process on /job-posts/scrape
-** TODO toolbar list of candidates
-*** [ ] filter stubs - explination of stubs
+** DONE user dropdown int settings.ai-spend is white on white
+CLOSED: [2026-04-20 Mon]
+[2026-04-20 frontend] =ai-spend.hbs= user =<select>= was using an
+undefined =.field-input= class that left the menu rendering white-on-
+white in dark mode. Swapped to the explicit
+=rounded border border-gray-300 bg-white dark:bg-gray-800
+dark:text-gray-100= pattern already used on the reports filter-bar.
+** YES looking for work is a full time job.
+CLOSED: [2026-04-20 Mon 20:47]
+** DONE /settings/profile Edit button contrast
+CLOSED: [2026-04-20 Mon]
+[2026-04-20 frontend] =<LinkTo class="btn primary">= rendered as
+=<a>=, which hit the generic =a.btn { color: var(--muted) }= rule in
+=app.css:823= and overrode =.btn.primary= on specificity. Muted text on
+the accent background → fails contrast on indigo/dark themes. Fix:
+explicit =a.btn.primary{:link,:visited,:hover,:active}= override
+restoring =color: #fff=. Affects every =LinkTo= that uses
+=btn primary= across the app, not just settings.profile.
+** DONE toolbar list of candidates
+CLOSED: [2026-04-20 Mon]
+*** DONE filter stubs — explanation of stubs
+CLOSED: [2026-04-20 Mon]
+[2026-04-20 frontend] Added native =title= tooltips to the "Hide
+stubs" buttons (both the top-right variant and the filter-pill
+variant) and to the active =hide stubs / stubs only= filter chip on
+=/job-posts=. Tooltip text: "Stub = job post with a thin description
+(<60 words) — usually a tracker-click or partial paste, scoring is
+unreliable." Threshold mirrors =STUB_MIN_WORDS= in
+=application_flow.py=. Non-blocking if we later want a richer popover.
 
 ** DONE when the scrape finishes reload the scrape.job-posts
 CLOSED: [2026-04-19 Sun]
@@ -585,14 +583,16 @@ toggle hides when unauthed, clickthroughs bounce through auth guard
 so no per-user data leaks. =Exclude stubs= checkbox added to the
 filter bar.
 
-** TODO caddy should store the original path of the resume for reference (but not actually link)
+** TODO caddy should store the original path of the resume for reference (but not actually link to it)
+This will help the user remember where that file was once there is some drift in the derivative versions
 ** DONE Run scrape should transition you job-post.show.scrapes
 CLOSED: [2026-04-19 Sun]
 [2026-04-19 frontend] After queuing the scrape, =runScrape= calls
 =router.transitionTo('job-posts.show.scrapes', this.model)= so the
 user lands on the tab that'll render the new row as soon as the
 poller writes it.
-** TODO liquid fire
+** DONE liquid fire
+CLOSED: [2026-04-20 Mon 20:26]
 https://github.com/ember-animation/liquid-fire
 ** DONE 404 page with mini-golf game [frontend]
 CLOSED: [2026-04-18 Sat]
@@ -721,7 +721,8 @@ so both produce the same canonical form — otherwise the dedup still
 breaks when an email link and a user-pasted link reach the API through
 different paths.
 
-** TODO remove console.log
+** DONE remove console.log
+CLOSED: [2026-04-20 Mon 20:45]
 ** DONE Proactive chat nudge when onboarding incomplete + user idle [frontend]
 CLOSED: [2026-04-18 Sat]
 [2026-04-18 frontend] New =services/idle-nudge.js= subscribes to
@@ -771,8 +772,10 @@ append =-id= as implicit final tiebreak when the user's =sort= param
 doesn't include it. Fixes fresh inserts scattering across pages when
 many rows share =posted_date=.
 
-** TODO the flash notification text is in the center of it's div, but with a sidebar open it looks weird when the title is in the true center
-** TODO delete resume produced :bug:
+** DONE the flash notification text is in the center of it's div, but with a sidebar open it looks weird when the title is in the true center
+CLOSED: [2026-04-20 Mon 20:45]
+** DONE delete resume produced :bug:
+CLOSED: [2026-04-20 Mon 20:45]
 the resume was a failed pdf import
 Error occurred:
 
@@ -801,9 +804,11 @@ CLOSED: [2026-04-18 Fri]
   without a page refresh.
 - Per-instance =@queueName= so multiple forms on a page (or across
   routes) don't collide on a global "resumes" queue name.
-** TODO dynamic OG tags
+** NO dynamic OG tags
+CLOSED: [2026-04-20 Mon 20:46]
 ** WAIT job-posts.show.questions.show.answer
-** TODO Chat behavior
+** DONE Chat behavior
+CLOSED: [2026-04-20 Mon 20:46]
 I whent to a job-posts.show page.
 I clicked the outbout link to the original job post.
 I ctrl-a ctlr-c on the page to get the contents
@@ -819,6 +824,13 @@ CLOSED: [2026-04-16 Wed]
 Wrapped =poll_once()= in try/except in the main loop so transient =RemoteProtocolError= doesn't crash the poller.
 
 * Bugs 🐛
+** TODO exclude healthcheck spans from Logfire [api]
+[2026-04-20] =GET /api/v1/healthcheck/= fires on every frontend route change,
+flooding Logfire with noise that drowns out the interesting spans. Filter
+them out at the =instrument_django()= level — either skip the span for the
+healthcheck path or drop it via a span processor. Same likely applies to
+Caddy/k8s probes hitting the endpoint.
+
 ** TODO answers/new favorite toggle lost on save [frontend] :bug:
 [2026-04-20] On =/answers/new=, toggling the favorite star before hitting
 Save doesn't persist — the new Answer lands with =favorite=false=. Likely
