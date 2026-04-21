@@ -103,8 +103,10 @@ services:
       CHAT_HOST: "0.0.0.0"
       CHAT_PORT: "8000"
       CHAT_MODEL: ${CHAT_MODEL:-openai:gpt-4o-mini}
+      CHAT_SMART_MODEL: ${CHAT_SMART_MODEL:-anthropic:claude-sonnet-4-6}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
     depends_on:
       - api
 
