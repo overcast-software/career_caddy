@@ -608,7 +608,18 @@ toggle hides when unauthed, clickthroughs bounce through auth guard
 so no per-user data leaks. =Exclude stubs= checkbox added to the
 filter bar.
 
-** TODO caddy should store the original path of the resume for reference (but not actually link to it)
+** DONE caddy should store the original path of the resume for reference (but not actually link to it)
+CLOSED: [2026-04-20 Mon]
+[2026-04-20 api+frontend] =Resume.file_path= already existed on the
+model; the ingest endpoint wasn't populating it. Now
+=/api/v1/resumes/ingest/= stashes =uploaded_file.name= on the
+placeholder Resume synchronously. Browsers only hand over the filename
+(no client-side path), so =file_path= is treated as a human-readable
+"where did this come from" marker — the server doesn't retain the
+blob, and the frontend renders it as plain text (no link target) in
+=components/resumes/title/form.hbs= below the Resume Notes field.
+Clone still carries =file_path= forward so derivative resumes can
+trace back to the originating import.
 This will help the user remember where that file was once there is some drift in the derivative versions
 ** DONE Run scrape should transition you job-post.show.scrapes
 CLOSED: [2026-04-19 Sun]
