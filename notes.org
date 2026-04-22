@@ -3,7 +3,7 @@
 :CREATED:  2026-04-08
 :END:
 
-* Agent Mistakes — Tally: 8                                        :IMPORTANT:
+* Agent Mistakes — Tally: 9                                        :IMPORTANT:
 Track repeated agent errors so patterns are visible and accountable.
 
 | # | Date | Agent | Mistake | Rule violated |
@@ -16,6 +16,7 @@ Track repeated agent errors so patterns are visible and accountable.
 | 6 | 2026-04-22 | frontend | Ran =npx prettier --check= prompting for permission when =npm run lint= is available | Prefer already-permitted commands; don't pester the user for perms on reformat-style chores |
 | 7 | 2026-04-22 | frontend | Invented =make ci-frontend= target instead of using documented =make test-frontend= / =make ci= | Use Makefile targets documented in CLAUDE.md; don't guess names |
 | 8 | 2026-04-22 | frontend | =git push --force-with-lease= with no refspec force-pushed stale local =main= backwards, clobbering merged PR #55 on origin/main | Always use explicit refspec; never bare =push --force=; =push.default=current= locked per-repo |
+| 9 | 2026-04-22 | frontend | Claimed local =make ci= passed on exit 0 without checking test-count lines; Dagger abbreviated output hid the =job-posts/scrape: it exists= failure that then broke remote CI | Don't rely on exit code alone for Dagger CI; grep output for =# pass N= / =not ok= or run =make test-frontend= directly for full TAP |
 
 * Build expectations                                               :IMPORTANT:
 Builds should not fail before we push. Builds should not fail in
