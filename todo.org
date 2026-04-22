@@ -541,6 +541,8 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO `/job-posts/paste`
+I need the url provided.  job post new will be a landing page with tabs for different ways to submit a job-post.  a brief description at the top will guid new users.  make sure the paste form doesn't revert to "scrape" if the url is present; job post paste will want the url and body.
 ** TODO I'm not seeing sources coming through.
 ** TODO wrong position for additional dialogue window
 
@@ -1020,13 +1022,28 @@ healthcheck path or drop it via a span processor. Same likely applies to
 Caddy/k8s probes hitting the endpoint.
 ** TODO exclude scrape polling request from logfire
 
-** TODO Plumb out liquid-fire [frontend]
-[2026-04-22] =ember-animated= added for the experiences/descriptions reorder
-animations. =liquid-fire= is still wired up for route transitions
-(=app/transitions.js= — tab slide, =liquid-default= fade). Migrate the
-remaining usages to =ember-animated=, delete =transitions.js=, remove the
-=liquid-fire= dep from =frontend/package.json=. Grep =liquid-| LiquidBind=
-for callers; check =components/answers/show.js=.
+** DONE Plumb out liquid-fire [frontend]
+CLOSED: [2026-04-22 Wed]
+[2026-04-22 frontend] Branch: =feature/remove-liquid-fire=.
+- Dropped =liquid-fire= + =velocity-animate= deps from
+  =frontend/package.json=.
+- Deleted =app/transitions.js=.
+- Replaced =<LiquidOutlet @class="tab-outlet" />= in
+  =templates/job-posts/show.hbs= with =ember-animated=
+  =<AnimatedContainer>= + ={{#animated-each (array activeTabKey)
+  key="@identity"}}{{outlet}}{{/animated-each}}=.
+- Tab-slide direction restored via =routeDidChange= listener on the
+  =job-posts.show= controller — tracked =tabForward= drives
+  =move()= offsets. Nested child routes (e.g.
+  =job-applications.index=) normalize to their =TAB_ORDER= prefix so
+  they still trigger the slide.
+- Added expand/collapse animation to the experience editor
+  (=components/experiences/editor/form.hbs=) using
+  =<AnimatedContainer>= + ={{#animated-if}}= with an opacity motion
+  (180ms in / 120ms out).
+- Cleaned stale =liquid-fire= comment in =components/answers/show.js=.
+- ={{outlet}}= + =animated-each= works fine with route-based tabs;
+  the predicted "global outlet DOM collision" concern was overblown.
 
 ** TODO answers/new favorite toggle lost on save [frontend] :bug:
 [2026-04-20] On =/answers/new=, toggling the favorite star before hitting
