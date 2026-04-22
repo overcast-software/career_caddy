@@ -3,7 +3,7 @@
 :CREATED:  2026-04-08
 :END:
 
-* Agent Mistakes — Tally: 3                                        :IMPORTANT:
+* Agent Mistakes — Tally: 5                                        :IMPORTANT:
 Track repeated agent errors so patterns are visible and accountable.
 
 | # | Date | Agent | Mistake | Rule violated |
@@ -11,6 +11,12 @@ Track repeated agent errors so patterns are visible and accountable.
 | 1 | 2026-04-14 | frontend | Compound bash: =cd ... && git diff= | One command per Bash call, use =-C= or absolute paths |
 | 2 | 2026-04-15 | frontend | Jumped to coding before fully reading notes.org | "read notes, internalize the lessons" — read the full file before acting |
 | 3 | 2026-04-16 | api | Used =cd= in Bash call for frontend git status | One command per Bash call, use =-C= or absolute paths |
+| 4 | 2026-04-22 | frontend | Ran =npx prettier --write= prompting for permission when a permitted command (e.g. =npm run lint:fix=) would do the same | Prefer already-permitted commands; don't pester the user for perms on reformat-style chores |
+| 5 | 2026-04-22 | frontend | =cd frontend && git checkout -b= for submodule branch creation | One command per Bash call, use =-C= or absolute paths |
+
+* Build expectations                                               :IMPORTANT:
+Builds should not fail before we push. Builds should not fail in
+github/workflows — they should already be tested locally with =make ci=.
 
 * Scratch file location                                            :IMPORTANT:
 Throwaway scripts, smoke tests, and one-off utilities live under
