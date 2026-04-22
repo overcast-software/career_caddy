@@ -3,7 +3,7 @@
 :CREATED:  2026-04-08
 :END:
 
-* Agent Mistakes — Tally: 5                                        :IMPORTANT:
+* Agent Mistakes — Tally: 8                                        :IMPORTANT:
 Track repeated agent errors so patterns are visible and accountable.
 
 | # | Date | Agent | Mistake | Rule violated |
@@ -13,10 +13,79 @@ Track repeated agent errors so patterns are visible and accountable.
 | 3 | 2026-04-16 | api | Used =cd= in Bash call for frontend git status | One command per Bash call, use =-C= or absolute paths |
 | 4 | 2026-04-22 | frontend | Ran =npx prettier --write= prompting for permission when a permitted command (e.g. =npm run lint:fix=) would do the same | Prefer already-permitted commands; don't pester the user for perms on reformat-style chores |
 | 5 | 2026-04-22 | frontend | =cd frontend && git checkout -b= for submodule branch creation | One command per Bash call, use =-C= or absolute paths |
+| 6 | 2026-04-22 | frontend | Ran =npx prettier --check= prompting for permission when =npm run lint= is available | Prefer already-permitted commands; don't pester the user for perms on reformat-style chores |
+| 7 | 2026-04-22 | frontend | Invented =make ci-frontend= target instead of using documented =make test-frontend= / =make ci= | Use Makefile targets documented in CLAUDE.md; don't guess names |
+| 8 | 2026-04-22 | frontend | =git push --force-with-lease= with no refspec force-pushed stale local =main= backwards, clobbering merged PR #55 on origin/main | Always use explicit refspec; never bare =push --force=; =push.default=current= locked per-repo |
 
 * Build expectations                                               :IMPORTANT:
 Builds should not fail before we push. Builds should not fail in
 github/workflows — they should already be tested locally with =make ci=.
+
+* Session state [2026-04-22]                                      :IMPORTANT:
+Two in-flight workstreams on the frontend submodule.
+
+** Phase 1 deprecation silence — PR #56 open, CI still red on 1 unrelated test
+Branch =fix/deprecation-workflow-matchids= (frontend), commit =c5f3ec4=,
+PR: https://github.com/overcast-software/career_caddy_frontend/pull/56
+
+Root cause of pre-fix red CI: bare ={ handler: 'silence' }= in
+=frontend/app/deprecation-workflow.js= does NOT act as a catch-all in
+=ember-cli-deprecation-workflow@3=. =raiseOnDeprecation= (registered by
+=@ember/test-helpers=) then escalated unhandled IDs into a test-load
+=TypeError: ... _routerMicrolib is undefined=.
+
+Fix (landed on branch): explicit =matchId= entries for 6 IDs —
+- =importing-inject-from-ember-service=
+- =deprecate-import-view-utils-from-ember=
+- =deprecate-import--set-classic-decorator-from-ember=
+- =deprecate-import-testing-from-ember=
+- =warp-drive.deprecate-tracking-package=
+- =ember-data:deprecate-legacy-imports=
+
+Post-fix CI: 235/236 pass. Single remaining failure is
+=Integration | Component | companies/select-or-create: it renders= —
+=TypeError: can't access property "hasRoute", this._routerMicrolib is undefined=
+during =store.findAll= → REST adapter → =router.transitionTo= in our
+401/refresh hook. Pre-existing bug that was masked by the load-time
+crash. Dagger confirms same failure locally.
+
+Options pending user decision:
+1. Ship PR #56 red; file follow-up for =companies/select-or-create=.
+2. Extend PR #56 to guard =frontend/app/adapters/application.js=
+   so =transitionTo= is no-op when =router._routerMicrolib= is absent
+   (integration-test env).
+
+Phase 2 (renaming our own =inject as service= + hasMany =.toArray()= sites)
+and Phase 3 (replace/upgrade =ember-animated=) follow.
+
+** Landing-page work (feature/job-posts-new-landing) — committed + pushed
+Now committed on the frontend branch; parent submodule pointer NOT yet
+bumped (don't bump until PR merges). Contents:
+- Router: =/job-posts/new{manual,scrape,paste}= (index→paste); legacy
+  =/job-posts/scrape= and =/job-posts/paste= redirect to new tabs.
+- Moved controllers/routes/templates into =job-posts/new/= subdirs.
+- New parent controller/template with descriptor cross-fade +
+  directional tab-slide (same =ember-animated= pattern as
+  =job-posts.show=).
+- Paste controller: dropped URL-redirect-to-scrape; posts
+  ={text, link}= together to =/scrapes/from-text/=.
+- Sidebar: collapsed Job Posts =<details>= dropdown into a single
+  =<LinkTo>= with =sidebar-link= class + =@current-when= covering all
+  =job-posts.*= subroutes. Removed =goToJobPosts= action.
+- =testem.js=: Firefox =-headless= in dev so =npm test= doesn't steal
+  focus.
+
+Outstanding:
+- Browser-verify tab slide (both directions incl. legacy redirects),
+  descriptor cross-fade, paste URL+body submission.
+- Open PR against main after browser verification.
+
+** Incident: force-push clobbered main (recovered same session)
+=git push --force-with-lease= with no refspec pushed stale local =main=
+backwards, deleting =0b0e767 "Remove liquid-fire ... (#55)"= on origin.
+Restored via =git push --force origin 0b0e767:main=. New rules captured
+in memory =feedback_force_push_refspec.md=; =push.default=current= now
+locked in the frontend submodule.
 
 * Scratch file location                                            :IMPORTANT:
 Throwaway scripts, smoke tests, and one-off utilities live under
