@@ -3,7 +3,7 @@
 :CREATED:  2026-04-08
 :END:
 
-* Agent Mistakes — Tally: 3                                        :IMPORTANT:
+* Agent Mistakes — Tally: 4                                        :IMPORTANT:
 Track repeated agent errors so patterns are visible and accountable.
 
 | # | Date | Agent | Mistake | Rule violated |
@@ -11,6 +11,7 @@ Track repeated agent errors so patterns are visible and accountable.
 | 1 | 2026-04-14 | frontend | Compound bash: =cd ... && git diff= | One command per Bash call, use =-C= or absolute paths |
 | 2 | 2026-04-15 | frontend | Jumped to coding before fully reading notes.org | "read notes, internalize the lessons" — read the full file before acting |
 | 3 | 2026-04-16 | api | Used =cd= in Bash call for frontend git status | One command per Bash call, use =-C= or absolute paths |
+| 4 | 2026-04-22 | frontend | Ran =npx prettier --write= prompting for permission when a permitted command (e.g. =npm run lint:fix=) would do the same | Prefer already-permitted commands; don't pester the user for perms on reformat-style chores |
 
 * Scratch file location                                            :IMPORTANT:
 Throwaway scripts, smoke tests, and one-off utilities live under
@@ -18,6 +19,10 @@ Throwaway scripts, smoke tests, and one-off utilities live under
 persists. Applies to docker-cp sources, e2e smoke scripts, pasted payloads,
 generated fixtures, etc. Only use =/tmp/= for files that genuinely live for
 a single tool call (e.g. =cat <<EOF | command=).
+* Front end work will require manual checking
+Lint in the background and tell me it's ready for inspection
+I will have input for you and I don't want to wait for a lint or a test for you to pick it up
+* All plans have a review style conventions task.
 
 * Curriculum gap analysis [ARCHIVED 2026-04-11]
 Archived to [[file:notes_archive.org::*Curriculum gap analysis][notes_archive.org]]. Phase 2 maturity assessment; 6 gaps added to todo.org.
