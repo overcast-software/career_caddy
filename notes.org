@@ -25,6 +25,9 @@ Lint in the background and tell me it's ready for inspection.
 if you can't lint in the background don't lint at all until I approve.
 Linting and testing take time, there are several back and forths between us that happen before we get to a state where you should be linting or testing.
 I will have input for you and I don't want to wait for a lint or a test for you to pick it up my feedback
+* Builds should not fail before we push.
+* Builds should not fail in github/workflwos
+they should already be tested.
 * All plans have a review style conventions task.
 
 * Curriculum gap analysis [ARCHIVED 2026-04-11]
