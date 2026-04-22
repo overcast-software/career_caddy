@@ -694,6 +694,28 @@ poller writes it.
 ** DONE liquid fire
 CLOSED: [2026-04-20 Mon 20:26]
 https://github.com/ember-animation/liquid-fire
+
+** DONE Plumb out liquid-fire [frontend]                            :APPROVED:
+CLOSED: [2026-04-22 Wed]
+[2026-04-22 frontend] Branch: =feature/remove-liquid-fire=.
+- Dropped =liquid-fire= + =velocity-animate= deps from
+  =frontend/package.json=; deleted =app/transitions.js=.
+- Replaced =<LiquidOutlet @class="tab-outlet" />= in
+  =templates/job-posts/show.hbs= with =ember-animated=
+  =<AnimatedContainer>= + ={{#animated-each (array activeTabKey)
+  key="@identity"}}{{outlet}}{{/animated-each}}=.
+- Tab-slide direction restored via =routeDidChange= listener on the
+  =job-posts.show= controller — tracked =tabForward= drives
+  =move()= offsets. Nested child routes (e.g.
+  =job-applications.index=) normalize to their =TAB_ORDER= prefix so
+  they still trigger the slide.
+- Added expand/collapse animation to the experience editor
+  (=components/experiences/editor/form.hbs=) using
+  =<AnimatedContainer>= + ={{#animated-if}}= with an opacity motion
+  (180ms in / 120ms out).
+- Cleaned stale =liquid-fire= comment in =components/answers/show.js=.
+- ={{outlet}}= + =animated-each= works fine with route-based tabs;
+  the predicted "global outlet DOM collision" concern was overblown.
 ** DONE 404 page with mini-golf game [frontend]
 CLOSED: [2026-04-18 Sat]
 [2026-04-18 frontend] Catch-all =not-found= route on
