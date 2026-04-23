@@ -542,21 +542,44 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
-** TODO need to ensure poller to save session
-** TODO No history yet — log the first status below.
+** DONE resume_importer doesn't show up in costs
+CLOSED: [2026-04-23]
+[2026-04-23 api] =IngestResume.process= now records an =AiUsage= row
+after =agent.run_sync= (agent_name="resume_importer",
+trigger="resume_import"). Added =_get_model_name= and =_record_usage=
+helpers mirroring the JobPostExtractor pattern; failures swallow into
+the logger so a telemetry error never breaks resume import. Falls
+back to the first staff user when no user is attached to the
+programmatic ingest path. Tests in
+=test_ingest_resume_usage.py= cover the happy path, the dict-usage
+legacy-stub case, and the no-user fallback.
+** TODO  Link search showed nothing.  I parsed one, after it parsed it said the route already existed. that's a waist of an agent call.
+https://careercaddy.online/job-posts?search=https%3A%2F%2Ftalent.toptal.com%2Fportal%2Fjob%2FVjEtSm9iLTQ5Mzg4OA
+** WAIT need to ensure poller to save session
+** TODO No history yet - log the first status below.
 https://careercaddy.online/job-applications/92
-it shows Contact.  I tried to add notes to that, but the history doesn't show
-** TODO new tool review answer
+I added that and wanted to add some notes.  I tried to add notes to that, but the history doesn't show anything.
+thes history doesn't represent the state
+** DONE new tool review answer
+CLOSED: [2026-04-23 Thu 15:01]
 mcp tool helps chat by making it look up contextual data like question and job-post.
 It also does a poor job of deciding to create a new answer or update current.
 when it updates current I often lose the work that made me want to iterate on it in the first place.
-** TODO I'm not seeing sources coming through.
-** TODO wrong position for additional dialogue window
+** [?] I'm not seeing sources coming through.
+not enough info
+** NO wrong position for additional dialogue window
+CLOSED: [2026-04-23 Thu 15:02]
 
-** TODO answers not polling.  buggy
-** TODO after asking ai to answer question, go to jp.show.questions.show.answers.index
+** DONE answers not polling.  buggy
+CLOSED: [2026-04-23 Thu 15:02]
+:LOGBOOK:
+- Note taken on [2026-04-23 Thu 15:02] \\
+  answer should be polling now
+:END:
+** DONE after asking ai to answer question, go to jp.show.questions.show.answers.index
+CLOSED: [2026-04-23 Thu 15:02]
 ** TODO if I change job-post company, all the questions, answers, etc. should change too.
-** TODO resume_importer doesn't sho up in costs
+** TODO resume_importer doesn't show up in costs
 ** TODO cover-letter spinner looks way cooler.  put it everywhere
 ** DONE button "scrape and score" should only show for stubbed content.
 CLOSED: [2026-04-23]
