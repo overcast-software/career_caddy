@@ -1,4 +1,5 @@
 -include .env
+-include .env.local
 export
 
 .PHONY: up up-core up-full down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai pipeline-url doctor doctor-poller list help

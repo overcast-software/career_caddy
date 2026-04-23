@@ -491,13 +491,143 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO need to ensure poller to save session
+** TODO No history yet — log the first status below.
+https://careercaddy.online/job-applications/92
+it shows Contact.  I tried to add notes to that, but the history doesn't show
+** TODO new tool review answer
+mcp tool helps chat by making it look up contextual data like question and job-post.
+It also does a poor job of deciding to create a new answer or update current.
+when it updates current I often lose the work that made me want to iterate on it in the first place.
+
+** TODO answers not polling.  buggy
+** TODO after asking ai to answer question, go to jp.show.questions.show.answers.index
+** TODO if I change job-post company, all the questions, answers, etc. should change too.
+** TODO resume_importer doesn't sho up in costs
 ** TODO cover-letter spinner looks way cooler.  put it everywhere
-** TODO scrape and score should only show for stubbed descriptions where scrape is availabe.
-** TODO scrape and score should only show for stubbed content.
-** TODO jp.new when submitting paste the text area turned white (was in dark mode)
+** TODO button "scrape and score" should only show for stubbed content.
+otherwise you will want to score and not scrape.
+** DONE jp.new when submitting paste the text area turned white (was in dark mode)
+CLOSED: [2026-04-23 Thu]
+[2026-04-22 frontend] =disabled:bg-gray-100= on the URL input and textarea
+had no dark-mode counterpart, so submit flipped them to near-white while
+the rest of the page stayed dark. Added =dark:disabled:bg-gray-900=.
+Shipped via PR #58 (career_caddy_frontend) and parent bump #20.
 ** PROJ linkedin and others have their link to job post in email, but I want to leverage that scrape has a scape relation to surface that other link.   it's part of frontend, automation, backend.  Have browser click the link for apply and document the final location.  easy apply wont work.  some sites in addition to linked in will work.  ScrapeProfile should have these directions.  front end job-post.show should show the final application destination and somehow this should be surfaced in reports.
+[[file:notes.org::*Apply-destination resolution (final URL behind the apply button)][Plan → notes.org]]
+
+** IN_PROGRESS Scrape-graph pydantic-graph refactor [api+ai+frontend]
+:PROPERTIES:
+:STARTED:  [2026-04-23]
+:END:
+[[file:notes.org::*Session summary — scrape-graph Phase 1][Session summary → notes.org]]
+Plan: =~/.claude/plans/snazzy-crafting-whale.md=. Phases 1a/1b/1c shipped
+[2026-04-23] under =v0.0.1= baseline:
+- 1a (api): persistence endpoints, graph fields on ScrapeStatus,
+  structure/mermaid/aggregate/trace reads, per-tier helper factoring,
+  dump_graph_traces command, api-repo =--keepdb= CI fix. PR #46.
+- 1b (ai): =ai/lib/scrape_graph/= skeleton — state, tracing, URL
+  canonicalize, scrape/obstacle/extract nodes, runner. Feature flag
+  =SCRAPE_GRAPH_MODE= defaults off. PR #5.
+- 1c (frontend): =/admin/scrape-graph= mermaid view +
+  =/scrapes/:id/graph= per-scrape trace. Lazy-imported mermaid.js
+  component. PR #63.
+- Parent bump #29 deployed.
+
+Remaining:
+- [X] *Phase 1d* — [2026-04-23] shipped on branch
+  =chore/bump-scrape-graph-phase-1=:
+  - Graph build fixed: cross-module forward refs now resolve because
+    =graph.py= constructs the =Graph= at module scope with every node
+    class in globals; pydantic-graph reads =f_locals= of the caller.
+  - =PersistScrape.run= gained explicit return annotation; xfail smoke
+    test flipped to passing.
+  - Dispatch wired via =hold_poller._maybe_dispatch_graph=; runs the
+    extract-only sub-graph after the legacy scrape when
+    =SCRAPE_GRAPH_MODE != off=.
+  - =POST /api/v1/scrapes/:id/llm-extract/= endpoint landed (delegates
+    to =JobPostExtractor.analyze_with_ai(model_override=...)=); 3 new
+    =LlmExtractTests= green.
+  - Shadow-mode suppression in =PersistJobPost= / =UpdateProfile= so
+    parity testing never mutates real data.
+  - Single source of truth: =ai/lib/scrape_graph/graph.py::NODE_META=
+    + =export_graph_structure()= → committed =graph_static.json= in
+    api/. =caddy-export-graph= CLI regenerates; drift test in ai/ CI.
+  - Hand-maintained api snapshot replaced; 3 phantom edges removed.
+- [X] *Primary cutover* — [2026-04-23] shipped. =SCRAPE_GRAPH_MODE=
+  now defaults to =primary=. Hold-poller opens a Playwright page,
+  builds =ScrapeGraphState=, and hands off to =run_scrape_graph= —
+  legacy =scrape_page= path is preserved as a kill-switch behind
+  =SCRAPE_GRAPH_MODE=off=. Moved into graph nodes as part of the
+  cutover:
+  - Screenshot + upload → =Capture= node.
+  - Selector discovery (discovered_selectors + candidate_ready_selector
+    probation) → =Capture= (reads) + =UpdateProfile= (writes with
+    probation gates ported from =_update_profile_from_results=).
+  - Final scrape status transitions (=completed=/=failed=) →
+    terminal nodes (=ResolveApplyUrl=, =DuplicateShortCircuit=,
+    =ExtractFail=, =ObstacleFail=) via =_patch_scrape_status= helper.
+  - =PersistScrape= now writes a poller-equivalent delivery note.
+  Soak as it runs; fix bugs as they appear. Once steady, prune
+  =_process_scrape_legacy= and the =off= mode.
+- [ ] =ResolveApplyUrl= Phase 2 — seam is in place in
+  =nodes_extract.ResolveApplyUrl= as a no-op; Phase 2 fills it in.
+- [ ] Shadow cleanup — once primary is stable, remove
+  =GraphMode.SHADOW= branches from =PersistJobPost=/=UpdateProfile=
+  and delete =_process_scrape_legacy= in the poller.
+
+Side work landed on the same branch:
+- Attended poller saves sessions on Ctrl-C (=ResidentBrowser.save_sessions=
+  writes per-domain cookies to =~/.career_caddy/sessions/=).
+- Pre-flight auth check in =hold_poller= aborts before browser launch
+  if =CC_API_TOKEN= is rejected.
+
+** TODO JobApplication.tracking_url — per-user post-submit status link [api+automation]
+[2026-04-22] Separate from the =JobPost.application_url= work (which is
+the pre-apply external destination). =tracking_url= is the URL returned
+to the user after they submit: Lever candidate portal, Greenhouse
+candidate dashboard, LinkedIn withdraw-application link. Per-application,
+user-specific.
+
+Scope:
+- Migration: =JobApplication.tracking_url : text= (nullable).
+- Automator hook: when processing confirmation emails ("Thanks for
+  applying to X"), parse out the status/withdraw link and populate.
+- Frontend: on =/job-applications/{id}=, show "Check application
+  status →" if set.
+- Manual fill: editable field on =job-applications.edit= for when the
+  automator misses.
+
+Do NOT conflate with =JobPost.application_url= — one is the entry point
+(ambient, per-post), the other is the user's outbound receipt
+(per-application). See =notes.org::*Apply-destination resolution= for
+the full semantic split.
+
 ** TODO job-applcations.index does not stagger in
-** TODO bookmarklet that populates job-post.new.paste wtih info.  maybe hits send
+** DONE bookmarklet that populates job-post.new.paste wtih info.  maybe hits send
+CLOSED: [2026-04-23 Thu]
+[2026-04-22/23 frontend] Shipped:
+- Drag-install bookmarklet on =/job-posts/new/paste= (href set
+  imperatively via =on-insert= to bypass Ember's =unsafe:javascript=
+  sanitizer).
+- MV3 browser extension =career-caddy-sender= at
+  =/extensions/career-caddy-sender-0.2.5.{zip,xpi}=. Popup shows
+  installed version in the top-right, remembers origin/auto-submit/
+  auto-score preferences per browser.
+- Auto-submit: extension URL =?auto=1= → paste form fills, submits,
+  polls scrape to completion.
+- Auto-score: =?score=1= implies auto=1; after scrape completes, paste
+  transitions to =/job-posts/:id/scores?auto=1= and the scores
+  controller auto-triggers career-data scoring (or opens existing
+  completed career-data score when one exists).
+- Application-route global =message= listener stashes to
+  =sessionStorage= so bookmarklet payloads survive a login redirect.
+- Install docs on the paste page split into three platform cards
+  (Firefox temporary / persistent / Chrome-family) with warning on
+  temp-install state loss.
+Shipped via PRs #58 and #60 (frontend), #41 and #45 (api — dedup
+branching + pydantic-ai 'openai:' prefix strip), parent bumps #21
+and #25.
 ** TODO I'm not seeing sources coming through.
 ** TODO what all do I need to spin up
 *** career_caddy
@@ -513,8 +643,8 @@ Web interface
 **** make poller-local
 **** make poller ARGS='--attended'
 
-** TODO wrong position for additional dialogue window
-
+** DONE wrong position for additional dialogue window
+CLOSED: [2026-04-22 Wed 20:19]
 /home/oldbones/Pictures/screenshot-2026-04-21_00-17-58.png
 ** DONE spinner on cover-letter polling https://careercaddy.online/job-posts/967/cover-letters
 CLOSED: [2026-04-21 Tue]
@@ -903,7 +1033,13 @@ breaks when an email link and a user-pasted link reach the API through
 different paths.
 
 ** DONE remove console.log
-CLOSED: [2026-04-20 Mon 20:45]
+CLOSED: [2026-04-23]
+[2026-04-23 frontend] Regression sweep — bookmarklet feature (=routes/
+application.js=, =controllers/job-posts/new/paste.js=,
+=controllers/job-posts/show/scores.js=) and =services/chat.js= had
+accumulated ~30 orphan =console.log= diagnostics. Removed all of them;
+user-facing =flashMessages.info= calls already cover the paste/score
+flow status. Previously closed [2026-04-20].
 ** DONE Proactive chat nudge when onboarding incomplete + user idle [frontend]
 CLOSED: [2026-04-18 Sat]
 [2026-04-18 frontend] New =services/idle-nudge.js= subscribes to
@@ -1005,36 +1141,39 @@ CLOSED: [2026-04-16 Wed]
 Wrapped =poll_once()= in try/except in the main loop so transient =RemoteProtocolError= doesn't crash the poller.
 
 * Bugs 🐛
-** TODO exclude healthcheck spans from Logfire [api]
-[2026-04-20] =GET /api/v1/healthcheck/= fires on every frontend route change,
-flooding Logfire with noise that drowns out the interesting spans. Filter
-them out at the =instrument_django()= level — either skip the span for the
-healthcheck path or drop it via a span processor. Same likely applies to
-Caddy/k8s probes hitting the endpoint.
-** TODO exclude scrape polling request from logfire
+** DONE exclude healthcheck + scrape-polling spans from Logfire [api]
+CLOSED: [2026-04-23]
+[2026-04-23] =job_hunting/logfire_setup.py::setup_logfire= now passes
+=excluded_urls= to =logfire.instrument_django(...)= with two regexes:
+=api/v1/healthcheck= and =api/v1/scrapes/\?.*status=hold=. The frontend's
+route-change healthchecks and the poller's 30s tick no longer produce
+Django request spans. Caddy/k8s probes covered by the same rule.
 
-** TODO Chat: detect duplicate JobPost by link, offer navigate instead of re-create [ai+frontend] :bug:
+** TODO Chat: detect duplicate JobPost by link, offer navigate instead of re-create [ai] :bug:
 [2026-04-22] When paste/scrape/chat ingest carries a URL that already matches
 an existing =JobPost.link=, the chat agent currently proceeds to create a
 duplicate (or lets the scrape run) rather than recognizing the hit. Expected
 behavior: agent calls =find_job_post_by_link(url)= first, and on a match emits
 a =propose_actions= button "Open existing job post" that navigates to
 =/job-posts/{id}= — no new record, no scrape kicked off.
-Scope:
-- Tool contract: =find_job_post_by_link= already exists; the rule is in
-  =career_caddy_agent.py= but the main chat skips it when the URL arrives via
-  paste/bookmarklet flows.
-- Prompt tightening: add an explicit "ALWAYS call find_job_post_by_link
-  before any create path, including when the user pastes text WITH a URL"
-  stanza to the main chat SYSTEM_PROMPT.
-- Also applies to the new browser-extension / bookmarklet flow — users will
-  hit "send" on a page they've already ingested and expect Career Caddy to
-  say "you already have this one" + take them there.
 
-** TODO answers/new favorite toggle lost on save [frontend] :bug:
-[2026-04-20] On =/answers/new=, toggling the favorite star before hitting
-Save doesn't persist — the new Answer lands with =favorite=false=. Likely
-the toggle mutates a property not tracked by the save payload, or the
-controller creates the record before the toggle value is read. Check
-=controllers/answers/new.js= + =components/answers/form.*= for how
-=favorite= is threaded into the create call.
+Paste/scrape side shipped [2026-04-22] — =parse_scrape= branches on stub
+vs non-stub, logs =duplicate:= / =updated_stub:= notes on the
+=ScrapeStatus=, frontend reads =scrape.latestStatusNote= and shows
+sticky warning flash. What remains is the CHAT-agent path:
+- Tool contract: =find_job_post_by_link= already exists in the agent's
+  toolset; the rule is in =career_caddy_agent.py= but the main chat
+  skips it when the URL arrives inside pasted text.
+- Prompt tightening: add "ALWAYS call find_job_post_by_link before any
+  create path, including when the user pastes text WITH a URL" stanza
+  to the main chat SYSTEM_PROMPT.
+
+** DONE answers/new favorite toggle lost on save [frontend] :bug:
+CLOSED: [2026-04-23]
+[2026-04-23] Root cause: =components/answers/form.js::toggleFavorite=
+called =answer.save()= unconditionally. On =/answers/new= the record
+is unsaved, so =save()= POSTed an invalid (empty-content) payload, the
+catch branch rolled =favorite= back to =false=, and the user's toggle
+never survived the form submit. Fix: early-return before =save()= when
+=answer.isNew= — the flipped attr rides along with the main form
+submit. On =/answers/edit= the flip-and-save behavior is preserved.

@@ -50,20 +50,28 @@ make pipeline-url URL=https://example.com/job
 ## Makefile Shortcuts
 
 ```bash
-make up               # core stack (db + api + frontend)
-make up-ai            # + browser MCP server (port 3004)
-make down             # stop all services
+make up               # core stack (db + api + frontend + chat)
+make up-full          # + browser MCP server (port 3004); sets USE_MCP_BROWSER_AGENT=True
+make down             # stop all services (removes orphans)
+make build            # rebuild all images (use after dependency changes)
 make logs             # follow all logs
+make list             # tabular view of running services + ports
 make shell-api        # bash shell in running api container
 make shell-db         # psql shell in running db container
 make migrate          # run Django migrations
+make demo-data        # seed guest user (Danny Noonan) + demo data (run after migrate)
 make test-api         # run API test suite
 make test-frontend    # run Ember QUnit tests
 make ci               # Dagger: lint + test API and frontend locally
+make ci-ai            # Dagger: build slim AI image (no camoufox)
 make pipeline-url URL=https://...   # scrape one job URL → add to Career Caddy
 make poller                          # hold-poller against prod (Camoufox default)
 make poller ARGS="--engine chrome"   # hold-poller with Chromium + stealth (ARM/Pi)
-make poller-local                    # hold-poller against localhost:8000
+make poller ARGS="--attended"        # headed browser with per-domain tabs; solve captchas manually
+make poller-local                    # hold-poller against localhost:8000 (uses CC_API_TOKEN_LOCAL)
+make doctor                          # check local environment is set up correctly
+make doctor-poller                   # check hold-poller environment
+make bootstrap                       # print API initialization status (curl /initialize/)
 ```
 
 ## Port Map
@@ -152,27 +160,18 @@ dagger -m ./dagger call deploy --ssh-key=file:~/.ssh/id_ed25519 --host=<vps> --a
 ## Gitflow
 
 ```
-feature/*  →  develop  →  main
+feature/*  →  main
 ```
 
-- **`feature/*`** — open PR to `develop`; triggers `CI` workflow (build-api + build-frontend)
-- **`develop`** — integration branch; same CI checks on push
-- **`main`** — production; merging here triggers `Deploy` workflow (publish images → deploy to VPS)
-
-**Setup** (one-time):
-```bash
-git checkout main && git pull
-git checkout -b develop
-git push -u origin develop
-# GitHub → Settings → Branches → set default branch to develop
-# Add protection rules: main requires PR + CI; develop requires PR
-```
+No `develop` branch in practice — feature branches are cut from `main` and PR'd back to `main`. Submodules (`api/`, `frontend/`, `ai/`) commit first; the parent repo bumps the submodule pointers after.
 
 **Daily workflow:**
 ```bash
-git checkout develop && git pull
-git checkout -b feature/my-thing
-# ... work ...
+git checkout main && git pull
+git checkout -b feature/my-thing        # or chore/... for housekeeping
+# ... work inside submodules, then commit submodule first ...
 git push -u origin feature/my-thing
-# Open PR: feature/my-thing → develop
+# Open PR: feature/my-thing → main
 ```
+
+Merging to `main` triggers the `Deploy` workflow (publish images → deploy to VPS).
