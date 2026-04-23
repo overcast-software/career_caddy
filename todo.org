@@ -27,7 +27,7 @@ Rules:
 - =PROJ= prefix on todo items means "use /plan mode" — enter planning, design the architecture, write the plan to notes.org, then exit.
 - Prefer amending recent commits for small fixes rather than creating new commits.
 - "Let's push" means commit+push submodules first, then parent. No need to ask.
-- Update =todo.org= and =notes.org= to reflect completed work before pushing.
+- Update =todo.org= to reflect completed work before pushing. =notes.org= is LOCAL-ONLY — NEVER commit it (holds server IPs / internal info). It is gitignored in parent + every submodule; unstage it if it ever shows up.
 - All =manage.py= commands run inside Docker (=make shell-api=), never locally with =uv run=.
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use =@tracked= intermediary for text inputs to prevent lost characters on fast typing.
@@ -491,7 +491,28 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO cover-letter spinner looks way cooler.  put it everywhere
+** TODO scrape and score should only show for stubbed descriptions where scrape is availabe.
+** TODO scrape and score should only show for stubbed content.
+** TODO jp.new when submitting paste the text area turned white (was in dark mode)
+** PROJ linkedin and others have their link to job post in email, but I want to leverage that scrape has a scape relation to surface that other link.   it's part of frontend, automation, backend.  Have browser click the link for apply and document the final location.  easy apply wont work.  some sites in addition to linked in will work.  ScrapeProfile should have these directions.  front end job-post.show should show the final application destination and somehow this should be surfaced in reports.
+** TODO job-applcations.index does not stagger in
+** TODO bookmarklet that populates job-post.new.paste wtih info.  maybe hits send
 ** TODO I'm not seeing sources coming through.
+** TODO what all do I need to spin up
+*** career_caddy
+*** automation
+**** uv run caddy-gateway --mode a2a
+gateway
+**** uv run caddy-web --mcp https://mcp.careercaddy.online/mcp
+Web interface
+**** uv run caddy-classify --loop --interval 10
+**** uv run caddy-process
+**** make up
+ front, api, ai
+**** make poller-local
+**** make poller ARGS='--attended'
+
 ** TODO wrong position for additional dialogue window
 
 /home/oldbones/Pictures/screenshot-2026-04-21_00-17-58.png
@@ -991,6 +1012,24 @@ them out at the =instrument_django()= level — either skip the span for the
 healthcheck path or drop it via a span processor. Same likely applies to
 Caddy/k8s probes hitting the endpoint.
 ** TODO exclude scrape polling request from logfire
+
+** TODO Chat: detect duplicate JobPost by link, offer navigate instead of re-create [ai+frontend] :bug:
+[2026-04-22] When paste/scrape/chat ingest carries a URL that already matches
+an existing =JobPost.link=, the chat agent currently proceeds to create a
+duplicate (or lets the scrape run) rather than recognizing the hit. Expected
+behavior: agent calls =find_job_post_by_link(url)= first, and on a match emits
+a =propose_actions= button "Open existing job post" that navigates to
+=/job-posts/{id}= — no new record, no scrape kicked off.
+Scope:
+- Tool contract: =find_job_post_by_link= already exists; the rule is in
+  =career_caddy_agent.py= but the main chat skips it when the URL arrives via
+  paste/bookmarklet flows.
+- Prompt tightening: add an explicit "ALWAYS call find_job_post_by_link
+  before any create path, including when the user pastes text WITH a URL"
+  stanza to the main chat SYSTEM_PROMPT.
+- Also applies to the new browser-extension / bookmarklet flow — users will
+  hit "send" on a page they've already ingested and expect Career Caddy to
+  say "you already have this one" + take them there.
 
 ** TODO answers/new favorite toggle lost on save [frontend] :bug:
 [2026-04-20] On =/answers/new=, toggling the favorite star before hitting
