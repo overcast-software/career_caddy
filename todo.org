@@ -61,7 +61,8 @@ See [[file:notes.org::*Curriculum gap analysis][notes.org: Curriculum gap analys
 * IN_PROGRESS [0/0]
 
 * Features — APPROVED (ready to work)
-** TODO Sankey — vetted hub grouping (d3 aggregator pattern)
+** DONE Sankey — vetted hub grouping (d3 aggregator pattern)
+CLOSED: [2026-04-23 Thu 12:52]
 CONCEPT: Vetted Good / Vetted Bad / Unvetted as hub node, like 'Thermal generation' in https://observablehq.com/@d3/sankey/2.
 BRANCH: api:feature/sankey-vetted-hub
 SEE: notes.org :: Sankey — vetted hub grouping [2026-04-20]
@@ -505,8 +506,14 @@ when it updates current I often lose the work that made me want to iterate on it
 ** TODO if I change job-post company, all the questions, answers, etc. should change too.
 ** TODO resume_importer doesn't sho up in costs
 ** TODO cover-letter spinner looks way cooler.  put it everywhere
-** TODO button "scrape and score" should only show for stubbed content.
-otherwise you will want to score and not scrape.
+** DONE button "scrape and score" should only show for stubbed content.
+CLOSED: [2026-04-23]
+[2026-04-23 frontend] =templates/job-posts/show.hbs= now gates the
+Scrape & Score button on =this.model.isStub=. Full-description posts
+keep Run-scrape alone; rescraping adds nothing over scoring in
+isolation. Closes the dup pair ("scrape and score should only show
+for stubbed descriptions where scrape is availabe." / "scrape and
+score should only show for stubbed content.") as well.
 ** DONE jp.new when submitting paste the text area turned white (was in dark mode)
 CLOSED: [2026-04-23 Thu]
 [2026-04-22 frontend] =disabled:bg-gray-100= on the URL input and textarea
@@ -603,7 +610,12 @@ Do NOT conflate with =JobPost.application_url= — one is the entry point
 (per-application). See =notes.org::*Apply-destination resolution= for
 the full semantic split.
 
-** TODO job-applcations.index does not stagger in
+** DONE job-applcations.index does not stagger in
+CLOSED: [2026-04-23]
+[2026-04-23 frontend] =templates/job-applications/index.hbs= was
+missing the =stagger-rows= class on its =<tbody>=. Added to match
+=components/job-posts/list.hbs=; per-row fade-up via =nth-child=
+delays in =app/styles/app.css=.
 ** DONE bookmarklet that populates job-post.new.paste wtih info.  maybe hits send
 CLOSED: [2026-04-23 Thu]
 [2026-04-22/23 frontend] Shipped:
@@ -681,7 +693,15 @@ Callers that deliberately suppress the navigated-away flash (e.g.
 scrape+score chains handling their own messaging in onComplete) no
 longer leak a null.
 
-** TODO asking ai to answer from jp.show.questions.show didn't do polling :bug:
+** DONE asking ai to answer from jp.show.questions.show didn't do polling :bug:
+CLOSED: [2026-04-23]
+[2026-04-23 frontend] =components/questions/inline-answer.js= now
+calls =pollable.pollIfPending(saved, ...)= after a successful AI save,
+so the inline-answer flow on any nested questions.show page polls the
+answer through pending → completed. Previously only the =answers.show=
+route started polling, which meant users who stayed on the list
+(=onSave= collapses the inline editor without navigating) sat on a
+stale pending answer until a manual refresh.
 ** DONE filters for job posts.
 CLOSED: [2026-04-21 Tue 00:19]
 it's pretty immature now, but I'm seeing utility in fleshing out simple thing.
@@ -912,12 +932,11 @@ List"); one dormant string mismatch in =Resume.tool_skills= (dead
 code, no callers). Three follow-up TODOs queued below.
 [[file:notes.org::*Resume Word-export jinja audit][Full audit]]
 
-** TODO Include email in Resume.to_export_context().header [api]
-[2026-04-20] =resume_export.docx= jinja prints =({{HEADER.EMAIL}})= but
-=Resume.to_export_context()= builds =header = {name, title, phone}=
-(no email). =HEADER.EMAIL= renders empty in the exported Word doc.
-Trivial: add =self.user.email= to the header dict in
-=api/job_hunting/models/resume.py= around line 137.
+** DONE Include email in Resume.to_export_context().header [api]
+CLOSED: [2026-04-23]
+[2026-04-23 api] Added =self.user.email= to =Resume.to_export_context()='s
+=header= dict. The docx template's ={{HEADER.EMAIL}}= placeholder now
+resolves to the user's actual email instead of rendering empty.
 
 ** TODO Add title + date_range to docx template Experience/Project blocks [api]
 [2026-04-20] =Experience.to_export_dict()= already emits =title= and
@@ -1070,8 +1089,18 @@ service, auto-navigates to the created JobPost. Cross-link in the
 subnav between =/paste= and =/scrape= so users can switch approaches.
 5 backend tests + lint clean.
 
-** TODO Chat: "take me to that job-post" confuses score_id with job_post_id [ai]
-[2026-04-18] User asked for highest score, agent correctly reported
+** DONE Chat: "take me to that job-post" confuses score_id with job_post_id [ai]
+CLOSED: [2026-04-23]
+[2026-04-23 ai] =mcp_servers/chat_server.py::SYSTEM_PROMPT= gained a
+new "ID types are NOT interchangeable" stanza under Page-Aware Data
+Access. Teaches the agent that a score's id is not a job-post id,
+requires resolving =score.job_post_id= via =get_scores= before
+navigating, and explicitly warns against interpreting a 404 as
+"deleted" when the likely cause is a cross-resource id mixup.
+Covers the same class of bug for cover-letter/answer/question/
+scrape ids as well.
+[2026-04-18] Original report:
+User asked for highest score, agent correctly reported
 score 38 with a propose_actions button "Go to Score #38" (AG-UI working).
 Then user said "take me to that job-post" — agent called
 =get_job_posts(id=38)=, got nothing back, and replied "the job post may
@@ -1123,7 +1152,15 @@ CLOSED: [2026-04-18 Fri]
   routes) don't collide on a global "resumes" queue name.
 ** NO dynamic OG tags
 CLOSED: [2026-04-20 Mon 20:46]
-** WAIT job-posts.show.questions.show.answer
+** PROJ job-posts.show.questions.show.answer
+One of the main uses for chat that I use is modifying answers
+the problem is that I'll want a tweak and the AI chat will not consult the question, or the job post before modifying.
+Ideally it should consult career-data and gather as much context as possible.
+then again, it may just need to do a tiny tweek, like lose the last sentence.
+in that case it should not need to.
+It should prefer to create a new answer b/c often I like an answer and I want it tweaked. it blows it away and I lose that data.
+it can change the record on elicitation.
+
 ** DONE Chat behavior
 CLOSED: [2026-04-20 Mon 20:46]
 I whent to a job-posts.show page.
