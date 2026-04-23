@@ -27,7 +27,7 @@ Rules:
 - =PROJ= prefix on todo items means "use /plan mode" — enter planning, design the architecture, write the plan to notes.org, then exit.
 - Prefer amending recent commits for small fixes rather than creating new commits.
 - "Let's push" means commit+push submodules first, then parent. No need to ask.
-- Update =todo.org= and =notes.org= to reflect completed work before pushing.
+- Update =todo.org= to reflect completed work before pushing. =notes.org= is LOCAL-ONLY — NEVER commit it (holds server IPs / internal info). It is gitignored in parent + every submodule; unstage it if it ever shows up.
 - All =manage.py= commands run inside Docker (=make shell-api=), never locally with =uv run=.
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use =@tracked= intermediary for text inputs to prevent lost characters on fast typing.
@@ -111,7 +111,8 @@ Dropped (explored and reverted):
   keyboard-friendly.
 
 * Features — APPROVED (ready to work)
-** TODO Sankey — vetted hub grouping (d3 aggregator pattern)
+** DONE Sankey — vetted hub grouping (d3 aggregator pattern)
+CLOSED: [2026-04-23 Thu 12:52]
 CONCEPT: Vetted Good / Vetted Bad / Unvetted as hub node, like 'Thermal generation' in https://observablehq.com/@d3/sankey/2.
 BRANCH: api:feature/sankey-vetted-hub
 SEE: notes.org :: Sankey — vetted hub grouping [2026-04-20]
@@ -541,9 +542,173 @@ and new action endpoints. Frontend uses count attrs instead of =.length=. Child 
 sorted arrays directly.
 
 * Inbox
+** TODO need to ensure poller to save session
+** TODO No history yet — log the first status below.
+https://careercaddy.online/job-applications/92
+it shows Contact.  I tried to add notes to that, but the history doesn't show
+** TODO new tool review answer
+mcp tool helps chat by making it look up contextual data like question and job-post.
+It also does a poor job of deciding to create a new answer or update current.
+when it updates current I often lose the work that made me want to iterate on it in the first place.
 ** TODO I'm not seeing sources coming through.
 ** TODO wrong position for additional dialogue window
 
+** TODO answers not polling.  buggy
+** TODO after asking ai to answer question, go to jp.show.questions.show.answers.index
+** TODO if I change job-post company, all the questions, answers, etc. should change too.
+** TODO resume_importer doesn't sho up in costs
+** TODO cover-letter spinner looks way cooler.  put it everywhere
+** DONE button "scrape and score" should only show for stubbed content.
+CLOSED: [2026-04-23]
+[2026-04-23 frontend] =templates/job-posts/show.hbs= now gates the
+Scrape & Score button on =this.model.isStub=. Full-description posts
+keep Run-scrape alone; rescraping adds nothing over scoring in
+isolation. Closes the dup pair ("scrape and score should only show
+for stubbed descriptions where scrape is availabe." / "scrape and
+score should only show for stubbed content.") as well.
+** DONE jp.new when submitting paste the text area turned white (was in dark mode)
+CLOSED: [2026-04-23 Thu]
+[2026-04-22 frontend] =disabled:bg-gray-100= on the URL input and textarea
+had no dark-mode counterpart, so submit flipped them to near-white while
+the rest of the page stayed dark. Added =dark:disabled:bg-gray-900=.
+Shipped via PR #58 (career_caddy_frontend) and parent bump #20.
+** PROJ linkedin and others have their link to job post in email, but I want to leverage that scrape has a scape relation to surface that other link.   it's part of frontend, automation, backend.  Have browser click the link for apply and document the final location.  easy apply wont work.  some sites in addition to linked in will work.  ScrapeProfile should have these directions.  front end job-post.show should show the final application destination and somehow this should be surfaced in reports.
+[[file:notes.org::*Apply-destination resolution (final URL behind the apply button)][Plan → notes.org]]
+
+** IN_PROGRESS Scrape-graph pydantic-graph refactor [api+ai+frontend]
+:PROPERTIES:
+:STARTED:  [2026-04-23]
+:END:
+[[file:notes.org::*Session summary — scrape-graph Phase 1][Session summary → notes.org]]
+Plan: =~/.claude/plans/snazzy-crafting-whale.md=. Phases 1a/1b/1c shipped
+[2026-04-23] under =v0.0.1= baseline:
+- 1a (api): persistence endpoints, graph fields on ScrapeStatus,
+  structure/mermaid/aggregate/trace reads, per-tier helper factoring,
+  dump_graph_traces command, api-repo =--keepdb= CI fix. PR #46.
+- 1b (ai): =ai/lib/scrape_graph/= skeleton — state, tracing, URL
+  canonicalize, scrape/obstacle/extract nodes, runner. Feature flag
+  =SCRAPE_GRAPH_MODE= defaults off. PR #5.
+- 1c (frontend): =/admin/scrape-graph= mermaid view +
+  =/scrapes/:id/graph= per-scrape trace. Lazy-imported mermaid.js
+  component. PR #63.
+- Parent bump #29 deployed.
+
+Remaining:
+- [X] *Phase 1d* — [2026-04-23] shipped on branch
+  =chore/bump-scrape-graph-phase-1=:
+  - Graph build fixed: cross-module forward refs now resolve because
+    =graph.py= constructs the =Graph= at module scope with every node
+    class in globals; pydantic-graph reads =f_locals= of the caller.
+  - =PersistScrape.run= gained explicit return annotation; xfail smoke
+    test flipped to passing.
+  - Dispatch wired via =hold_poller._maybe_dispatch_graph=; runs the
+    extract-only sub-graph after the legacy scrape when
+    =SCRAPE_GRAPH_MODE != off=.
+  - =POST /api/v1/scrapes/:id/llm-extract/= endpoint landed (delegates
+    to =JobPostExtractor.analyze_with_ai(model_override=...)=); 3 new
+    =LlmExtractTests= green.
+  - Shadow-mode suppression in =PersistJobPost= / =UpdateProfile= so
+    parity testing never mutates real data.
+  - Single source of truth: =ai/lib/scrape_graph/graph.py::NODE_META=
+    + =export_graph_structure()= → committed =graph_static.json= in
+    api/. =caddy-export-graph= CLI regenerates; drift test in ai/ CI.
+  - Hand-maintained api snapshot replaced; 3 phantom edges removed.
+- [X] *Primary cutover* — [2026-04-23] shipped. =SCRAPE_GRAPH_MODE=
+  now defaults to =primary=. Hold-poller opens a Playwright page,
+  builds =ScrapeGraphState=, and hands off to =run_scrape_graph= —
+  legacy =scrape_page= path is preserved as a kill-switch behind
+  =SCRAPE_GRAPH_MODE=off=. Moved into graph nodes as part of the
+  cutover:
+  - Screenshot + upload → =Capture= node.
+  - Selector discovery (discovered_selectors + candidate_ready_selector
+    probation) → =Capture= (reads) + =UpdateProfile= (writes with
+    probation gates ported from =_update_profile_from_results=).
+  - Final scrape status transitions (=completed=/=failed=) →
+    terminal nodes (=ResolveApplyUrl=, =DuplicateShortCircuit=,
+    =ExtractFail=, =ObstacleFail=) via =_patch_scrape_status= helper.
+  - =PersistScrape= now writes a poller-equivalent delivery note.
+  Soak as it runs; fix bugs as they appear. Once steady, prune
+  =_process_scrape_legacy= and the =off= mode.
+- [ ] =ResolveApplyUrl= Phase 2 — seam is in place in
+  =nodes_extract.ResolveApplyUrl= as a no-op; Phase 2 fills it in.
+- [ ] Shadow cleanup — once primary is stable, remove
+  =GraphMode.SHADOW= branches from =PersistJobPost=/=UpdateProfile=
+  and delete =_process_scrape_legacy= in the poller.
+
+Side work landed on the same branch:
+- Attended poller saves sessions on Ctrl-C (=ResidentBrowser.save_sessions=
+  writes per-domain cookies to =~/.career_caddy/sessions/=).
+- Pre-flight auth check in =hold_poller= aborts before browser launch
+  if =CC_API_TOKEN= is rejected.
+
+** TODO JobApplication.tracking_url — per-user post-submit status link [api+automation]
+[2026-04-22] Separate from the =JobPost.application_url= work (which is
+the pre-apply external destination). =tracking_url= is the URL returned
+to the user after they submit: Lever candidate portal, Greenhouse
+candidate dashboard, LinkedIn withdraw-application link. Per-application,
+user-specific.
+
+Scope:
+- Migration: =JobApplication.tracking_url : text= (nullable).
+- Automator hook: when processing confirmation emails ("Thanks for
+  applying to X"), parse out the status/withdraw link and populate.
+- Frontend: on =/job-applications/{id}=, show "Check application
+  status →" if set.
+- Manual fill: editable field on =job-applications.edit= for when the
+  automator misses.
+
+Do NOT conflate with =JobPost.application_url= — one is the entry point
+(ambient, per-post), the other is the user's outbound receipt
+(per-application). See =notes.org::*Apply-destination resolution= for
+the full semantic split.
+
+** DONE job-applcations.index does not stagger in
+CLOSED: [2026-04-23]
+[2026-04-23 frontend] =templates/job-applications/index.hbs= was
+missing the =stagger-rows= class on its =<tbody>=. Added to match
+=components/job-posts/list.hbs=; per-row fade-up via =nth-child=
+delays in =app/styles/app.css=.
+** DONE bookmarklet that populates job-post.new.paste wtih info.  maybe hits send
+CLOSED: [2026-04-23 Thu]
+[2026-04-22/23 frontend] Shipped:
+- Drag-install bookmarklet on =/job-posts/new/paste= (href set
+  imperatively via =on-insert= to bypass Ember's =unsafe:javascript=
+  sanitizer).
+- MV3 browser extension =career-caddy-sender= at
+  =/extensions/career-caddy-sender-0.2.5.{zip,xpi}=. Popup shows
+  installed version in the top-right, remembers origin/auto-submit/
+  auto-score preferences per browser.
+- Auto-submit: extension URL =?auto=1= → paste form fills, submits,
+  polls scrape to completion.
+- Auto-score: =?score=1= implies auto=1; after scrape completes, paste
+  transitions to =/job-posts/:id/scores?auto=1= and the scores
+  controller auto-triggers career-data scoring (or opens existing
+  completed career-data score when one exists).
+- Application-route global =message= listener stashes to
+  =sessionStorage= so bookmarklet payloads survive a login redirect.
+- Install docs on the paste page split into three platform cards
+  (Firefox temporary / persistent / Chrome-family) with warning on
+  temp-install state loss.
+Shipped via PRs #58 and #60 (frontend), #41 and #45 (api — dedup
+branching + pydantic-ai 'openai:' prefix strip), parent bumps #21
+and #25.
+** TODO I'm not seeing sources coming through.
+** TODO what all do I need to spin up
+*** career_caddy
+*** automation
+**** uv run caddy-gateway --mode a2a
+gateway
+**** uv run caddy-web --mcp https://mcp.careercaddy.online/mcp
+Web interface
+**** uv run caddy-classify --loop --interval 10
+**** uv run caddy-process
+**** make up
+ front, api, ai
+**** make poller-local
+**** make poller ARGS='--attended'
+
+** DONE wrong position for additional dialogue window
+CLOSED: [2026-04-22 Wed 20:19]
 /home/oldbones/Pictures/screenshot-2026-04-21_00-17-58.png
 ** DONE spinner on cover-letter polling https://careercaddy.online/job-posts/967/cover-letters
 CLOSED: [2026-04-21 Tue]
@@ -580,7 +745,15 @@ Callers that deliberately suppress the navigated-away flash (e.g.
 scrape+score chains handling their own messaging in onComplete) no
 longer leak a null.
 
-** TODO asking ai to answer from jp.show.questions.show didn't do polling :bug:
+** DONE asking ai to answer from jp.show.questions.show didn't do polling :bug:
+CLOSED: [2026-04-23]
+[2026-04-23 frontend] =components/questions/inline-answer.js= now
+calls =pollable.pollIfPending(saved, ...)= after a successful AI save,
+so the inline-answer flow on any nested questions.show page polls the
+answer through pending → completed. Previously only the =answers.show=
+route started polling, which meant users who stayed on the list
+(=onSave= collapses the inline editor without navigating) sat on a
+stale pending answer until a manual refresh.
 ** DONE filters for job posts.
 CLOSED: [2026-04-21 Tue 00:19]
 it's pretty immature now, but I'm seeing utility in fleshing out simple thing.
@@ -744,6 +917,28 @@ poller writes it.
 ** DONE liquid fire
 CLOSED: [2026-04-20 Mon 20:26]
 https://github.com/ember-animation/liquid-fire
+
+** DONE Plumb out liquid-fire [frontend]                            :APPROVED:
+CLOSED: [2026-04-22 Wed]
+[2026-04-22 frontend] Branch: =feature/remove-liquid-fire=.
+- Dropped =liquid-fire= + =velocity-animate= deps from
+  =frontend/package.json=; deleted =app/transitions.js=.
+- Replaced =<LiquidOutlet @class="tab-outlet" />= in
+  =templates/job-posts/show.hbs= with =ember-animated=
+  =<AnimatedContainer>= + ={{#animated-each (array activeTabKey)
+  key="@identity"}}{{outlet}}{{/animated-each}}=.
+- Tab-slide direction restored via =routeDidChange= listener on the
+  =job-posts.show= controller — tracked =tabForward= drives
+  =move()= offsets. Nested child routes (e.g.
+  =job-applications.index=) normalize to their =TAB_ORDER= prefix so
+  they still trigger the slide.
+- Added expand/collapse animation to the experience editor
+  (=components/experiences/editor/form.hbs=) using
+  =<AnimatedContainer>= + ={{#animated-if}}= with an opacity motion
+  (180ms in / 120ms out).
+- Cleaned stale =liquid-fire= comment in =components/answers/show.js=.
+- ={{outlet}}= + =animated-each= works fine with route-based tabs;
+  the predicted "global outlet DOM collision" concern was overblown.
 ** DONE 404 page with mini-golf game [frontend]
 CLOSED: [2026-04-18 Sat]
 [2026-04-18 frontend] Catch-all =not-found= route on
@@ -789,12 +984,11 @@ List"); one dormant string mismatch in =Resume.tool_skills= (dead
 code, no callers). Three follow-up TODOs queued below.
 [[file:notes.org::*Resume Word-export jinja audit][Full audit]]
 
-** TODO Include email in Resume.to_export_context().header [api]
-[2026-04-20] =resume_export.docx= jinja prints =({{HEADER.EMAIL}})= but
-=Resume.to_export_context()= builds =header = {name, title, phone}=
-(no email). =HEADER.EMAIL= renders empty in the exported Word doc.
-Trivial: add =self.user.email= to the header dict in
-=api/job_hunting/models/resume.py= around line 137.
+** DONE Include email in Resume.to_export_context().header [api]
+CLOSED: [2026-04-23]
+[2026-04-23 api] Added =self.user.email= to =Resume.to_export_context()='s
+=header= dict. The docx template's ={{HEADER.EMAIL}}= placeholder now
+resolves to the user's actual email instead of rendering empty.
 
 ** TODO Add title + date_range to docx template Experience/Project blocks [api]
 [2026-04-20] =Experience.to_export_dict()= already emits =title= and
@@ -910,7 +1104,13 @@ breaks when an email link and a user-pasted link reach the API through
 different paths.
 
 ** DONE remove console.log
-CLOSED: [2026-04-20 Mon 20:45]
+CLOSED: [2026-04-23]
+[2026-04-23 frontend] Regression sweep — bookmarklet feature (=routes/
+application.js=, =controllers/job-posts/new/paste.js=,
+=controllers/job-posts/show/scores.js=) and =services/chat.js= had
+accumulated ~30 orphan =console.log= diagnostics. Removed all of them;
+user-facing =flashMessages.info= calls already cover the paste/score
+flow status. Previously closed [2026-04-20].
 ** DONE Proactive chat nudge when onboarding incomplete + user idle [frontend]
 CLOSED: [2026-04-18 Sat]
 [2026-04-18 frontend] New =services/idle-nudge.js= subscribes to
@@ -941,8 +1141,18 @@ service, auto-navigates to the created JobPost. Cross-link in the
 subnav between =/paste= and =/scrape= so users can switch approaches.
 5 backend tests + lint clean.
 
-** TODO Chat: "take me to that job-post" confuses score_id with job_post_id [ai]
-[2026-04-18] User asked for highest score, agent correctly reported
+** DONE Chat: "take me to that job-post" confuses score_id with job_post_id [ai]
+CLOSED: [2026-04-23]
+[2026-04-23 ai] =mcp_servers/chat_server.py::SYSTEM_PROMPT= gained a
+new "ID types are NOT interchangeable" stanza under Page-Aware Data
+Access. Teaches the agent that a score's id is not a job-post id,
+requires resolving =score.job_post_id= via =get_scores= before
+navigating, and explicitly warns against interpreting a 404 as
+"deleted" when the likely cause is a cross-resource id mixup.
+Covers the same class of bug for cover-letter/answer/question/
+scrape ids as well.
+[2026-04-18] Original report:
+User asked for highest score, agent correctly reported
 score 38 with a propose_actions button "Go to Score #38" (AG-UI working).
 Then user said "take me to that job-post" — agent called
 =get_job_posts(id=38)=, got nothing back, and replied "the job post may
@@ -994,7 +1204,15 @@ CLOSED: [2026-04-18 Fri]
   routes) don't collide on a global "resumes" queue name.
 ** NO dynamic OG tags
 CLOSED: [2026-04-20 Mon 20:46]
-** WAIT job-posts.show.questions.show.answer
+** PROJ job-posts.show.questions.show.answer
+One of the main uses for chat that I use is modifying answers
+the problem is that I'll want a tweak and the AI chat will not consult the question, or the job post before modifying.
+Ideally it should consult career-data and gather as much context as possible.
+then again, it may just need to do a tiny tweek, like lose the last sentence.
+in that case it should not need to.
+It should prefer to create a new answer b/c often I like an answer and I want it tweaked. it blows it away and I lose that data.
+it can change the record on elicitation.
+
 ** DONE Chat behavior
 CLOSED: [2026-04-20 Mon 20:46]
 I whent to a job-posts.show page.
@@ -1012,26 +1230,39 @@ CLOSED: [2026-04-16 Wed]
 Wrapped =poll_once()= in try/except in the main loop so transient =RemoteProtocolError= doesn't crash the poller.
 
 * Bugs 🐛
-** TODO exclude healthcheck spans from Logfire [api]
-[2026-04-20] =GET /api/v1/healthcheck/= fires on every frontend route change,
-flooding Logfire with noise that drowns out the interesting spans. Filter
-them out at the =instrument_django()= level — either skip the span for the
-healthcheck path or drop it via a span processor. Same likely applies to
-Caddy/k8s probes hitting the endpoint.
-** TODO exclude scrape polling request from logfire
+** DONE exclude healthcheck + scrape-polling spans from Logfire [api]
+CLOSED: [2026-04-23]
+[2026-04-23] =job_hunting/logfire_setup.py::setup_logfire= now passes
+=excluded_urls= to =logfire.instrument_django(...)= with two regexes:
+=api/v1/healthcheck= and =api/v1/scrapes/\?.*status=hold=. The frontend's
+route-change healthchecks and the poller's 30s tick no longer produce
+Django request spans. Caddy/k8s probes covered by the same rule.
 
-** TODO Plumb out liquid-fire [frontend]
-[2026-04-22] =ember-animated= added for the experiences/descriptions reorder
-animations. =liquid-fire= is still wired up for route transitions
-(=app/transitions.js= — tab slide, =liquid-default= fade). Migrate the
-remaining usages to =ember-animated=, delete =transitions.js=, remove the
-=liquid-fire= dep from =frontend/package.json=. Grep =liquid-| LiquidBind=
-for callers; check =components/answers/show.js=.
+** TODO Chat: detect duplicate JobPost by link, offer navigate instead of re-create [ai] :bug:
+[2026-04-22] When paste/scrape/chat ingest carries a URL that already matches
+an existing =JobPost.link=, the chat agent currently proceeds to create a
+duplicate (or lets the scrape run) rather than recognizing the hit. Expected
+behavior: agent calls =find_job_post_by_link(url)= first, and on a match emits
+a =propose_actions= button "Open existing job post" that navigates to
+=/job-posts/{id}= — no new record, no scrape kicked off.
 
-** TODO answers/new favorite toggle lost on save [frontend] :bug:
-[2026-04-20] On =/answers/new=, toggling the favorite star before hitting
-Save doesn't persist — the new Answer lands with =favorite=false=. Likely
-the toggle mutates a property not tracked by the save payload, or the
-controller creates the record before the toggle value is read. Check
-=controllers/answers/new.js= + =components/answers/form.*= for how
-=favorite= is threaded into the create call.
+Paste/scrape side shipped [2026-04-22] — =parse_scrape= branches on stub
+vs non-stub, logs =duplicate:= / =updated_stub:= notes on the
+=ScrapeStatus=, frontend reads =scrape.latestStatusNote= and shows
+sticky warning flash. What remains is the CHAT-agent path:
+- Tool contract: =find_job_post_by_link= already exists in the agent's
+  toolset; the rule is in =career_caddy_agent.py= but the main chat
+  skips it when the URL arrives inside pasted text.
+- Prompt tightening: add "ALWAYS call find_job_post_by_link before any
+  create path, including when the user pastes text WITH a URL" stanza
+  to the main chat SYSTEM_PROMPT.
+
+** DONE answers/new favorite toggle lost on save [frontend] :bug:
+CLOSED: [2026-04-23]
+[2026-04-23] Root cause: =components/answers/form.js::toggleFavorite=
+called =answer.save()= unconditionally. On =/answers/new= the record
+is unsaved, so =save()= POSTed an invalid (empty-content) payload, the
+catch branch rolled =favorite= back to =false=, and the user's toggle
+never survived the form submit. Fix: early-return before =save()= when
+=answer.isNew= — the flipped attr rides along with the main form
+submit. On =/answers/edit= the flip-and-save behavior is preserved.

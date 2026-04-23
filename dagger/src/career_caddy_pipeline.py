@@ -87,7 +87,16 @@ class CareerCaddy:
             .with_env_variable("DEBUG", "True")
             .with_exec(["uv", "run", "ruff", "check", "."])
             .with_exec(["uv", "run", "bandit", "-r", ".", "-x", "*/migrations/*,./.venv/*", "-ll"])
-            .with_exec(["uv", "run", "python", "manage.py", "test", "-v", "2"])
+            # --keepdb skips the teardown step. Without it, Django tries
+            # DROP DATABASE at the end and intermittently fails with
+            # "database is being accessed by other users" when the Dagger
+            # postgres sidecar health-checker still holds a connection.
+            # CI runs in a fresh container every time, so skipping teardown
+            # has no state-leak consequence.
+            .with_exec([
+                "uv", "run", "python", "manage.py", "test",
+                "-v", "2", "--keepdb", "--noinput",
+            ])
         )
 
     @function
