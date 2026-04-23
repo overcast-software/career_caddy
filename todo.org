@@ -1273,6 +1273,39 @@ CLOSED: [2026-04-16 Wed]
 Wrapped =poll_once()= in try/except in the main loop so transient =RemoteProtocolError= doesn't crash the poller.
 
 * Bugs 🐛
+** DONE scrape graph route fetches frontend host instead of api host [frontend] :bug:
+CLOSED: [2026-04-23]
+[2026-04-23] DevTools showed =/api/v1/scrapes/162/graph-trace/= and
+=/api/v1/admin/graph-structure/= going to =careercaddy.online= (frontend)
+instead of =api.careercaddy.online=. Cause: =routes/scrapes/graph.js=
+and =routes/admin/scrape-graph.js= called raw =fetch('/api/v1/...')=
+with bare paths, bypassing the Ember Data adapter that handles the
+host swap. The frontend's Caddy then served =index.html= for the
+unknown path and the SPA choked on HTML where it expected JSON.
+Fix: new =api.url(path)= helper on the api service prepends
+=config.APP.API_HOST=; both route files now go through it. Tests in
+=tests/unit/services/api-test.js= cover the join, leading-slash
+handling, host-trailing-slash trimming, and missing-host fallback.
+
+** DONE poller: opaque "Page.goto: Target page... closed" with no retry [ai] :bug:
+CLOSED: [2026-04-23]
+[2026-04-23] LinkedIn scrape #162 failed with one cryptic line — the
+camoufox subprocess died mid-scrape and Playwright surfaced
+"Target page, context or browser has been closed", which
+=mcp_servers/browser_server.py::_scrape_on_page= was logging via
+=str(e)= only (no traceback). Two changes:
+- =except Exception= at the bottom of =_scrape_on_page= now does
+  =logger.exception(...)= so the next recurrence has a full stack.
+- New =_scrape_page_once= helper returns a parsed dict instead of
+  re-serialized JSON; =scrape_page= retries once on a curated set of
+  transient-browser-died substrings ("Target page, context or browser
+  has been closed", "Browser has been closed", "Connection closed").
+  Bounded to one retry — a deterministic crash still surfaces and
+  the poller marks the scrape failed as before.
+Tests: =tests/test_browser_server_retry.py= covers the matcher, the
+retry-then-succeed path, no-retry on terminal errors, and persistent
+crashes still surfacing.
+
 ** DONE exclude healthcheck + scrape-polling spans from Logfire [api]
 CLOSED: [2026-04-23]
 [2026-04-23] =job_hunting/logfire_setup.py::setup_logfire= now passes
