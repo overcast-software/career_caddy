@@ -553,8 +553,17 @@ back to the first staff user when no user is attached to the
 programmatic ingest path. Tests in
 =test_ingest_resume_usage.py= cover the happy path, the dict-usage
 legacy-stub case, and the no-user fallback.
-** TODO  Link search showed nothing.  I parsed one, after it parsed it said the route already existed. that's a waist of an agent call.
+** DONE Link search showed nothing — wasted an agent call on a duplicate
+CLOSED: [2026-04-23]
 https://careercaddy.online/job-posts?search=https%3A%2F%2Ftalent.toptal.com%2Fportal%2Fjob%2FVjEtSm9iLTQ5Mzg4OA
+[2026-04-23 api] =filter[query]= on the job-posts list searched
+title/description/company.name/company.display_name but NOT
+=link=. Pasting a job URL in the search bar always returned zero
+results, so the user re-parsed the URL → wasted agent call → got
+"already exists". Fix: added =Q(link__icontains=query_filter)= to
+the OR-clause in =job_hunting/api/views/jobs.py=. Tests in
+=test_job_post_query_filter_link.py= cover full-URL match, partial
+slug match, and that title/company matching still works.
 ** WAIT need to ensure poller to save session
 ** TODO No history yet - log the first status below.
 https://careercaddy.online/job-applications/92
