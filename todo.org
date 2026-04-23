@@ -1204,14 +1204,34 @@ CLOSED: [2026-04-18 Fri]
   routes) don't collide on a global "resumes" queue name.
 ** NO dynamic OG tags
 CLOSED: [2026-04-20 Mon 20:46]
-** PROJ job-posts.show.questions.show.answer
-One of the main uses for chat that I use is modifying answers
-the problem is that I'll want a tweak and the AI chat will not consult the question, or the job post before modifying.
-Ideally it should consult career-data and gather as much context as possible.
-then again, it may just need to do a tiny tweek, like lose the last sentence.
-in that case it should not need to.
-It should prefer to create a new answer b/c often I like an answer and I want it tweaked. it blows it away and I lose that data.
-it can change the record on elicitation.
+** DONE job-posts.show.questions.show.answer — chat tweaks preserve original
+CLOSED: [2026-04-23]
+[2026-04-23 ai] =chat_server.py= now parses nested answer routes so the
+prompt exposes =Job Post ID=, =Question ID=, and =Answer ID= separately
+(previous =/(\d+)= regex grabbed job_post_id and misled the agent). New
+"Modifying an Existing Answer" section in SYSTEM_PROMPT: classify
+surface-edit vs substantive-rewrite, fetch only the context needed
+(=get_answers= alone for small tweaks; + =get_questions=/=get_job_posts=
+for rewrites), and default to =create_answer= so the original is
+preserved. Offers two =propose_actions= buttons — "View new answer" and
+"Replace original instead" (the latter is a =message= follow-up that
+re-issues the turn as =update_answer=).
+Tests: =ai/tests/test_chat_prompt_answer_page.py= pins the ID extraction
+and the prompt section.
+
+** DONE Chat: agent emits =example.com/job-posts/1= links :bug:
+CLOSED: [2026-04-23]
+[2026-04-23] Agent was stripping =https://= per the "no raw API URLs"
+rule but keeping a hallucinated hostname, producing unroutable SPA
+links. Belt-and-suspenders:
+- =ai/mcp_servers/chat_server.py= SYSTEM_PROMPT now explicitly forbids
+  any scheme/hostname/domain prefix with =example.com/job-posts/1= as a
+  negative example.
+- =frontend/app/components/chat/message.js= exports =sanitizeAppHref=;
+  both =handleClick= (markdown-link clicks) and =runAction=
+  (propose_actions navigate) strip scheme+host when the path matches a
+  known app route. Unit tests in
+  =tests/unit/components/chat/message-test.js=.
 
 ** DONE Chat behavior
 CLOSED: [2026-04-20 Mon 20:46]
