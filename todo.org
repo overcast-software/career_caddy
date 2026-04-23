@@ -570,6 +570,44 @@ https://careercaddy.online/job-posts?search=https%3A%2F%2Ftalent.toptal.com%2Fpo
   banner with two actions: "Open job post #N" or "Re-parse anyway".
   Tests in =test_scrape_from_text.py::TestScrapeFromTextDuplicateLink=.
 ** WAIT need to ensure poller to save session
+** TODO Structured =accepting_applications= field on JobPost
+[2026-04-23] Companion to the linkedin =extraction_hints= update that
+makes the LLM lead closed-post descriptions with =[CLOSED — applications
+no longer accepted]=. The hint solves *visibility* (user sees it on the
+page) but the signal is still trapped in the description text — not
+queryable, not actionable.
+
+Why a column:
+- Filter the job-posts list to hide closed posts (default), with a
+  toggle to show.
+- Disable Score / Cover Letter / Tailor my resume buttons on
+  =job-posts.show= when closed — currently all three are live on dead
+  postings.
+- Sankey: a "Closed" terminal node so we can see what fraction of
+  hold-poller traffic lands on dead jobs.
+- Hold-poller bug-squash: if a post we already had goes from open →
+  closed on a re-scrape, we'd want to know.
+
+Sketch:
+- =JobPost.accepting_applications= (Boolean, null=True default null —
+  null = "unknown" so we don't lie about historical rows we never
+  scanned).
+- Extractor (=ParsedJobData= + =JobPostExtractor.persist=) populates
+  the field from the same phrase list now in the linkedin profile
+  hints. Hoist the phrase list into =job_hunting/lib/text_signals.py=
+  so the API extractor and (eventually) other host profiles share it.
+- Migration: backfill =null= (don't text-scan existing
+  =Scrape.job_content= eagerly — let next re-scrape fill it). Optional
+  management command for an aggressive backfill.
+- Frontend: tiny chip on =job-posts.show= header + filter on the
+  list view.
+- Tests: extractor sets =False= on each phrase, =True= on a normal
+  post; persist round-trips through the JSON:API serializer.
+
+Blast radius: 1 model field, 1 migration, 1 extractor function, 1
+serializer key, 1 chip + filter on the frontend. Bigger than the
+profile hint but not large.
+
 ** TODO No history yet - log the first status below.
 https://careercaddy.online/job-applications/92
 I added that and wanted to add some notes.  I tried to add notes to that, but the history doesn't show anything.
