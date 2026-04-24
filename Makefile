@@ -1,3 +1,22 @@
+# ── Env loading ────────────────────────────────────────────────────────────
+# WARNING — this is not a dotenv loader, it is a make `-include` directive.
+# Make reads `.env` and `.env.local` AS MAKEFILES: every `KEY=VALUE` line
+# becomes a make variable. `export` (next line) then propagates every
+# make variable into each recipe's shell, SHADOWING whatever that variable
+# held in the parent interactive shell (direnv, manual export, ~/.envrc…).
+#
+# Processing is top-to-bottom, last-write-wins:
+#   `.env`       — sets CC_API_TOKEN=<prod>
+#   `.env.local` — if it ALSO sets CC_API_TOKEN=<local>, that value
+#                  overrides and every recipe (incl. `make poller`) will
+#                  see the local token instead of your shell's prod value.
+#
+# If you maintain both files, keep the key names disjoint: put dev-only
+# overrides under distinct names (`CC_API_TOKEN_LOCAL`, `DB_PASSWORD_LOCAL`,
+# …) and reference them explicitly in the recipes that want dev values
+# (see `poller-local:` below as a template). The shadow is silent —
+# `echo $CC_API_TOKEN` in your terminal will still show the prod value;
+# only `make`'s recipe sub-shell sees the override.
 -include .env
 -include .env.local
 export
