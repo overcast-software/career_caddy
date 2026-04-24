@@ -233,6 +233,7 @@ feeds the eventual plugin PR.
 Queue sequential display instead of stacking. First flash finishes its time, slides left, next slides in.
 ** TODO Audit redundant parent columns in child route list components [frontend]
 * Inbox
+** TODO viewing a scrape from jp.show.scrapes.index should go to jp.show.scrapes.show
 ** WAIT need to ensure poller to save session
 ** TODO Structured =accepting_applications= field on JobPost
 [2026-04-23] Companion to the linkedin =extraction_hints= update that
@@ -540,6 +541,52 @@ Follow-ups:
 
 ** NO dynamic OG tags
 CLOSED: [2026-04-20 Mon 20:46]
+
+** DONE [#A] Scrape-quality gate + profile url_rewrites [api+ai+automation]
+CLOSED: [2026-04-23]
+Trigger: scrapes 172 (ziprecruiter =ekm/…= → Salesforce Lightning
+bootstrap shell) and 175 (indeed =?vjk=X= tracker → logged-in homepage
+job list) both terminated with =outcome=success=, hallucinated a
+JobPost, and poisoned =ScrapeProfile.update-from-outcome= learning.
+DetectObstacle's login-wall detector missed the loading shell; the
+extract LLM filled in plausible fields from 1KB of JS.
+
+api/:
+- =ScrapeProfile.url_rewrites=: new =JSONField=. Migration
+  =0054_scrapeprofile_url_rewrites.py=. Serializer attribute added.
+  Consumed by ai/ before Navigate; target audience is the offline
+  profile-sharpening script.
+
+ai/:
+- =url_canonicalize.apply_url_rewrites(url, rules)= — list of
+  ={match, rewrite}= regex pairs; first match wins; invalid regex
+  skipped silently.
+- Navigate node applies profile =url_rewrites= to =state.submitted_url=
+  BEFORE =page.goto=, sets =state.rewritten_url= breadcrumb. Indeed
+  vjk case now lands on =/viewjob?jk=X= directly.
+- New =ValidateExtraction= node between =EvaluateExtraction=-passed
+  and =PersistJobPost=. Rejects on =source_too_short= (<40 words) or
+  =loading_shell_fingerprint= (≥2 of: "sorry to interrupt", "css
+  error", "cookieenabled", "enable cookies", "please enable
+  javascript", "wd-body-loading"). Failures route to =ExtractFail= so
+  PR 35's debug-artifact invariant fires.
+- =graph_static.json= regenerated (27 nodes, 37 edges).
+- Tests: 4 new =apply_url_rewrites= cases in
+  =test_scrape_graph_state.py= incl. Indeed vjk; new
+  =test_validate_extraction.py= with Salesforce-shell repro. 25/25
+  scrape-graph tests pass; ruff clean.
+
+career_caddy_automation/:
+- =scripts/sharpen_profiles.py= — per-hostname, MCP-driven. Pulls
+  recent scrapes, groups by URL shape
+  (=path?sorted_query_keys=), classifies clean /
+  suspicious-thin / suspicious-list / failed, prints a table, and
+  emits =url_rewrites= suggestions. Seeded with the Indeed
+  =?vjk=X → /viewjob?jk=\1= rule. Dry-run only — write path lands
+  once suggestions are validated on more hosts.
+
+Intentionally deferred per user: rollback of JobPost 1201 and the
+two poisoned =ScrapeProfile.update-from-outcome= promotions.
 * Bugs 🐛
 ** TODO [#A] Chat: detect duplicate JobPost by link, offer navigate instead of re-create [ai] :bug:
 [2026-04-22] When paste/scrape/chat ingest carries a URL that already matches
