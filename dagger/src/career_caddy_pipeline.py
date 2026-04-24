@@ -112,6 +112,13 @@ class CareerCaddy:
             .without_directory(".git")
         )
 
+        # Firefox in `node:20-slim` fails with
+        # "RenderCompositorSWGL failed mapping default framebuffer"
+        # under `-headless` because there's no /dev/dri. Wrapping the
+        # test run with xvfb-run gives Firefox a virtual framebuffer.
+        # libpci3 / libgl1 / libdbus-glib-1-2 are the GL+PCI bits firefox-esr
+        # probes at startup (and warns about when missing — see
+        # glxtest errors in the failing CI log).
         return (
             dag.container()
             .from_("node:20-slim")
@@ -119,17 +126,25 @@ class CareerCaddy:
                 [
                     "sh", "-c",
                     "apt-get update && apt-get install -y --no-install-recommends "
-                    "firefox-esr && rm -rf /var/lib/apt/lists/*",
+                    "firefox-esr "
+                    # xvfb provides the virtual framebuffer, xauth is required
+                    # by xvfb-run to generate the magic cookie — without it
+                    # xvfb-run fails with "xauth command not found".
+                    "xvfb xauth "
+                    "libpci3 libgl1 libegl1 libdbus-glib-1-2 "
+                    "libgtk-3-0 libasound2 "
+                    "&& rm -rf /var/lib/apt/lists/*",
                 ]
             )
             .with_workdir("/app")
             .with_file("/app/package.json", src.file("package.json"))
             .with_file("/app/package-lock.json", src.file("package-lock.json"))
             .with_env_variable("CI", "true")
+            .with_env_variable("MOZ_HEADLESS", "1")
             .with_exec(["npm", "ci"])
             .with_directory("/app", src)
             .with_exec(["npm", "run", "lint"])
-            .with_exec(["npm", "run", "test:ember"])
+            .with_exec(["xvfb-run", "-a", "npm", "run", "test:ember"])
         )
 
     @function
