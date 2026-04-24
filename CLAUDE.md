@@ -67,7 +67,7 @@ make ci-ai            # Dagger: build slim AI image (no camoufox)
 make pipeline-url URL=https://...   # scrape one job URL → add to Career Caddy
 make poller                          # hold-poller against prod (Camoufox default)
 make poller ARGS="--engine chrome"   # hold-poller with Chromium + stealth (ARM/Pi)
-make poller ARGS="--attended"        # headed browser with per-domain tabs; solve captchas manually
+make poller ARGS="--attended"        # headed browser with per-domain tabs; solve captchas manually (add --attended-delay for a 5s pre-preseed pause, or --attended-delay N for a custom wait)
 make poller-local                    # hold-poller against localhost:8000 (uses CC_API_TOKEN_LOCAL)
 make doctor                          # check local environment is set up correctly
 make doctor-poller                   # check hold-poller environment

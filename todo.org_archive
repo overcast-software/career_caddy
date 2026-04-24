@@ -65,3 +65,1461 @@ CLOSED: [2026-04-18 Sat 20:52]
 :END:
 [[file:notes.org::*Fonts and buttons from "under construction" page][Considerations → notes.org]]
 Remaining: font adoption from under-construction.html.
+
+* DONE Status history on job-applications/92 showed "No history yet" despite DB rows :bug:
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:05
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+https://careercaddy.online/job-applications/92
+[2026-04-23] Timeline pills read right ("Unvetted → Vetted Good →
+Applied → Contact") because they branch off =jobApplication.status=,
+but STATUS HISTORY reads =applicationStatuses= hasMany — and Ember
+Data was getting an empty relationship, so blank list, so no way
+to click into an entry to add a note.
+
+Two-line fix:
+- =api/job_hunting/api/serializers.py::JobApplicationSerializer= —
+  add =linked_relationships = ["application-statuses"]= so the
+  to-many relationship emits =data: [...]= linkage instead of the
+  spec-compliant links-only form (other to-many rels do the same
+  thing; this one was missing).
+- =frontend/app/routes/job-applications/show.js= —
+  =findRecord= now passes =include: "application-statuses"= so the
+  API sideloads the records in the =included= array for Ember to
+  match against the linkage.
+
+Tests: =api/.../test_job_application_status_history.py= pins the
+linkage shape and the sideload.
+
+* DONE button "scrape and score" should only show for stubbed content.
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:07
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23 frontend] =templates/job-posts/show.hbs= now gates the
+Scrape & Score button on =this.model.isStub=. Full-description posts
+keep Run-scrape alone; rescraping adds nothing over scoring in
+isolation. Closes the dup pair ("scrape and score should only show
+for stubbed descriptions where scrape is availabe." / "scrape and
+score should only show for stubbed content.") as well.
+
+* DONE jp.new when submitting paste the text area turned white (was in dark mode)
+CLOSED: [2026-04-23 Thu]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:07
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-22 frontend] =disabled:bg-gray-100= on the URL input and textarea
+had no dark-mode counterpart, so submit flipped them to near-white while
+the rest of the page stayed dark. Added =dark:disabled:bg-gray-900=.
+Shipped via PR #58 (career_caddy_frontend) and parent bump #20.
+
+* DONE job-applcations.index does not stagger in
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:08
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23 frontend] =templates/job-applications/index.hbs= was
+missing the =stagger-rows= class on its =<tbody>=. Added to match
+=components/job-posts/list.hbs=; per-row fade-up via =nth-child=
+delays in =app/styles/app.css=.
+
+* DONE user dropdown int settings.ai-spend is white on white
+CLOSED: [2026-04-20 Mon]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:10
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-20 frontend] =ai-spend.hbs= user =<select>= was using an
+undefined =.field-input= class that left the menu rendering white-on-
+white in dark mode. Swapped to the explicit
+=rounded border border-gray-300 bg-white dark:bg-gray-800
+dark:text-gray-100= pattern already used on the reports filter-bar.
+
+* YES looking for work is a full time job.
+CLOSED: [2026-04-20 Mon 20:47]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:10
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: YES
+:END:
+
+* DONE /settings/profile Edit button contrast
+CLOSED: [2026-04-20 Mon]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:10
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-20 frontend] =<LinkTo class="btn primary">= rendered as
+=<a>=, which hit the generic =a.btn { color: var(--muted) }= rule in
+=app.css:823= and overrode =.btn.primary= on specificity. Muted text on
+the accent background → fails contrast on indigo/dark themes. Fix:
+explicit =a.btn.primary{:link,:visited,:hover,:active}= override
+restoring =color: #fff=. Affects every =LinkTo= that uses
+=btn primary= across the app, not just settings.profile.
+
+* DONE toolbar list of candidates
+CLOSED: [2026-04-20 Mon]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:11
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+** DONE filter stubs — explanation of stubs
+CLOSED: [2026-04-20 Mon]
+[2026-04-20 frontend] Added native =title= tooltips to the "Hide
+stubs" buttons (both the top-right variant and the filter-pill
+variant) and to the active =hide stubs / stubs only= filter chip on
+=/job-posts=. Tooltip text: "Stub = job post with a thin description
+(<60 words) — usually a tracker-click or partial paste, scoring is
+unreliable." Threshold mirrors =STUB_MIN_WORDS= in
+=application_flow.py=. Non-blocking if we later want a richer popover.
+
+* DONE when the scrape finishes reload the scrape.job-posts
+CLOSED: [2026-04-19 Sun]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:11
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-19 frontend] runScrape's pollable onComplete now calls
+=this.model.reload()= so title/description/salary reflect freshly
+parsed values without a page refresh.
+
+* DONE Sources report — stacked bar per hostname on /reports/sources [api+frontend]
+CLOSED: [2026-04-19 Sun]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:11
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-19] Second report page under /reports/. Backend
+=lib/services/source_flow.py= rolls up JobPosts by URL hostname ×
+outcome bucket (reuses =application_flow= bucket map). Frontend
+=components/reports/sources-stacked-bar= renders via =d3-scale= +
+=d3-selection=. Shared palette extracted to
+=components/reports/colors.js= so sankey + stacked bar stay in sync.
+Application Flow / Sources subnav on both report pages. 8 api tests.
+
+* DONE parse_scrape force flag unifies re-parse paths [api]
+CLOSED: [2026-04-19 Sun]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:11
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-19] Prod bug: Run Scrape from /job-posts/show and manual
+Parse on /scrapes/show both bailed silently because
+=scrape.job_post_id= was already set. Added =force=True= to
+=parse_scrape= and =process_evaluation= — skips the early-bail AND
+overwrites non-None extracted fields on the linked post (company
+preserved). =reextract= delegates to =parse_scrape(force=True)=;
+=_run_reextract_async= deleted. Full workflow documented in
+notes.org under 'Scrape → Parse → JobPost workflow (post-refactor)'.
+
+* DONE Triage reflects status on JobApplication + optional note [api]
+CLOSED: [2026-04-19 Sun]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:12
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+Mirrors latest triage onto =JobApplication.status= cache; accepts
+optional =note= on the =JobApplicationStatus= row.
+
+* DONE JobPost PATCH hotfix: drop read-only computed attrs [api]
+CLOSED: [2026-04-19 Sun]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:12
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+Frontend echoed =active_application_status= back in PATCH payload;
+=setattr= on the @property crashed with 'no setter'. Pop computed
+read-only keys in =_upsert_django=. Regression test added.
+
+* DONE Scrapes list: search filter + default sort with tiebreak [api]
+CLOSED: [2026-04-19 Sun]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:12
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+=ScrapeViewSet.list= honors =filter[query]=. Default sort
+=scraped_at DESC nulls-last, -id=; explicit sort params get =-id= tiebreak.
+
+* DONE Spinner + polling for Run Scrape and Re-extract [api+frontend]
+CLOSED: [2026-04-19 Sun]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+Reextract endpoint switched to async (returns Scrape(status=pending),
+spawns daemon thread). Frontend controllers use =spinner.begin= +
+=pollable.poll= so the global spinner runs until the scrape reaches
+terminal; JobPost reloads in place.
+
+* DONE Clickable sankey/sources charts + public application flow [api+frontend]
+CLOSED: [2026-04-19 Sun]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:29
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-19] Sankey nodes (stub/scored/unscored/applied/interview/
+offer/ghosted/rejected/withdrew/accepted/declined/no_application)
+and sources-bar hostname rows are now clickable. They route to
+=/job-posts?bucket|hostname|scored|stub=...= via new filter[...]
+query params on =JobPostViewSet.list=:
+- =filter[hostname]= (exact =(direct)= matches null/empty link)
+- =filter[source]= / =filter[stub]= / =filter[scored]=
+- =filter[bucket]= resolves to the same Status-name sets that drive
+  the sankey, with =ghosted= additionally checking the 30-day
+  staleness cutoff
+=stub= threshold uses Length-approximation SQL-side; canonical
+word-count definition still lives in
+=application_flow._is_thin_description=.
+=/reports/application-flow= is now public: anonymous visitors see
+the global aggregate sankey (scope=all, user_id=None), Mine/Global
+toggle hides when unauthed, clickthroughs bounce through auth guard
+so no per-user data leaks. =Exclude stubs= checkbox added to the
+filter bar.
+
+* DONE caddy should store the original path of the resume for reference (but not actually link to it)
+CLOSED: [2026-04-20 Mon]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:29
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-20 api+frontend] =Resume.file_path= already existed on the
+model; the ingest endpoint wasn't populating it. Now
+=/api/v1/resumes/ingest/= stashes =uploaded_file.name= on the
+placeholder Resume synchronously. Browsers only hand over the filename
+(no client-side path), so =file_path= is treated as a human-readable
+"where did this come from" marker — the server doesn't retain the
+blob, and the frontend renders it as plain text (no link target) in
+=components/resumes/title/form.hbs= below the Resume Notes field.
+Clone still carries =file_path= forward so derivative resumes can
+trace back to the originating import.
+This will help the user remember where that file was once there is some drift in the derivative versions
+
+* DONE liquid fire
+CLOSED: [2026-04-20 Mon 20:26]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:29
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+https://github.com/ember-animation/liquid-fire
+
+* DONE Plumb out liquid-fire [frontend] :APPROVED:
+CLOSED: [2026-04-22 Wed]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:29
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-22 frontend] Branch: =feature/remove-liquid-fire=.
+- Dropped =liquid-fire= + =velocity-animate= deps from
+  =frontend/package.json=; deleted =app/transitions.js=.
+- Replaced =<LiquidOutlet @class="tab-outlet" />= in
+  =templates/job-posts/show.hbs= with =ember-animated=
+  =<AnimatedContainer>= + ={{#animated-each (array activeTabKey)
+  key="@identity"}}{{outlet}}{{/animated-each}}=.
+- Tab-slide direction restored via =routeDidChange= listener on the
+  =job-posts.show= controller — tracked =tabForward= drives
+  =move()= offsets. Nested child routes (e.g.
+  =job-applications.index=) normalize to their =TAB_ORDER= prefix so
+  they still trigger the slide.
+- Added expand/collapse animation to the experience editor
+  (=components/experiences/editor/form.hbs=) using
+  =<AnimatedContainer>= + ={{#animated-if}}= with an opacity motion
+  (180ms in / 120ms out).
+- Cleaned stale =liquid-fire= comment in =components/answers/show.js=.
+- ={{outlet}}= + =animated-each= works fine with route-based tabs;
+  the predicted "global outlet DOM collision" concern was overblown.
+
+* DONE 404 page with mini-golf game [frontend]
+CLOSED: [2026-04-18 Sat]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:29
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-18 frontend] Catch-all =not-found= route on
+=app/router.js= renders an "Out of Bounds" page with a 256×192
+canvas mini-golf game (3 procedural holes, mouse aim + hold-to-charge,
+sand + walls, hole-attraction sink). New =on-insert= modifier replaces
+the ad-hoc =getElementById= pattern for components that need DOM refs.
+Branch =feature/404-golf=.
+
+* DONE Default nav sidebar closed; chat doesn't persist open [frontend]
+CLOSED: [2026-04-18 Sat]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:30
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-18 frontend] Two defaults bugs:
+- Nav sidebar previously =!= 'false'= so first-time visitors landed
+  with sidebar open. Flipped to =='true'=.
+- Chat sidebar persisted open across reloads via =cc:chat-open=. Now
+  always starts closed; toggle still works within the session.
+Merged into =feature/job-post-paste-edit= so it ships with the rest.
+
+* DONE remove console.log
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:32
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23 frontend] Regression sweep — bookmarklet feature (=routes/
+application.js=, =controllers/job-posts/new/paste.js=,
+=controllers/job-posts/show/scores.js=) and =services/chat.js= had
+accumulated ~30 orphan =console.log= diagnostics. Removed all of them;
+user-facing =flashMessages.info= calls already cover the paste/score
+flow status. Previously closed [2026-04-20].
+
+* DONE Paste-to-JobPost form (/job-posts/paste) [api+frontend]
+CLOSED: [2026-04-18 Fri]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:33
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-18] For job sites that block browser scraping (LinkedIn,
+Greenhouse behind login). Backend: =POST /api/v1/scrapes/from-text/=
+creates a Scrape with =job_content=<text>=, =status='pending'=, kicks
+off the existing =parse_scrape= daemon. Frontend: =/job-posts/paste=
+route with a textarea + Ctrl-A/C helper text, polls via the =pollable=
+service, auto-navigates to the created JobPost. Cross-link in the
+subnav between =/paste= and =/scrape= so users can switch approaches.
+5 backend tests + lint clean.
+
+* DONE Chat: "take me to that job-post" confuses score_id with job_post_id [ai]
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:33
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23 ai] =mcp_servers/chat_server.py::SYSTEM_PROMPT= gained a
+new "ID types are NOT interchangeable" stanza under Page-Aware Data
+Access. Teaches the agent that a score's id is not a job-post id,
+requires resolving =score.job_post_id= via =get_scores= before
+navigating, and explicitly warns against interpreting a 404 as
+"deleted" when the likely cause is a cross-resource id mixup.
+Covers the same class of bug for cover-letter/answer/question/
+scrape ids as well.
+[2026-04-18] Original report:
+User asked for highest score, agent correctly reported
+score 38 with a propose_actions button "Go to Score #38" (AG-UI working).
+Then user said "take me to that job-post" — agent called
+=get_job_posts(id=38)=, got nothing back, and replied "the job post may
+have been deleted." Wrong: 38 is the SCORE id; the related job post is a
+different id reachable via the score's =job_post_id= relationship.
+Prompt fix: teach the agent that scores have a =job_post_id= relation
+and it must resolve that before calling =get_job_posts(id=...)=. Likely
+add a one-liner under "Page-Aware Data Access" or tighten the score
+tools' descriptions.
+
+* DONE /job-posts list sort: deterministic -id tiebreak [api]
+CLOSED: [2026-04-18 Fri]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:33
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-18 api] =JobPostViewSet.list= and =JobApplicationViewSet.list=
+append =-id= as implicit final tiebreak when the user's =sort= param
+doesn't include it. Fixes fresh inserts scattering across pages when
+many rows share =posted_date=.
+
+* DONE the flash notification text is in the center of it's div, but with a sidebar open it looks weird when the title is in the true center
+CLOSED: [2026-04-20 Mon 20:45]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:33
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+
+* DONE delete resume produced :bug:
+CLOSED: [2026-04-20 Mon 20:45]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:33
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+the resume was a failed pdf import
+Error occurred:
+
+- While rendering:
+  {{outlet}} for -top-level
+    -top-level
+      {{outlet}} for application
+        application
+          main-application
+            {{outlet}} for resumes
+              resumes
+                {{outlet}} for resumes.edit
+                  resumes.edit
+                    route-layout
+                      builder/section
+                        experiences/list
+
+* DONE Upload form: working state, auto-clear, manual Remove [frontend]
+CLOSED: [2026-04-18 Fri]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:34
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-18 frontend] All three closed together in =UploadForm=:
+- Button label becomes "Uploading…" with a small spinner while
+  =@uploading= is true (import controller threads =isUploading=).
+- On successful import (or on error during upload), the controller
+  uses the =fileQueue= service to remove the file from the queue so
+  the stale filename doesn't linger.
+- New Remove button next to Upload lets users drop their selection
+  without a page refresh.
+- Per-instance =@queueName= so multiple forms on a page (or across
+  routes) don't collide on a global "resumes" queue name.
+
+* DONE job-posts.show.questions.show.answer — chat tweaks preserve original
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:34
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23 ai] =chat_server.py= now parses nested answer routes so the
+prompt exposes =Job Post ID=, =Question ID=, and =Answer ID= separately
+(previous =/(\d+)= regex grabbed job_post_id and misled the agent). New
+"Modifying an Existing Answer" section in SYSTEM_PROMPT: classify
+surface-edit vs substantive-rewrite, fetch only the context needed
+(=get_answers= alone for small tweaks; + =get_questions=/=get_job_posts=
+for rewrites), and default to =create_answer= so the original is
+preserved. Offers two =propose_actions= buttons — "View new answer" and
+"Replace original instead" (the latter is a =message= follow-up that
+re-issues the turn as =update_answer=).
+Tests: =ai/tests/test_chat_prompt_answer_page.py= pins the ID extraction
+and the prompt section.
+
+* DONE Chat: agent emits =example.com/job-posts/1= links :bug:
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:34
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23] Agent was stripping =https://= per the "no raw API URLs"
+rule but keeping a hallucinated hostname, producing unroutable SPA
+links. Belt-and-suspenders:
+- =ai/mcp_servers/chat_server.py= SYSTEM_PROMPT now explicitly forbids
+  any scheme/hostname/domain prefix with =example.com/job-posts/1= as a
+  negative example.
+- =frontend/app/components/chat/message.js= exports =sanitizeAppHref=;
+  both =handleClick= (markdown-link clicks) and =runAction=
+  (propose_actions navigate) strip scheme+host when the path matches a
+  known app route. Unit tests in
+  =tests/unit/components/chat/message-test.js=.
+
+* DONE Chat behavior
+CLOSED: [2026-04-20 Mon 20:46]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:34
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+I whent to a job-posts.show page.
+I clicked the outbout link to the original job post.
+I ctrl-a ctlr-c on the page to get the contents
+I then went back to career caddy and opened up chat
+I pasted in the content and said, update this job post with the following
+It correctly filled out the data
+but it also made a job-application too.
+It should reasonably consider this scenario that a user is feeding it description data for the job-post as it is necessary for scoring, cover-letters, summaries.  It could infer this without the call to action of "update this job post"
+When it decides that this is the probable course of action it should use elicitation to confirm with the user.
+
+* DONE scrape error — poller crashes on transient connection errors
+CLOSED: [2026-04-16 Wed]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:34
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+Wrapped =poll_once()= in try/except in the main loop so transient =RemoteProtocolError= doesn't crash the poller.
+
+* DONE =make ci= Dagger frontend container couldn't launch Firefox [parent] :bug:
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:34
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Bugs 🐛
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23] =make ci= failed with
+=RenderCompositorSWGL failed mapping default framebuffer, no dt=
++ =glxtest: libpci missing, libGL.so.1 missing= in the build-frontend
+Dagger container (node:20-slim + firefox-esr). Root cause: headless
+Firefox under SWGL compositor still wants /dev/dri, and the container
+was missing =libpci3=/=libgl1=/=libegl1= + had no virtual framebuffer.
+Fix (=dagger/src/career_caddy_pipeline.py::build_frontend=):
+- Install =libpci3 libgl1 libegl1 libdbus-glib-1-2 libgtk-3-0
+  libasound2 xvfb= alongside firefox-esr.
+- Wrap the test step with =xvfb-run -a npm run test:ember= so Firefox
+  has a virtual framebuffer to render into.
+- Export =MOZ_HEADLESS=1= as defense-in-depth.
+
+* DONE =make poller= hit localhost when =.env.local= was present [parent] :bug:
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:34
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Bugs 🐛
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23] The =poller= target was =cd ai && uv run caddy-poller=,
+relying on inherited =CC_API_BASE_URL=. When a user has =.env.local=
+with =CC_API_BASE_URL=http://localhost:8000= at repo root, =uv run=
+(or some other dotenv consumer in the chain) picked that up despite
+the shell env pointing at prod — so =make poller= silently hit local.
+Fix: =Makefile= =poller= target now sets =CC_API_BASE_URL= explicitly
+to =$${CC_API_BASE_URL_PROD:-https://api.careercaddy.online}=,
+mirroring =poller-local='s explicit-override pattern. Matches the
+"pick an explicit target and force the env" rule already used by
+=poller-local=.
+
+* DONE scrape graph route fetches frontend host instead of api host [frontend] :bug:
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:35
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Bugs 🐛
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23] DevTools showed =/api/v1/scrapes/162/graph-trace/= and
+=/api/v1/admin/graph-structure/= going to =careercaddy.online= (frontend)
+instead of =api.careercaddy.online=. Cause: =routes/scrapes/graph.js=
+and =routes/admin/scrape-graph.js= called raw =fetch('/api/v1/...')=
+with bare paths, bypassing the Ember Data adapter that handles the
+host swap. The frontend's Caddy then served =index.html= for the
+unknown path and the SPA choked on HTML where it expected JSON.
+Fix: new =api.url(path)= helper on the api service prepends
+=config.APP.API_HOST=; both route files now go through it. Tests in
+=tests/unit/services/api-test.js= cover the join, leading-slash
+handling, host-trailing-slash trimming, and missing-host fallback.
+
+* DONE exclude healthcheck + scrape-polling spans from Logfire [api]
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:36
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Bugs 🐛
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23] =job_hunting/logfire_setup.py::setup_logfire= now passes
+=excluded_urls= to =logfire.instrument_django(...)= with two regexes:
+=api/v1/healthcheck= and =api/v1/scrapes/\?.*status=hold=. The frontend's
+route-change healthchecks and the poller's 30s tick no longer produce
+Django request spans. Caddy/k8s probes covered by the same rule.
+
+* DONE answers/new favorite toggle lost on save [frontend] :bug:
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:36
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Bugs 🐛
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23] Root cause: =components/answers/form.js::toggleFavorite=
+called =answer.save()= unconditionally. On =/answers/new= the record
+is unsaved, so =save()= POSTed an invalid (empty-content) payload, the
+catch branch rolled =favorite= back to =false=, and the user's toggle
+never survived the form submit. Fix: early-return before =save()= when
+=answer.isNew= — the flipped attr rides along with the main form
+submit. On =/answers/edit= the flip-and-save behavior is preserved.
+
+* DONE Resume ingest quality + reorder UX :APPROVED:
+CLOSED: [2026-04-22 Wed]
+:PROPERTIES:
+:STARTED:  [2026-04-22 api+frontend]
+:ARCHIVE_TIME: 2026-04-23 Thu 19:44
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: HOW TO USE THIS FILE (agents: read this first)
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+[2026-04-22 api+frontend] Branch: =feature/resume-ingest-quality=.
+
+Ingest pipeline:
+- System prompt added to =ai/... ingest_resume.IngestResume=: preserve
+  source order, strict =YYYY-MM= / =YYYY= / =present= dates, bullets
+  stay with preceding experience, treat =--- PAGE BREAK ---= markers as
+  invisible.
+- Date parser (=_canonicalize_date_string= + =_split_date_range=) accepts
+  =Jan 2020=, =January 2020=, =01/2020=, =2018 – 2020=, ranges, etc.
+  Pydantic validators on Experience/Education/Project/Certification
+  normalize before =parse_date=.
+- =ResumeExperience.order= / =ExperienceDescription.order= / =ResumeProject.order= /
+  =ProjectDescription.order= now populated during ingest
+  (=create()= instead of =get_or_create()= — stops cross-resume
+  Description reuse that was swapping bullets between users).
+- =ResumeSerializer.get_related= now preserves join-table order on the
+  wire (experiences + projects). Was dropping order because
+  =Experience.objects.filter(pk__in=...)= re-sorted by PK.
+- =extract_text_from_pdf= uses =pdfplumber= (layout-aware) with =pypdf=
+  fallback; pages joined with =--- PAGE BREAK ---= markers.
+- Added =pdfplumber>=0.11.0= to =api/pyproject.toml=.
+- 27 =test_parse_date.py= + 3 =test_ingest_ordering.py= tests pass.
+
+Frontend resume editor:
+- Experience editor: disabled company input replaced with
+  =<Companies::SelectOrCreate>= (now self-fetches companies; accepts
+  =@selected=/=@onSelect=).
+- =addDescription= saves a new experience first so the description can
+  link by id; =Description= model gained =@belongsTo('experience')= and
+  =@attr('number') order= for create payloads.
+- Experience rows + description rows now have stacked ↑/↓ buttons for
+  reorder. Posts to new bulk endpoints
+  (=POST /resumes/:id/reorder-experiences/=,
+   =POST /experiences/:id/reorder-descriptions/=), atomic per drag.
+- =ember-animated= adopted for the reorder animation (~220ms move,
+  easeOut). =liquid-fire= deprecation queued below.
+- Chronology warning badge on any experience whose =startDate= inverts
+  against its neighbor.
+
+Dropped (explored and reverted):
+- HTML5 drag-drop with a =<SortableList>= abstraction — event bubbling
+  + textarea mousedown + row-height-vs-indicator issues made it brittle.
+  Up/down buttons with keyed animated reorder are cleaner and
+  keyboard-friendly.
+
+* DONE Sankey — vetted hub grouping (d3 aggregator pattern)
+CLOSED: [2026-04-23 Thu 12:52]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:44
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — APPROVED (ready to work)
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+CONCEPT: Vetted Good / Vetted Bad / Unvetted as hub node, like 'Thermal generation' in https://observablehq.com/@d3/sankey/2.
+BRANCH: api:feature/sankey-vetted-hub
+SEE: notes.org :: Sankey — vetted hub grouping [2026-04-20]
+
+* DONE Elicitation action buttons act directly, not round-trip chat :APPROVED:
+CLOSED: [2026-04-18 Fri]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:44
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — APPROVED (ready to work)
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-18 ai+frontend] Landed as a single change this session.
+Three action shapes now supported by =ChatMessageComponent.runAction=;
+agent prompts (main chat + onboarding sub-agent) updated to prefer
+the zero-LLM variants.
+
+Shapes emitted by the agent:
+- ={"label": "...", "navigate": "/path"}= → =router.transitionTo= (no LLM turn)
+- ={"label": "...", "model": {"type": T, "id": N, "patch": {...}}}=
+  → =store.peekRecord(T, N).setProperties(patch).save()= via a
+  per-type allow-list in =message.js= (resume/cover-letter/answer/
+  job-post: favorite only + a few safe sibling fields; user:
+  onboarding sub-keys only). Unknown types / disallowed keys are
+  dropped silently.
+- ={"label": "...", "message": "..."}= → existing chat turn (legacy)
+
+Rolled out to ALL users, not just staff — per product decision this
+is the desired UX.
+
+Follow-ups (if we hit them):
+- Warning toast when an agent emits an unsupported patch so we can
+  tighten the prompts without silent drops.
+- Analytics on which action shape the agent picks most often, to
+  calibrate prompt tightness.
+
+* DONE Chat: no editing linked resume resources; disambiguate "title" :APPROVED:
+CLOSED: [2026-04-18 Fri]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:44
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — APPROVED (ready to work)
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-18 ai] Surfaced when user said "change my title in RHI to
+OFFICE BADASS" on a resume page. The agent called
+=edit_resume(resume_id=39, title="OFFICE BADASS")= — which OVERWROTE
+the resume's top-level label field. User meant the job title inside
+the Robert Half International experience (a linked record), not the
+resume's own label.
+
+Product decision: editing linked resume resources (experiences,
+educations, certifications, projects, descriptions, skills) from
+chat is DISCOURAGED. Those are structured records that belong in the
+resume form UI, where ordering / date reconciliation / company links
+work correctly. Chat should navigate the user there, not attempt
+the edit itself.
+
+Fixes landed this session:
+- =ai/lib/api_tools.py::edit_resume= docstring now hard-states
+  "top-level only; do not use for experiences". Also: disambiguate
+  before calling when the user's phrasing could mean either.
+- Main chat =SYSTEM_PROMPT= got a new "Linked resume resources are
+  NOT editable via chat" section with the same rules + a pointer
+  to use =navigate= actions to send the user to =/resumes/{id}=.
+- No new =edit_experience= tool — deliberately NOT adding one.
+
+* DONE Main chat: "intent announced, tool skipped" (systemic) :APPROVED:
+CLOSED: [2026-04-23 Thu 19:46]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:46
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — APPROVED (ready to work)
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-18 ai] Recurring pattern on haiku-4-5 in the main chat: model
+emits "I'll check X" / "I'll create Y" / "Let me look that up" — then
+the turn ends with no tool call. Step B already fixed this for
+onboarding by forcing delegation. Remaining examples seen in e2e:
+- User pasted LinkedIn job markup, AW said "I'll create the job post"
+  → no POST to =/api/v1/job-posts/=.
+- User asked "what should I do next?" with all onboarding steps done
+  (no AW block injected) → "I'll check what job posts you have"
+  → no =get_job_posts= call.
+
+Both hit the same systemic gap: the main chat prompt tells the agent
+*what* to do but doesn't force *how*. Negative-rules-in-a-big-prompt
+continues to be the weakness.
+
+Candidate fixes (pick one, not all):
+1. *Tightened tool-use directive at the top of SYSTEM_PROMPT*, similar
+   to the AW delegation rule: "When you say 'I'll check X' or 'I'll
+   create Y', you MUST have called the corresponding tool in THIS
+   turn. If you don't call it, don't announce it."
+2. *Job-post creation sub-agent* (mirrors step B): a dedicated
+   pydantic-ai agent owns the pasted-text → structured extraction →
+   create flow, with a tight prompt and 3 tools. Main chat delegates
+   via a =create_job_post_from_text= delegation tool. Worth it if we
+   expect users to paste job descriptions routinely.
+3. *Just-in-time prompt rider*: when the user message exceeds N chars
+   OR contains job-post-like keywords (title / salary / location),
+   _build_system_prompt adds a focused "MUST extract and call
+   create_job_post_with_company_check" stanza.
+
+Order of attack: try #1 first (cheap, 5-line prompt tweak). If
+pasted-text creates still skip the tool call, escalate to #2.
+
+* DONE Accept PDF resumes in ingest pipeline :APPROVED:
+CLOSED: [2026-04-18 Fri]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:46
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — APPROVED (ready to work)
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-18 api+ai+frontend] Added =pypdf>=5.0.0= to =api/pyproject.toml=.
+New =IngestResume.extract_text_from_pdf= uses =pypdf.PdfReader= and the
+new =_extract_text= dispatcher routes by extension so =process()= handles
+both. Ingest endpoint accepts =.pdf= in addition to =.docx=. Frontend hint
++ AW sub-agent + =chat_server= SYSTEM_PROMPT + =import_resume_from_url=
+all updated from "DOCX only / PDF pending" to "DOCX or PDF". 4 new unit
+tests in =test_ingest_resume_pdf.py= stub =sys.modules['pypdf']= so tests
+run without the real dep. 24 ingest tests pass, ruff clean.
+
+Initially tried =docling= (user's original choice since camoufox depends
+on it), but =docling= pulls =torch + transformers= (~2GB) — unacceptable
+for a text-extraction task. Swapped to =pypdf= (pure Python). If we later
+need OCR for scanned PDFs, revisit with a lazy/optional heavy backend.
+Note: container needs rebuild to pick up pypdf.
+
+* DONE Security: gate DjangoUserViewSet PATCH/PUT by ownership :APPROVED:SECURITY:
+CLOSED: [2026-04-18 Fri]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:46
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — APPROVED (ready to work)
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-18 api] Account-takeover-class gap: =_upsert= at
+=api/job_hunting/api/views/users.py:437= had no ownership gate, so any
+authenticated user could =PATCH /api/v1/users/{other_id}/= and overwrite
+another account's =password=, =email=, =phone=, =linkedin=, =github=,
+=address=, =links=, =first_name=, =last_name=, =onboarding=. Only
+=is_staff= / =is_active= were gated (they already return 403). Found
+during Agent Wizard review of the Ember-inspector tampering surface.
+
+Fix: added
+=if not request.user.is_staff and user.id != request.user.id: 403=
+at the top of =_upsert=, mirroring the guard =retrieve= has at line 222.
+Tests in =tests/test_user_upsert_ownership.py=: 7 cases covering PATCH
+self, PATCH other (incl. password + onboarding), PUT other, and staff
+override. Reconciles =api/SECURITY_AUDIT.md='s "5 detail actions"
+matrix claim — update/partial_update were missed in the original audit
+scope.
+
+Follow-up (not blocking; own ticket): require current-password
+re-authentication for password change, even when changing your own.
+
+* DONE Security audit — multi-tenancy data isolation :APPROVED:
+CLOSED: [2026-04-15 Tue]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:49
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — APPROVED (ready to work)
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-15 api] Report at =api/SECURITY_AUDIT.md=. All 7 remediation phases implemented:
+- DjangoUserViewSet detail actions: ownership guards on 5 endpoints
+- career_data(): staff-only cross-user access
+- ProjectViewSet: scoped list/retrieve/destroy via user FK
+- Education/Certification/Experience/Description: scoped via resume join tables
+- _build_included(): added resume + project to type filter
+- ScrapeViewSet: ownership checks on update/partial_update/destroy
+265 tests pass, ruff clean.
+[[file:notes.org::*Security audit — multi-tenancy data isolation][Considerations → notes.org]]
+
+* DONE admin interface for AI model selection (read-only docs) :APPROVED:
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:51
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — PENDING APPROVAL
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+flipping switches sound fun but too much work for too little
+CLOSED: [2026-04-18 Fri]
+[2026-04-18 frontend] Shipped =/admin/ai-models= as a read-only reference
+page: 4 agent roles (caddy, chat, job_extractor, browser_scraper), their
+env var names, defaults, and restart instructions. Added "AI Models" link
+to the admin subnav across 9 templates. No backend work.
+[[file:notes.org::*Admin AI Model Configuration][Partial status → notes.org]]
+
+* DONE AG-UI chat migration :APPROVED:
+CLOSED: [2026-04-18 Fri]
+:PROPERTIES:
+:STARTED:  [2026-04-18 ai]
+:ARCHIVE_TIME: 2026-04-23 Thu 19:52
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — PENDING APPROVAL
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[[file:notes.org::*AG-UI migration — phased rollout][Implementation → notes.org]]
+All 4 phases landed 2026-04-18 on feature/ag-ui-migration:
+- Phase 1 (on main already): =propose_actions= tool + 18 tests
+- Phase 2 (ai c05a958): server /chat rewrite to =run_ag_ui=; reload
+  as AG-UI CustomEvent; =session_meta= CustomEvent carries
+  conversation_id + usage; =_stream_once= and 6 custom events deleted
+- Phase 3 (frontend 797a30d): =services/chat.js= parser over AG-UI
+  vocabulary; propose_actions args → =message.elicitation=;
+  =chat/message.js= drops ELICITATION_RE
+- Phase 4 (ai aa75f66): SYSTEM_PROMPT now teaches =propose_actions=
+  calls instead of fenced JSON + HTML comment navigate markers
+Smoke-tested: "take me to my resumes" renders a Go-to-Resumes button
+that navigates without a follow-up LLM turn. 46 chat tests still green.
+Follow-ups (non-blocking) tracked in notes.org.
+
+* NO AI Models admin — runtime DB override (revisit) :PENDING_APPROVAL:
+CLOSED: [2026-04-23 Thu 19:52]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:52
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — PENDING APPROVAL
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: NO
+:END:
+[[file:notes.org::*Admin AI Model Configuration][Full architecture → notes.org]]
+Follow-on to the read-only page shipped [2026-04-18]. DB-stored configs
++ 30s TTL cache in AI service + live admin UI. Don't start until there's
+a concrete need to switch models without a restart (A/B test, cost
+experiment, etc.). Also requires refactoring agents to call
+=get_model(role)= per-request instead of at module import time — see
+=ai/agents/career_caddy_agent.py:185= for the current caching pattern.
+
+* NO omarchy theme integration
+CLOSED: [2026-04-20 Mon 20:55]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:52
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — PENDING APPROVAL
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: NO
+:END:
+[[file:notes.org::*Color Palette System][Omarchy integration roadmap → notes.org]]
+
+* NO use omarchy to set theme
+CLOSED: [2026-04-20 Mon 20:55]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:53
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — PENDING APPROVAL
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: NO
+:END:
+publicity stunt
+
+* DONE caddy_automation: standalone toolkit + MCP verification :APPROVED:
+CLOSED: [2026-04-20 Mon 20:55]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:53
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — PENDING APPROVAL
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[[file:notes.org::*Standalone Career Caddy Automation Toolkit (caddy_automation)][Architecture → notes.org]]
+
+* DONE Graduate auto-score from automation into ai/ [api+ai]
+CLOSED: [2026-04-23 Thu 19:55]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:55
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — PENDING APPROVAL
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+:LOGBOOK:
+- Note taken on [2026-04-23 Thu 19:55] \\
+  this is done with scrape and score
+:END:
+[2026-04-20] Port =career_caddy_automation/scripts/score_posts.py= to
+=ai/scripts/score_poller.py= so every user — not just the owner — gets
+their job-posts auto-scored once scrapes complete. Email stays out of
+core: notmuch + anything email-shaped lives only in
+=career_caddy_automation/=. Also ports =url_extractor= to =ai/lib/= and
+has the paste/scrape endpoints call it (closes the Inbox
+"Canonicalize tracker URLs on scrape ingest" TODO). Ships behind
+=CC_AUTOSCORE_ENABLED= (server) + =Profile.auto_score= (per-user) +
+server-enforced daily cost cap. One PR.
+[[file:notes.org::*Canonical auto-score in ai/][Full plan → notes.org]]
+
+* DONE Ember Engines extension points for private website layer [frontend]
+CLOSED: [2026-04-17 Fri]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:55
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — Open TODOs
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[[file:notes.org::*Ember Engines extension points for private website layer][Architecture → notes.org]]  [[file:~/.claude/plans/eventual-launching-meadow.md][Full plan]]
+Installed =ember-engines@0.13.1= (compatible with Ember 6.6). Added =extensions= and
+=public-routes= services, conditional engine mount in =router.js= gated by
+=@embroider/macros='s =dependencySatisfies=, sidebar rendering for registered nav
+entries (sidebar + footer positions with =authOnly= filter). Documented public
+customization API in =frontend/EXTENSIONS.md=. 214 tests pass, ruff + prettier +
+template-lint clean. Private =@careercaddy/site-chrome= engine lives in a separate
+repo (out of scope here).
+
+* DONE Refactor =serializers.py= — extract data linkage pattern into BaseSerializer [api]
+CLOSED: [2026-04-16 Wed]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:55
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — Open TODOs
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[[file:notes.org::*Refactor: serializers.py][Plan → notes.org]]
+3 patterns extracted: linked_relationships, user_fk auto-linkage, user FK resolution in get_related. 190 lines removed (1325 → 1135). 265 tests pass.
+
+* DONE Refactor =views.py= → =views/= package [api]
+CLOSED: [2026-04-16 Wed]
+:PROPERTIES:
+:STARTED:  [2026-04-16 api]
+:ARCHIVE_TIME: 2026-04-23 Thu 19:55
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — Open TODOs
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[[file:notes.org::*Refactor: views.py][Plan → notes.org]]  [[file:~/.claude/plans/resilient-jumping-glade.md][Full plan]]
+Split 8269-line monolith into 17-file =views/= package. No mixin extraction, no inheritance changes.
+=__init__.py= re-exports everything — =urls.py= unchanged. 271 tests pass, ruff clean.
+
+* KILL Adopt PollableController across all pollable show routes [frontend]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:56
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — Open TODOs
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: KILL
+:END:
+used service
+CLOSED: [2026-04-15 Tue]
+Enhanced PollableController with hooks, created PollableListController. Migrated 6 controllers. 13 unit tests.
+
+* DONE Refactor polling into pollable service [frontend]
+CLOSED: [2026-04-16 Wed]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:56
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — Open TODOs
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[[file:~/.claude/plans/peaceful-dreaming-gosling.md][Full plan]]
+Consolidated PollableController + PollableListController into =pollable= service.
+Polls survive navigation, seamless spinner, flash-with-link on completion.
+Deleted both base controllers, migrated all 8 consumers. 13 service tests.
+
+* DONE Company show: get child resource counts from API metadata instead of relationship length [api+frontend]
+CLOSED: [2026-04-16 Wed]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:56
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — Open TODOs
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+API retrieve returns =meta= with 5 counts. Added =scores=, =questions=, =scrapes= to CompanySerializer relationships
+and new action endpoints. Frontend uses count attrs instead of =.length=. Child routes await relationships and return
+sorted arrays directly.
+
+* DONE resume_importer doesn't show up in costs
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:56
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23 api] =IngestResume.process= now records an =AiUsage= row
+after =agent.run_sync= (agent_name="resume_importer",
+trigger="resume_import"). Added =_get_model_name= and =_record_usage=
+helpers mirroring the JobPostExtractor pattern; failures swallow into
+the logger so a telemetry error never breaks resume import. Falls
+back to the first staff user when no user is attached to the
+programmatic ingest path. Tests in
+=test_ingest_resume_usage.py= cover the happy path, the dict-usage
+legacy-stub case, and the no-user fallback.
+
+* DONE Link search showed nothing — wasted an agent call on a duplicate
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:56
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+https://careercaddy.online/job-posts?search=https%3A%2F%2Ftalent.toptal.com%2Fportal%2Fjob%2FVjEtSm9iLTQ5Mzg4OA
+[2026-04-23 api] Two-part fix:
+- =filter[query]= on the job-posts list now OR's against
+  =link__icontains= so a pasted URL in the search bar finds the
+  existing post. Was searching only title/description/company. Tests
+  in =test_job_post_query_filter_link.py=.
+- =POST /api/v1/scrapes/from-text/= now short-circuits with 409
+  when =link= maps to a non-stub JobPost — re-parsing a fully-
+  extracted post wastes the LLM call and overwrites the user's
+  data. Stubs (thin/empty description) still pass through so the
+  existing =updated_stub= path can fill them in. Body =force=true=
+  overrides. Frontend paste form catches 409 and shows a sticky
+  banner with two actions: "Open job post #N" or "Re-parse anyway".
+  Tests in =test_scrape_from_text.py::TestScrapeFromTextDuplicateLink=.
+
+* DONE new tool review answer
+CLOSED: [2026-04-23 Thu 15:01]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:58
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+mcp tool helps chat by making it look up contextual data like question and job-post.
+It also does a poor job of deciding to create a new answer or update current.
+when it updates current I often lose the work that made me want to iterate on it in the first place.
+
+* NO wrong position for additional dialogue window
+CLOSED: [2026-04-23 Thu 15:02]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:58
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: NO
+:END:
+
+* DONE answers not polling.  buggy
+CLOSED: [2026-04-23 Thu 15:02]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:58
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+:LOGBOOK:
+- Note taken on [2026-04-23 Thu 15:02] \\
+  answer should be polling now
+:END:
+
+* DONE after asking ai to answer question, go to jp.show.questions.show.answers.index
+CLOSED: [2026-04-23 Thu 15:02]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:58
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+
+* DONE resume_importer doesn't show up in costs
+CLOSED: [2026-04-23 Thu 19:58]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 19:58
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+
+* DONE bookmarklet that populates job-post.new.paste wtih info.  maybe hits send
+CLOSED: [2026-04-23 Thu]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:05
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-22/23 frontend] Shipped:
+- Drag-install bookmarklet on =/job-posts/new/paste= (href set
+  imperatively via =on-insert= to bypass Ember's =unsafe:javascript=
+  sanitizer).
+- MV3 browser extension =career-caddy-sender= at
+  =/extensions/career-caddy-sender-0.2.5.{zip,xpi}=. Popup shows
+  installed version in the top-right, remembers origin/auto-submit/
+  auto-score preferences per browser.
+- Auto-submit: extension URL =?auto=1= → paste form fills, submits,
+  polls scrape to completion.
+- Auto-score: =?score=1= implies auto=1; after scrape completes, paste
+  transitions to =/job-posts/:id/scores?auto=1= and the scores
+  controller auto-triggers career-data scoring (or opens existing
+  completed career-data score when one exists).
+- Application-route global =message= listener stashes to
+  =sessionStorage= so bookmarklet payloads survive a login redirect.
+- Install docs on the paste page split into three platform cards
+  (Firefox temporary / persistent / Chrome-family) with warning on
+  temp-install state loss.
+Shipped via PRs #58 and #60 (frontend), #41 and #45 (api — dedup
+branching + pydantic-ai 'openai:' prefix strip), parent bumps #21
+and #25.
+
+** TODO the timeout didn't work.
+
+* KILL I'm not seeing sources coming through.
+CLOSED: [2026-04-23 Thu 19:09]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:05
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: KILL
+:END:
+Don't know what this means
+
+* DONE wrong position for additional dialogue window
+CLOSED: [2026-04-22 Wed 20:19]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:05
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+/home/oldbones/Pictures/screenshot-2026-04-21_00-17-58.png
+
+* DONE spinner on cover-letter polling https://careercaddy.online/job-posts/967/cover-letters
+CLOSED: [2026-04-21 Tue]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:05
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-21 frontend] Route now calls =pollable.pollIfPending= for each
+pending cover letter on setup; list component shows an inline spinner
++ "Generating…" in the Actions column while =isPending= is true.
+Handles the page-reload-mid-generation case.
+
+* DONE career-data has navigatiable anchors for different sections.
+CLOSED: [2026-04-21 Tue]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:05
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-21 api+frontend] /career-data reworked end-to-end:
+- Backend =/api/v1/career-data/= adds a typed =sections= array
+  (resumes / qas / cover_letters) alongside the markdown =data= blob.
+  Each item carries a stable DB id (=resume-39=, =qa-128=, =cl-77=).
+- Frontend renders per-item sub-cards (CareerData::ResumeCards /
+  QaCards / CoverLetterCards). No markdown regex-splitting.
+- Subnav anchor-nav widget shows item-level labels as you scroll
+  (resume title, truncated question, "Cover · <company>"). Fixed
+  width so prev/next buttons stay on target.
+- Subnav rendered inline per route (portal removed, no nested-dup
+  hack); scroll-padding-top on html + .course-main so anchor jumps
+  clear the sticky bar. Firefox-safe (portal timing was the bug).
+- resume_markdown.j2 cleaned: single =## Name= heading, italic
+  metadata line, h4 sub-headings per experience/project. Prompt
+  fidelity strictly improved (the old 4-space indent had been
+  rendering each resume as a code block for any markdown-aware
+  consumer — see de2815d).
+
+* DONE scrape and score is finishing and flashmessages is showing up null with link to (in this case) https://careercaddy.online/job-posts?search=Crossing%20Hurdles
+CLOSED: [2026-04-21 Tue]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:05
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-21 frontend] =pollable._flashLink= now bails early on a
+falsy message instead of rendering =<a>null</a>= as a sticky banner.
+Callers that deliberately suppress the navigated-away flash (e.g.
+scrape+score chains handling their own messaging in onComplete) no
+longer leak a null.
+
+* DONE asking ai to answer from jp.show.questions.show didn't do polling :bug:
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:06
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23 frontend] =components/questions/inline-answer.js= now
+calls =pollable.pollIfPending(saved, ...)= after a successful AI save,
+so the inline-answer flow on any nested questions.show page polls the
+answer through pending → completed. Previously only the =answers.show=
+route started polling, which meant users who stayed on the list
+(=onSave= collapses the inline editor without navigating) sat on a
+stale pending answer until a manual refresh.
+
+* DONE filters for job posts.
+CLOSED: [2026-04-21 Tue 00:19]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:06
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+it's pretty immature now, but I'm seeing utility in fleshing out simple thing.
+I also want to revisit the underconstruction pages buttons, since the filter indication badges look bad.
+#+NOTE: [2026-04-20 frontend+api] Shipped:
+- =JobPosts::FiltersMenu= popover in subnav (Hide Vetted Bad, Stubs
+  tri-state, Scoring tri-state, Source dropdown)
+- API =filter[exclude_vetted_bad]= (latest-status aware; re-appears
+  when a newer status is logged)
+- =FilterPill= component — unified slate rounded-full pill matching
+  =frontend/under-construction.html= aesthetic; replaced the 6
+  per-color rectangular chips on =/job-posts=
+
+* DONE Screenshots on prod — absolute API URL [frontend] :ARCHIVE:
+CLOSED: [2026-04-19 Sun]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:06
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+Root cause: relative =/api/v1/scrapes/:id/screenshots/= resolved to the
+frontend origin in prod (careercaddy.online), served =index.html= as SPA
+fallback, =json.parse= threw into the silent catch, Screenshots row
+never rendered. Fix: =this.api.baseUrl= (absolute) +
+=this.api.headers()=. Also added =Cache-Control: no-store= + fetch
+=cache: 'no-store'= to prevent 304 revalidation against an earlier
+empty-list response.
+
+* DONE Track how a job-post was created (provenance)
+CLOSED: [2026-04-19 Sun]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:06
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-19 api+frontend] =JobPost.source= + =Scrape.source= CharField
+(default ='manual'=, values: manual/email/paste/scrape/chat/import).
+Pre-save hook on each ingest path sets it; sankey filter-bar + job-post
+form expose it as a dropdown; reports rollup by provenance.
+
+* DONE Run scrape should transition you job-post.show.scrapes
+CLOSED: [2026-04-19 Sun]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:06
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-19 frontend] After queuing the scrape, =runScrape= calls
+=router.transitionTo('job-posts.show.scrapes', this.model)= so the
+user lands on the tab that'll render the new row as soon as the
+poller writes it.
+
+* DONE Paste page accepts URL; edit page has re-extract from paste
+CLOSED: [2026-04-18 Sat]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:06
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-18 api+frontend] Branches:
+=feature/job-post-reextract= (api), =feature/job-post-paste-edit=
+(frontend + parent).
+- Paste page (=/job-posts/paste=): optional URL input above the
+  textarea. URL submission redirects to =/job-posts/scrape= with
+  =?url== query param so the existing browser-scrape flow takes over.
+- Edit page (=/job-posts/{id}/edit=): "Re-extract from paste" textarea
+  + button. Calls =POST /api/v1/job-posts/{id}/reextract/= which
+  runs the AI extractor on pasted text and merges non-None fields
+  onto the existing JobPost. Company is intentionally preserved.
+  Persists a Scrape with =job_post= linked for provenance. 7 tests.
+- Future: 3rd submission mode on paste (URL+text together) would POST
+  to =from-text/= with both =text= and =link= so the JobPost gets the
+  URL as link and the parser fills the rest. Not wired yet.
+
+* DONE Include email in Resume.to_export_context().header [api]
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:07
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23 api] Added =self.user.email= to =Resume.to_export_context()='s
+=header= dict. The docx template's ={{HEADER.EMAIL}}= placeholder now
+resolves to the user's actual email instead of rendering empty.
+
+* DONE poller: opaque "Page.goto: Target page... closed" with no retry [ai] :bug:
+CLOSED: [2026-04-23]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-23 Thu 20:07
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Bugs 🐛
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+[2026-04-23] LinkedIn scrape #162 failed with one cryptic line — the
+camoufox subprocess died mid-scrape and Playwright surfaced
+"Target page, context or browser has been closed", which
+=mcp_servers/browser_server.py::_scrape_on_page= was logging via
+=str(e)= only (no traceback). Two changes:
+- =except Exception= at the bottom of =_scrape_on_page= now does
+  =logger.exception(...)= so the next recurrence has a full stack.
+- New =_scrape_page_once= helper returns a parsed dict instead of
+  re-serialized JSON; =scrape_page= retries once on a curated set of
+  transient-browser-died substrings ("Target page, context or browser
+  has been closed", "Browser has been closed", "Connection closed").
+  Bounded to one retry — a deterministic crash still surfaces and
+  the poller marks the scrape failed as before.
+Tests: =tests/test_browser_server_retry.py= covers the matcher, the
+retry-then-succeed path, no-retry on terminal errors, and persistent
+crashes still surfacing.
