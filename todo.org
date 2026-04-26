@@ -175,7 +175,7 @@ Use more recent conventions.
 [[file:notes.org::*Superuser account management][Considerations → notes.org]]
 *** TODO decide on user roles and be able to manage them as admin
 
-** DONE IN_PROGRESS Hold poller + multi-model pipeline :APPROVED:
+** SHIPPED IN_PROGRESS Hold poller + multi-model pipeline :APPROVED:
 CLOSED: [2026-04-23 Thu 19:50]
 :PROPERTIES:
 :STARTED:  [2026-04-14 ai+api+frontend]
@@ -439,7 +439,7 @@ unreliable." Threshold mirrors =STUB_MIN_WORDS= in
 =application_flow.py=. Non-blocking if we later want a richer popover.
 *** TODO review stubs
 
-** DONE [#A] Add title + date_range to docx template Experience/Project blocks [api]
+** SHIPPED [#A] Add title + date_range to docx template Experience/Project blocks [api]
 CLOSED: [2026-04-26]
 [2026-04-26 audit] Already resolved on main. The live export path
 (=GET /api/v1/resumes/:id/export/=) uses
@@ -575,7 +575,7 @@ Projects
 {% endfor %}
 {% endif %}
 
-** DONE Proactive chat nudge when onboarding incomplete + user idle [frontend]
+** SHIPPED Proactive chat nudge when onboarding incomplete + user idle [frontend]
 CLOSED: [2026-04-18 Sat]
 [2026-04-18 frontend] New =services/idle-nudge.js= subscribes to
 =routeDidChange=. On chime-eligible pages (gated by
@@ -597,7 +597,7 @@ Follow-ups:
 ** NO dynamic OG tags
 CLOSED: [2026-04-20 Mon 20:46]
 
-** DONE [#A] Scrape-quality gate + profile url_rewrites [api+ai+automation]
+** SHIPPED [#A] Scrape-quality gate + profile url_rewrites [api+ai+automation]
 CLOSED: [2026-04-23]
 Trigger: scrapes 172 (ziprecruiter =ekm/…= → Salesforce Lightning
 bootstrap shell) and 175 (indeed =?vjk=X= tracker → logged-in homepage
@@ -643,7 +643,7 @@ career_caddy_automation/:
 Intentionally deferred per user: rollback of JobPost 1201 and the
 two poisoned =ScrapeProfile.update-from-outcome= promotions.
 
-** DONE [#A] Job-post dedupe — canonical link + content fingerprint [api+frontend]
+** SHIPPED [#A] Job-post dedupe — canonical link + content fingerprint [api+frontend]
 CLOSED: [2026-04-24]
 Trigger: =/job-posts/1184= (applied) and =/job-posts/1206= (scraping)
 were the same ziprecruiter posting minted twice because the
@@ -698,7 +698,7 @@ bandit =B324= (sha1 usedforsecurity flag) and
 =ember-template-lint= =no-unused-block-params= that broke the
 first Deploy attempt.
 
-** DONE [#A] Loading-skeleton substates for all parent paths [frontend]
+** SHIPPED [#A] Loading-skeleton substates for all parent paths [frontend]
 CLOSED: [2026-04-24]
 Trigger: user reported =/job-posts= (and other sidebar nav targets)
 felt unresponsive on prod — clicking the link hung on the previous
@@ -739,7 +739,7 @@ User-reported outcome on prod after #40 Deploy landed: "love the
 skeleton fix."
 
 * Bugs 🐛
-** DONE [#A] Chat: detect duplicate JobPost by link, offer navigate instead of re-create [ai] :bug:
+** SHIPPED [#A] Chat: detect duplicate JobPost by link, offer navigate instead of re-create [ai] :bug:
 CLOSED: [2026-04-26]
 ai PR #14 (merged =fc3b2c8=): tightened the main chat =SYSTEM_PROMPT=:
 - Top-level rule names ALL create paths (job-post, scrape, application)
