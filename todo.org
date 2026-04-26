@@ -726,21 +726,20 @@ User-reported outcome on prod after #40 Deploy landed: "love the
 skeleton fix."
 
 * Bugs 🐛
-** TODO [#A] Chat: detect duplicate JobPost by link, offer navigate instead of re-create [ai] :bug:
-[2026-04-22] When paste/scrape/chat ingest carries a URL that already matches
-an existing =JobPost.link=, the chat agent currently proceeds to create a
-duplicate (or lets the scrape run) rather than recognizing the hit. Expected
-behavior: agent calls =find_job_post_by_link(url)= first, and on a match emits
-a =propose_actions= button "Open existing job post" that navigates to
-=/job-posts/{id}= — no new record, no scrape kicked off.
+** DONE [#A] Chat: detect duplicate JobPost by link, offer navigate instead of re-create [ai] :bug:
+CLOSED: [2026-04-26]
+ai PR #14 (merged =fc3b2c8=): tightened the main chat =SYSTEM_PROMPT=:
+- Top-level rule names ALL create paths (job-post, scrape, application)
+  and explicitly covers URLs embedded inside pasted text.
+- New "Scraping URLs / handling pasted text that CONTAINS a URL"
+  section gates =create_scrape= on =find_job_post_by_link= first; on
+  hit emits =propose_actions= with an "Open existing job post"
+  navigate action and skips the create entirely.
+- 3 regression tests pin the literal phrases in =SYSTEM_PROMPT= so
+  vague instructions can't creep back.
+Paste/scrape side already shipped [2026-04-22]; this closes the
+chat-agent gap.
 
-Paste/scrape side shipped [2026-04-22] — =parse_scrape= branches on stub
-vs non-stub, logs =duplicate:= / =updated_stub:= notes on the
-=ScrapeStatus=, frontend reads =scrape.latestStatusNote= and shows
-sticky warning flash. What remains is the CHAT-agent path:
-- Tool contract: =find_job_post_by_link= already exists in the agent's
-  toolset; the rule is in =career_caddy_agent.py= but the main chat
-  skips it when the URL arrives inside pasted text.
-- Prompt tightening: add "ALWAYS call find_job_post_by_link before any
-  create path, including when the user pastes text WITH a URL" stanza
-  to the main chat SYSTEM_PROMPT.
+Promote to SHIPPED after parent Deploy clears + live verify (paste a
+recruiter email containing a known JobPost URL → expect "Open existing
+job post" propose-actions instead of a new scrape).
