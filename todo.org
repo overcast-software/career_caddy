@@ -233,6 +233,43 @@ feeds the eventual plugin PR.
 Queue sequential display instead of stacking. First flash finishes its time, slides left, next slides in.
 ** TODO Audit redundant parent columns in child route list components [frontend]
 * Inbox
+** TODO clicking around.  if I go to jp.index i get the skeleton, if i then go to answers.index i get a skeleton.  in either case the page loads and it's good.  the weirdness if I go back to jp.index I don't see the loaded jps I get another skeleton. 
+** DONE vetted bad is not multi-tenant :bug:
+CLOSED: [2026-04-24]
+Existing triage was already per-user (=JobApplication.user= → =JobApplicationStatus=).
+What shipped:
+- api: =JobApplicationStatus.reason_code= (choices enum + =other=) + note pairing.
+  Migration 0056. =triage= endpoint accepts =reason_code=; =other= requires a note.
+  Per-caller triage moved off of =attributes.active_application_status= onto
+  =meta.triage= ({ status, reason_code, note }). No more =attrs.pop()= guards on
+  PATCH — meta can't be round-tripped as resource state. Going forward, other
+  per-user computed fields should move to meta too.
+- frontend: =@attr triage= on job-post (single object, heavily documented as
+  coming from response meta, not a DB column). =triage-actions= uses
+  =PowerSelectWithCreate= — fixed enum options (Compensation / Location /
+  Seniority / Tech stack / Dislike company) and "type anything" creates
+  =Other: "<text>"= with the text stashed as the JAS note. Chip shows =Vetted
+  Bad — Other: "...truncated..."= with full text on hover; =max-w-xs truncate=
+  keeps it contained.
+- tests: 15 new (triage variants + multi-tenant scoping regression);
+  514 total green.
+** TODO what happend to this job post.  I'm very qualified and I can't find it in prod
+2026-04-24 05:08:16 INFO     Run complete: 3 email(s), 3 ok, 0 failed, 5 job-post(s) created
+  [ok  ] New Staff Engineer - RoR - Remote opportunity  →  0 new, 0 dup / 0 kept
+  [ok  ] Doug, you may want to apply for this job!  →  0 new, 0 dup / 0 kept
+  [ok  ] Data Engineering Solution Architect (Consulting) openings are available. Apply Now.  →  5 new, 0 dup / 5 kept
+2026-04-24 05:08:16 INFO     Next run in 58 minutes
+2026-04-24 06:06:20 INFO     Starting caddy-process run (limit=3)
+2026-04-24 06:06:20 INFO     Found 1 pending email(s)
+2026-04-24 06:06:20 INFO       1. [39 mins. ago] New DevOps Engineer opportunity  <Jobot Alerts>
+2026-04-24 06:06:20 INFO     Processing email: 7pDS_xlrQ_qwgZCUlj-D_g@geopod-ismtpd-108
+2026-04-24 06:06:43 INFO     HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-04-24 06:06:43 INFO     HTTP Request: GET https://url9751.alerts.jobot.com/ls/click?upn=u001.nzDSnI8Q0Y9UfX4wWW5-2BpLmDLJUw5zsWrRP9ba15kqrR71dcQvSkMZsi93OgqEl1GR-2BumVA48lmYvHGTzFLoAtDwCi8gLAj-2BYkZuxwP1kP5DyNoM9UFFbZkvLQEWuacP8gKFbvFPwpaJ675wvMlxj-2FyEL-2Bmn1AuqCNl4vmLefWPRusH1DmzDS1DEIj5P33CBNu4-_NE755C4sNRUd1jBQo-2BOPb25tnSx-2FZVStHCzurLhDLfRECb9UBFHWpCDz4V7HI5p6jysPqJ8U8vpHH9Hr-2BeKleDxDzHK9q-2FGIAfNtT-2FKdfnoiwnX6lSyufoJRPt6mdtrMrBje1hkRyOw6oYojCeyHJb0-2F0TJ9FfWz3E5Rn3uT-2BFqNNE9oOFGiUm5waSH5FtbGst9iPsEnsndo4TyfHhvswH8jPlPKLZo3EQ9inywXmGSV-2Blid0rtqE72GvtcLyp5GIZKSLAr4JJ3jN6nfh8-2FeDQ-3D-3D "HTTP/1.1 302 Found"
+2026-04-24 06:06:44 INFO     HTTP Request: GET https://jobot.com/details/devops-engineer/fdcc79bd01?utm_source=DigestAlert&utm_campaign=A&utm_medium=SimilarCandidate_JobTitle "HTTP/1.1 200 OK"
+2026-04-24 06:06:44 INFO       extractor kept 1 url(s): 1 job kept, 0 dropped, all links were valid job postings.
+2026-04-24 06:06:44 INFO     HTTP Request: GET https://api.careercaddy.online/api/v1/job-posts/?filter%5Blink%5D=https%3A%2F%2Fjobot.com%2Fdetails%2Fdevops-engineer%2Ffdcc79bd01 "HTTP/1.1 200 OK"
+*** the website says I applied for this job 5 months ago
+You applied to this job on Nov 28, 2025 (5 months ago)
 ** TODO viewing a scrape from jp.show.scrapes.index should go to jp.show.scrapes.show
 ** WAIT need to ensure poller to save session
 ** TODO Structured =accepting_applications= field on JobPost
@@ -341,8 +378,18 @@ Remaining:
   - =PersistScrape= now writes a poller-equivalent delivery note.
   Soak as it runs; fix bugs as they appear. Once steady, prune
   =_process_scrape_legacy= and the =off= mode.
-- [ ] =ResolveApplyUrl= Phase 2 — seam is in place in
-  =nodes_extract.ResolveApplyUrl= as a no-op; Phase 2 fills it in.
+- [X] =ResolveApplyUrl= Phase 2 — [2026-04-25] real resolver landed.
+  =ai/lib/scrape_graph/apply_resolver.py= reads profile-driven
+  =apply_resolver_config= (internal markers → link selectors → button
+  click), PATCHes new =/api/v1/scrapes/:id/apply-url/= endpoint which
+  writes through to =JobPost.apply_url{,_status,_resolved_at}=. New
+  =ScrapeProfile.apply_resolver_config= JSONField (migration 0056).
+  Frontend =<ApplyDestination>= chip on =/job-posts/:id= (resolved →
+  emerald "Apply →" external link; internal/stale/failed → status
+  chips). Plan: =notes.org::*Apply-destination resolution (final URL
+  behind the apply button)=. No per-host configs seeded yet — hosts
+  remain =unknown= until profile owners populate the field; same
+  no-op-until-configured shape as =url_rewrites=.
 - [ ] Shadow cleanup — once primary is stable, remove
   =GraphMode.SHADOW= branches from =PersistJobPost=/=UpdateProfile=
   and delete =_process_scrape_legacy= in the poller.
@@ -587,6 +634,102 @@ career_caddy_automation/:
 
 Intentionally deferred per user: rollback of JobPost 1201 and the
 two poisoned =ScrapeProfile.update-from-outcome= promotions.
+
+** DONE [#A] Job-post dedupe — canonical link + content fingerprint [api+frontend]
+CLOSED: [2026-04-24]
+Trigger: =/job-posts/1184= (applied) and =/job-posts/1206= (scraping)
+were the same ziprecruiter posting minted twice because the
+=/ekm/<token>= URL differs per recruiter send and =link=-equality
+dedupe missed it. User asked for automatic detection with a soft
+label so a multi-tenant environment stays coherent.
+
+api/ (PR #52):
+- =job_hunting/models/job_post.py=: new =canonical_link= (indexed),
+  =content_fingerprint=, =duplicate_of= self-FK (=SET_NULL=).
+  Auto-populated in =save()=.
+- =job_hunting/models/job_post_dedupe.py= (new):
+  - =canonicalize_link()= strips known tracking query params
+    (=utm_*=, =gh_src=, =trk=, etc.); opaque tokens left alone.
+  - =fingerprint()= = =sha1(company_id | title | location)= with
+    =usedforsecurity=False= (per fix PR #53). Description is NOT
+    hashed — recruiter wording tweaks shouldn't break the match.
+  - =find_duplicate()= checks =canonical_link= first, then
+    fingerprint within a 30-day window. Null-fingerprint rows
+    skip dedupe.
+- =job_hunting/api/views/jobs.py= + =from_json= call
+  =find_duplicate= BEFORE insert; on hit returns the existing
+  canonical post (200), never mints a dupe.
+- =job_hunting/api/serializers.py=: exposes =duplicate_of_id=.
+- Migration =0055_jobpost_dedupe_fields.py= with composite
+  =(fingerprint, -created_at)= index + backfill of existing rows.
+- Kept fully separate from the =apply_url*= resolver fields —
+  dedupe reads =link= only, resolver reads/writes =apply_url=
+  only, no shared helpers, no cross-field lookups.
+- 14 new tests in =test_job_post_dedupe.py= pass; 10 existing
+  JobPost tests pass.
+
+frontend/ (PR #69):
+- =app/models/job-post.ts=: =duplicateOfId= attr.
+- =templates/job-posts/show.hbs=: amber "Duplicate of #N" chip
+  below the meta line, =LinkTo= to the canonical post.
+- =components/job-posts/list.hbs=: same chip inline next to the
+  title in the table view.
+- Chip is tenant-neutral (the relationship between two posts is
+  global); per-user "you applied to this" overlays still key off
+  =Score= / =JobApplication= records.
+
+Known limitations (left intentionally per user):
+- Different =Company= rows (e.g. "Disney" vs "Disney Software
+  Division") produce different fingerprints — those dupes survive.
+  Acceptable soft/ambiguous case; no auto-resolution.
+- Description tweaks (single-word changes) don't break the hash
+  since description isn't in the fingerprint.
+
+Follow-up ship PR #53 (api) / #71 (frontend) / #39 (parent) fixed
+bandit =B324= (sha1 usedforsecurity flag) and
+=ember-template-lint= =no-unused-block-params= that broke the
+first Deploy attempt.
+
+** DONE [#A] Loading-skeleton substates for all parent paths [frontend]
+CLOSED: [2026-04-24]
+Trigger: user reported =/job-posts= (and other sidebar nav targets)
+felt unresponsive on prod — clicking the link hung on the previous
+page while the =model= hook resolved. Prod is compute-constrained,
+so a client-side perceived-latency fix was the right lever.
+
+Pattern: Ember renders a =<route>-loading.hbs= substate
+automatically when the model hook promise is pending. No route JS
+changes needed.
+
+frontend/ (PR #70 then PR #72):
+- =components/loading-skeleton.hbs= — shared 8-card animated-pulse
+  skeleton. =Tailwind= only, HyperUI-style. Renders via
+  ={{#each (array 1 2 ... 8)}}= (no unused block param, per lint
+  tally #14).
+- 13 per-route loading templates, each 6 lines
+  (=<RouteLayout><:main><LoadingSkeleton /></:main></RouteLayout>=):
+  - =templates/job-posts/index-loading.hbs= (first to ship, PR #70)
+  - =templates/job-applications/index-loading.hbs=
+  - =templates/companies/index-loading.hbs=
+  - =templates/cover-letters/index-loading.hbs=
+  - =templates/resumes/index-loading.hbs=
+  - =templates/scores/index-loading.hbs=
+  - =templates/scrapes/index-loading.hbs=
+  - =templates/questions/index-loading.hbs=
+  - =templates/answers/index-loading.hbs=
+  - =templates/career-data/index-loading.hbs=
+  - =templates/favorites-loading.hbs= (leaf top-level)
+  - =templates/caddy-loading.hbs= (leaf top-level)
+  - =templates/reports/activity/loading.hbs= (matches existing
+    =reports/application-flow/= and =reports/sources/= convention)
+
+Skipped for now: =admin.*= and =settings.*= — multi-tab containers
+that deserve their own loading shape rather than the generic
+8-card skeleton.
+
+User-reported outcome on prod after #40 Deploy landed: "love the
+skeleton fix."
+
 * Bugs 🐛
 ** TODO [#A] Chat: detect duplicate JobPost by link, offer navigate instead of re-create [ai] :bug:
 [2026-04-22] When paste/scrape/chat ingest carries a URL that already matches
