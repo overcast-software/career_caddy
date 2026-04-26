@@ -234,33 +234,14 @@ Queue sequential display instead of stacking. First flash finishes its time, sli
 ** TODO Audit redundant parent columns in child route list components [frontend]
 * Inbox
 ** TODO clicking around.  if I go to jp.index i get the skeleton, if i then go to answers.index i get a skeleton.  in either case the page loads and it's good.  the weirdness if I go back to jp.index I don't see the loaded jps I get another skeleton. 
-** TODO vetted bad reason picker — branched but never shipped :bug:
-[2026-04-25 audit] This entry was previously marked =DONE [2026-04-24]= but the work is NOT in prod. Verified [2026-04-26]:
-- api/main: =JobApplicationStatus= has no =reason_code= field; migrations end at 0056 (apply_resolver_config) — no reason_code migration in 0050-0056.
-- frontend/main: =triage-actions.hbs= renders plain Vetted Good/Bad buttons; no =<PowerSelectWithCreate>=, no reason picker.
-- Last merged triage PRs are api #16 / frontend #17 (2026-04-19) — basic Vetted Good/Bad only.
+** DONE vetted bad reason picker — merged, awaiting prod verify :bug:
+CLOSED: [2026-04-26]
+[2026-04-26] Rebased the long-stale =feature/vetted-bad-reason= branches off current main and shipped:
+- api PR #55 (merged =fdac09a=): =JobApplicationStatus.reason_code= + =vetting_reasons.py= + migration =0057_job_application_status_reason_code=. Tests +15.
+- api PR #56 (merged =4386477=) — hotfix: 0057's dependency was incorrectly =0055_jobpost_dedupe_fields= (would two-leaf the migration graph and break =manage.py migrate= against prod's existing 0056). One-line fix to depend on =0056_scrapeprofile_apply_resolver_config=. Local CI passed because Dagger spins fresh DBs each run.
+- frontend PR #74 (merged =09b8d9b=): =<PowerSelectWithCreate>= reason picker on =<TriageActions>=, =@attr triage= reads from =meta.triage=, =Vetted Bad — Other= chip with truncate+hover.
 
-The shipped triage is only: filter[exclude_vetted_bad] on JobPost list (api bb9f78b), sankey vetted_bad terminal hub (api PR #35), Vetted Good/Bad cache fix (api PR #20). Multi-tenancy is fine. The reason_code enhancement was scoped + branched but never opened as a PR.
-
-Unmerged WIP lives on:
-- =api: feature/vetted-bad-reason= (6222ef1) — adds =JobApplicationStatus.reason_code= + =vetting_reasons.py= + 0056 migration that NOW collides with apply_resolver_config (rebase needed).
-- =frontend: feature/vetted-bad-reason= (7b06f85) — adds =<PowerSelectWithCreate>= triage-actions, =vetting-reasons.js= util, =@attr triage= on job-post.
-
-Original design notes (still valid):
-- api: =JobApplicationStatus.reason_code= (choices enum + =other=) + note pairing.
-  Migration NN (rebase off the 0056 collision). =triage= endpoint accepts =reason_code=;
-  =other= requires a note. Per-caller triage moved off of
-  =attributes.active_application_status= onto =meta.triage= ({ status, reason_code, note }).
-  No more =attrs.pop()= guards on PATCH — meta can't be round-tripped as resource state.
-  Going forward, other per-user computed fields should move to meta too.
-- frontend: =@attr triage= on job-post (single object, heavily documented as
-  coming from response meta, not a DB column). =triage-actions= uses
-  =PowerSelectWithCreate= — fixed enum options (Compensation / Location /
-  Seniority / Tech stack / Dislike company) and "type anything" creates
-  =Other: "<text>"= with the text stashed as the JAS note. Chip shows =Vetted
-  Bad — Other: "...truncated..."= with full text on hover; =max-w-xs truncate=
-  keeps it contained.
-- tests: ~15 new (triage variants + multi-tenant scoping regression).
+DONE = merged on submodule main. Promote to =SHIPPED= once parent Deploy clears + manual smoke on the live Vetted Bad picker.
 ** TODO what happend to this job post.  I'm very qualified and I can't find it in prod
 2026-04-24 05:08:16 INFO     Run complete: 3 email(s), 3 ok, 0 failed, 5 job-post(s) created
   [ok  ] New Staff Engineer - RoR - Remote opportunity  →  0 new, 0 dup / 0 kept
