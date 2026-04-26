@@ -439,35 +439,48 @@ unreliable." Threshold mirrors =STUB_MIN_WORDS= in
 =application_flow.py=. Non-blocking if we later want a richer popover.
 *** TODO review stubs
 
-** LOOP Audit jinja word template against resume export context
-[2026-04-20 api] Audit written to notes.org :: "Resume Word-export
-jinja audit [2026-04-20]". TL;DR: five gaps — =HEADER.EMAIL= referenced
-but not in context; Experience.title and Project.title/dates never
-rendered; two template-styling notes ("RP Summary" / "RP Bulleted
-List"); one dormant string mismatch in =Resume.tool_skills= (dead
-code, no callers). Three follow-up TODOs queued below.
-[[file:notes.org::*Resume Word-export jinja audit][Full audit]]
+** DONE [#A] Add title + date_range to docx template Experience/Project blocks [api]
+CLOSED: [2026-04-26]
+[2026-04-26 audit] Already resolved on main. The live export path
+(=GET /api/v1/resumes/:id/export/=) uses
+=lib/services/resume_docx_render.render_docx=, NOT the jinja template
+the TODO described. The renderer reads =exp["header_line"]= /
+=proj["header_line"]= from =resume_export_context.build_context=,
+which already includes =e.title= (=resume_export_context.py:97=) and
+=p.title= (=resume_export_context.py:178=). Test assertions:
+=test_resume_docx_render.py:78= ("Widget Lead") and =:82= ("Widget
+CLI"). Codepath shipped before today's audit.
 
-** TODO [#A] Add title + date_range to docx template Experience/Project blocks [api]
-[2026-04-20] =Experience.to_export_dict()= already emits =title= and
-=date_range= but the current =api/templates/resume_export.docx= drops
-them — every experience shows company + location with no job title.
-Same on Projects: =Project.to_export_dict()= emits =title= but the
-template only iterates =proj.description= bullets, so each project is
-a nameless bullet list. Manual Word-template edit: add
-={{ experience.title }}= and ={{ proj.title }}= placeholders (with the
-correct paragraph styles — "RP Summary" for experience summary,
-"RP Bulleted List" for project bullets, as flagged by jinja comments).
+** TODO Retire dead jinja resume-export path [api]
+[2026-04-26] Cleanup follow-up after [#A] audit. Three orphaned
+artifacts of the deprecated docxtpl-based export, all reachable only
+via =ResumeExportService= (which has no callers):
+- =api/templates/resume_export.docx= (the jinja-template binary)
+- =api/templates/update_resume_export.jinja2= (regen script for the
+  binary above)
+- =api/job_hunting/lib/services/resume_export_service.py= (class with
+  no callers; superseded by =resume_docx_render=)
+- =RESUME_EXPORT_TEMPLATE= settings constant (=settings.py:388= +
+  =resume_export_context.py:234=)
+- =Resume.tool_skills= / =language_skills= / =database_skills= /
+  =framework_skills= / =security_skills= properties on
+  =models/resume.py= (no callers; the original audit flagged a
+  =Tool/Platform= vs =Tools/Platform= string mismatch but since
+  nothing reads them, deletion beats the fix).
 
-** LOOP Retire unused Resume.tool_skills / *_skills properties [api]
-I don't know what this is about
-[2026-04-20] =Resume.tool_skills= calls =skills_by_type("Tools/Platform")=
-(plural) but canonical enum is =Tool/Platform= (singular). No callers
-in the repo (docx export uses =to_export_value= + a separate
-=key_mapping=, which works). Either delete
-=tool_skills=/=language_skills=/=database_skills=/=framework_skills=/=security_skills=
-properties on =models/resume.py= or fix the string — prefer deletion
-unless a caller appears.
+Subsumes the previous LOOP entries:
+- =LOOP Audit jinja word template against resume export context= —
+  audit done; the gaps it surfaced were addressed by the move to
+  programmatic rendering.
+- =LOOP Retire unused Resume.tool_skills / *_skills properties= —
+  rolled into this entry.
+
+Blast radius: 2 files deleted, 1 class deleted, 1 settings constant +
+its 2 callsites removed, 5 model properties removed. Pure dead-code
+removal; no test changes expected beyond removing tests that exist
+solely for the dead surface. One PR, one concern.
+
+[[file:notes.org::*Resume Word-export jinja audit][Original audit]]
 
 ** TODO [#B] Canonicalize tracker URLs on scrape ingest [api]
 [2026-04-18] Same root cause as the automation-side dedup bug: marketing
