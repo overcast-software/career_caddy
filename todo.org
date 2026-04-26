@@ -34,6 +34,46 @@ Rules:
 
 
 
+* Status snapshot
+:PROPERTIES:
+:CREATED:  [2026-04-26]
+:END:
+Quick navigation across this file. Counts are a snapshot — re-run with
+=grep -cE "^\*\*+ STATE " todo.org= when stale.
+
+** State counts [2026-04-26]
+| State            |  # | Notes |
+|------------------+----+-------|
+| SHIPPED          |  8 | =DONE= → =SHIPPED= once verified in prod. =SPC m t S= |
+| STRT             |  1 | =[#A]= apply-destination per-host configs (=L317= below) |
+| TODO             | 23 | by-priority breakdown below |
+| LOOP             |  5 | research-needed before starting |
+| PROJ             |  2 | =/plan= mode before code |
+| WAIT             |  3 | external blocker |
+| PENDING_APPROVAL |  5 | do NOT touch (see HOW TO USE rule) |
+
+** Priority queue
+- =[#A]= open: see [[*TODO [#A] if I change job-post company, all the questions, answers, etc. should change too.][cascade company changes]] · [[*LOOP [#A] Scrape-graph pydantic-graph refactor [api+ai+frontend]][scrape-graph shadow cleanup]]
+- =[#A]= in flight: [[*STRT [#A] Surface apply destination per host (seed ScrapeProfile.apply_resolver_config) :bug:][per-host apply-resolver configs]]
+- =[#B]= open: [[*TODO [#B] cover-letter spinner looks way cooler.  put it everywhere][cover-letter spinner everywhere]] · [[*TODO [#B] Canonicalize tracker URLs on scrape ingest [api]][canonicalize tracker URLs]]
+
+** Section index
+- [[*Features — APPROVED (ready to work)][Features — APPROVED]] — 7 ready, all reviewed
+- [[*PROJ Feature sorting tables][PROJ Feature sorting tables]] — single sort/filter project
+- [[*Features — PENDING APPROVAL][Features — PENDING APPROVAL]] — 5 awaiting decision
+- [[*Features — Open TODOs][Features — Open TODOs]] — small backlog (audit redundant cols, flash transitions)
+- [[*Inbox][Inbox]] — recent capture, mix of bugs + feature ideas + SHIPPED retros
+- [[*Bugs 🐛][Bugs 🐛]] — bug-specific landing zone
+
+** Conventions
+- =DONE= = merged on submodule =main= (verified locally).
+- =SHIPPED= = parent =Deploy= clears + smoke-tested in prod. Promote
+  via =SPC m t S= after verifying.
+- "ship X" in chat → promote =DONE= entry. "what needs to be
+  shipped?" → list current =DONE= entries awaiting promotion.
+- See =notes.org::*SHIPPED vs DONE — todo lifecycle= for full
+  rules.
+
 * Features — APPROVED (ready to work)
 ** TODO Deep-link navigate targets into resume edit form (anchors)  :APPROVED:
 [2026-04-18 ai+frontend] Follow-on from the "no editing linked
@@ -314,7 +354,39 @@ It's going to be a good metric.
 not enough info
 ** TODO [#A] if I change job-post company, all the questions, answers, etc. should change too.
 ** TODO [#B] cover-letter spinner looks way cooler.  put it everywhere
-** LOOP linkedin and others have their link to job post in email, but I want to leverage that scrape has a scape relation to surface that other link.   it's part of frontend, automation, backend.  Have browser click the link for apply and document the final location.  easy apply wont work.  some sites in addition to linked in will work.  ScrapeProfile should have these directions.  front end job-post.show should show the final application destination and somehow this should be surfaced in reports.
+** STRT [#A] Surface apply destination per host (seed ScrapeProfile.apply_resolver_config) :bug:
+:PROPERTIES:
+:STARTED:  [2026-04-26]
+:END:
+Foundation shipped today via apply-resolver Phase 2 (parent PR #41 +
+parent #48 tool-layer enforcement). What's actionable now:
+
+- [ ] Seed =ScrapeProfile.apply_resolver_config= for the hosts we
+  see most: =linkedin.com=, =greenhouse.io=, =lever.co=,
+  =boards.greenhouse.io=, =jobs.lever.co=, =jobot.com=,
+  =indeed.com=, =ziprecruiter.com=. For each, identify:
+  - =internal_apply_markers= (e.g. linkedin's
+    =.jobs-apply-button--easy-apply= → status=internal, no nav).
+  - =apply_link_selectors= (preferred — read =href= directly).
+  - =apply_button_selectors= (last resort — click + capture
+    landing URL).
+- [ ] Verify on a real scrape per host: queue, let the poller
+  pick up, confirm =JobPost.apply_url{,_status,_resolved_at}=
+  populates and =<ApplyDestination>= chip renders correctly on
+  =/job-posts/:id=.
+- [ ] Reports rollup: add an "applies-by-hostname" cut to the
+  sources sankey distinct from the entry-URL hostname (the
+  posting may live on a tracker but resolve to a real ATS).
+
+Out of scope (deferred to follow-ups in =:LOGBOOK:= when surfaced):
+- Stale-link health checker (cron 4xx-pings resolved =apply_url=
+  and demotes to =stale=).
+- ScrapeProfile UI editor in =/admin= so non-staff can extend
+  per-host configs.
+- Phase 3 learning loop: when the resolver fails on a host, batch
+  candidate selectors for offline review and promote into the
+  profile.
+
 [[file:notes.org::*Apply-destination resolution (final URL behind the apply button)][Plan → notes.org]]
 
 ** LOOP [#A] Scrape-graph pydantic-graph refactor [api+ai+frontend]
