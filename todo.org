@@ -234,14 +234,18 @@ Queue sequential display instead of stacking. First flash finishes its time, sli
 ** TODO Audit redundant parent columns in child route list components [frontend]
 * Inbox
 ** TODO clicking around.  if I go to jp.index i get the skeleton, if i then go to answers.index i get a skeleton.  in either case the page loads and it's good.  the weirdness if I go back to jp.index I don't see the loaded jps I get another skeleton. 
-** DONE vetted bad reason picker — merged, awaiting prod verify :bug:
+** SHIPPED vetted bad reason picker :bug:
 CLOSED: [2026-04-26]
+:LOGBOOK:
+- State "SHIPPED"    from "DONE"       [2026-04-26]
+:END:
 [2026-04-26] Rebased the long-stale =feature/vetted-bad-reason= branches off current main and shipped:
 - api PR #55 (merged =fdac09a=): =JobApplicationStatus.reason_code= + =vetting_reasons.py= + migration =0057_job_application_status_reason_code=. Tests +15.
 - api PR #56 (merged =4386477=) — hotfix: 0057's dependency was incorrectly =0055_jobpost_dedupe_fields= (would two-leaf the migration graph and break =manage.py migrate= against prod's existing 0056). One-line fix to depend on =0056_scrapeprofile_apply_resolver_config=. Local CI passed because Dagger spins fresh DBs each run.
 - frontend PR #74 (merged =09b8d9b=): =<PowerSelectWithCreate>= reason picker on =<TriageActions>=, =@attr triage= reads from =meta.triage=, =Vetted Bad — Other= chip with truncate+hover.
+- parent PR #43 (merged =a3d8be7=) → Deploy.
 
-DONE = merged on submodule main. Promote to =SHIPPED= once parent Deploy clears + manual smoke on the live Vetted Bad picker.
+Follow-up: frontend PR #75 (merged =67e58a0=) consolidated =job-post.{js,ts}= → =.js=, fixing a latent bug where apply-resolver attrs were orphaned on a never-loadable =.ts= file. Parent bump PR #44 (merged =8013da6=). The =SPC m t S= → SHIPPED keybinding earned its keep on this very entry.
 ** TODO what happend to this job post.  I'm very qualified and I can't find it in prod
 2026-04-24 05:08:16 INFO     Run complete: 3 email(s), 3 ok, 0 failed, 5 job-post(s) created
   [ok  ] New Staff Engineer - RoR - Remote opportunity  →  0 new, 0 dup / 0 kept
@@ -367,11 +371,13 @@ Remaining:
   - =PersistScrape= now writes a poller-equivalent delivery note.
   Soak as it runs; fix bugs as they appear. Once steady, prune
   =_process_scrape_legacy= and the =off= mode.
-- [X] =ResolveApplyUrl= Phase 2 — [2026-04-25] real resolver landed.
-  =ai/lib/scrape_graph/apply_resolver.py= reads profile-driven
-  =apply_resolver_config= (internal markers → link selectors → button
-  click), PATCHes new =/api/v1/scrapes/:id/apply-url/= endpoint which
-  writes through to =JobPost.apply_url{,_status,_resolved_at}=. New
+- [X] =ResolveApplyUrl= Phase 2 [SHIPPED 2026-04-26] — real resolver
+  landed [2026-04-25]; consolidated job-post model [2026-04-26] so the
+  attrs are actually live. =ai/lib/scrape_graph/apply_resolver.py=
+  reads profile-driven =apply_resolver_config= (internal markers →
+  link selectors → button click), PATCHes new
+  =/api/v1/scrapes/:id/apply-url/= endpoint which writes through to
+  =JobPost.apply_url{,_status,_resolved_at}=. New
   =ScrapeProfile.apply_resolver_config= JSONField (migration 0056).
   Frontend =<ApplyDestination>= chip on =/job-posts/:id= (resolved →
   emerald "Apply →" external link; internal/stale/failed → status
