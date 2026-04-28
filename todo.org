@@ -2,6 +2,8 @@
 #+contact: Contact name
 :PROPERTIES:
 :CREATED:  2026-04-07
+
+ #+TODO: TODO(t) STRT(s) PROJ(p) LOOP(l)  READY(r) WAIT(w) HOLD(h) IDEA(i) PENDING_APPROVAL(P) | DONE(d) SHIPPED(S) KILL(k)
 :END:
 
 * HOW TO USE THIS FILE (agents: read this first) :IMPORTANT:
@@ -53,7 +55,7 @@ Quick navigation across this file. Counts are a snapshot — re-run with
 | PENDING_APPROVAL |  5 | do NOT touch (see HOW TO USE rule) |
 
 ** Priority queue
-- =[#A]= open: see [[*TODO [#A] if I change job-post company, all the questions, answers, etc. should change too.][cascade company changes]] · [[*LOOP [#A] Scrape-graph pydantic-graph refactor [api+ai+frontend]][scrape-graph shadow cleanup]]
+- Recently SHIPPED [2026-04-28]: cascade company changes · synchronous browser-MCP scrape deprecation · scrape-graph shadow+OFF collapse · scrape-graph dagre layout (LR + native scroll) · scrape diag MCP tools (graph_trace, scrape_statuses) · linkedin rememberme_candidates seeded · 409 dedupe contract (skip when job-post relationship sent) · =JobPost.posting_status= (open/closed) + list-default hides closed · bounded scrape-graph wait (Navigate domcontentloaded + 240s poller cap)
 - =[#A]= in flight: [[*STRT [#A] Surface apply destination per host (seed ScrapeProfile.apply_resolver_config) :bug:][per-host apply-resolver configs]]
 - =[#B]= open: [[*TODO [#B] cover-letter spinner looks way cooler.  put it everywhere][cover-letter spinner everywhere]] · [[*TODO [#B] Canonicalize tracker URLs on scrape ingest [api]][canonicalize tracker URLs]]
 
@@ -117,7 +119,7 @@ Value:
   we may have cleared this bar in another commit
 :END:
 
-[2026-04-18 ai] Hit during AW e2e: user asked AW what to do next and
+[2026-04-18 ai] Hit during AW (agent wizard) e2e: user asked AW what to do next and
 the agent said "upload or create a Resume... go to your Career Data
 page to start building your profile." Career Data is NOT a
 fill-in-the-form resource — it's a READ-ONLY aggregated view
@@ -140,7 +142,19 @@ Career Data this session. Still TODO:
   the current one so Career Data picks it up; then add a job post")
   and embed it as an App Guide section the agent can quote.
 
-** TODO Deprecate synchronous browser-MCP scrape; poller is the one true path :APPROVED:
+** SHIPPED Deprecate synchronous browser-MCP scrape; poller is the one true path :APPROVED:
+- State "SHIPPED"    from "TODO"       [2026-04-28]
+Shipped 2026-04-28 across api PR #65 + frontend PR #80 + ai PR #22
+(parent =3ca5003=, Deploy 25076723433 green). api removed Scraper +
+a2a_client + mcp_client + BROWSER_SERVICE_URL (~660 LOC); =POST
+/scrapes/= now defaults all creates to =status='hold'= and =redo=
+flips to hold instead of dispatching. Frontend two stragglers
+(=actions.js= jp toolbar, =controllers/job-posts/show/scrapes.js=
+jp.show.scrapes new-scrape) flipped to explicit =status: 'hold'=
+with 409 dedupe handling. ai/CLAUDE.md marks the synchronous path as
+removed; =browser_server.py='s =scrape_page= MCP tool stays for
+ad-hoc / exploratory use only.
+
 [2026-04-18 api+ai] Surfaced during AW e2e. When the user asked the
 chat agent to "scrape this LinkedIn URL", the API tried a direct
 =POST http://localhost:3012/scrape_job= and failed with
@@ -206,7 +220,7 @@ Tasks:
 - [ ] Regression test: after a "take me to X" turn, assert a
   navigate marker is present in the sub-agent's response.
 
-** LOOP revamp scrapes/edit page :APPROVED:
+** TODO revamp scrapes/edit page :APPROVED:
 [[file:notes.org::*Revamp scrapes/edit page][Considerations → notes.org]]
 Use more recent conventions.
 *** nuclear delete is and the other buttons in that dialogue box are in the wrong spot.  should be above paste.
@@ -273,7 +287,11 @@ feeds the eventual plugin PR.
 Queue sequential display instead of stacking. First flash finishes its time, slides left, next slides in.
 ** TODO Audit redundant parent columns in child route list components [frontend]
 * Inbox
-** TODO clicking around.  if I go to jp.index i get the skeleton, if i then go to answers.index i get a skeleton.  in either case the page loads and it's good.  the weirdness if I go back to jp.index I don't see the loaded jps I get another skeleton. 
+** TODO career caddy sidebar on small screen where it's full height is way better than partial height.
+** TODO when on a smaller screen the animation for chat looks like it's coming from the bottom
+I enjoy this but, CSS make the subnav bar contents slide over.  It's also incredibly tall and it covers all the content.
+
+** TODO clicking around.  if I go to jp.index i get the skeleton, if i then go to answers.index i get a skeleton.  in either case the page loads and it's good.  the weirdness if I go back to jp.index I don't see the loaded jps I get another skeleton.
 ** SHIPPED vetted bad reason picker :bug:
 CLOSED: [2026-04-26]
 :LOGBOOK:
@@ -303,9 +321,38 @@ Follow-up: frontend PR #75 (merged =67e58a0=) consolidated =job-post.{js,ts}= �
 2026-04-24 06:06:44 INFO     HTTP Request: GET https://api.careercaddy.online/api/v1/job-posts/?filter%5Blink%5D=https%3A%2F%2Fjobot.com%2Fdetails%2Fdevops-engineer%2Ffdcc79bd01 "HTTP/1.1 200 OK"
 *** the website says I applied for this job 5 months ago
 You applied to this job on Nov 28, 2025 (5 months ago)
+** TODO Reorder scrape-graph: run obstacle handling before ResolveFinalUrl :scrape-graph:
+[2026-04-28] Today's bounded-wait fix (Navigate → =domcontentloaded=,
+240s poller cap) keeps a stuck scrape from wedging the queue, but it
+doesn't *recover* the run. Scrape 189 (=linkedin.com/comm/jobs/...=)
+landed on the LinkedIn account-chooser interstitial; obstacle
+handling could have clicked "Login as Doug" and proceeded, but it
+sits *downstream* of =ResolveFinalUrl=, so an interstitial that
+holds the page open never reaches the handler.
+
+Proposal: insert =DetectObstacle= → =Obstacle*= immediately after
+=Navigate= (or interleave: Navigate → DetectObstacle → if-resolved →
+ResolveFinalUrl). Tradeoff is shape change to the canonical graph
+(node order, mermaid/dagre snapshots, edge aggregates) — non-trivial
+but recovers more scrapes than today's timeout-then-fail approach.
+
+See =notes.org::*Scrape-graph: obstacles before ResolveFinalUrl=
+for the full sketch + alternatives considered.
 ** TODO viewing a scrape from jp.show.scrapes.index should go to jp.show.scrapes.show
 ** WAIT need to ensure poller to save session
-** TODO Structured =accepting_applications= field on JobPost
+** SHIPPED Structured =accepting_applications= field on JobPost
+- State "SHIPPED"    from "TODO"       [2026-04-28]
+Shipped 2026-04-28 as =JobPost.posting_status= (open / closed / null).
+Renamed from initial =application_status= via api PR #67 + frontend
+PR #83 to avoid collision with =JobApplication.status= (the user's
+per-application state). =text_signals.detect_posting_status= +
+sticky-once-closed in =JobPostExtractor.persist=. List view hides
+closed by default with =?include_closed=true= opt-in.
+Follow-ups (separate TODOs):
+- disable Score / Cover Letter / Tailor buttons on =job-posts.show=
+  when =posting_status == "closed"=
+- Sankey "Closed" terminal node
+- poller log line on open → closed transition
 [2026-04-23] Companion to the linkedin =extraction_hints= update that
 makes the LLM lead closed-post descriptions with =[CLOSED — applications
 no longer accepted]=. The hint solves *visibility* (user sees it on the
@@ -352,7 +399,18 @@ It's going to be a good metric.
 
 ** [?] I'm not seeing sources coming through.
 not enough info
-** TODO [#A] if I change job-post company, all the questions, answers, etc. should change too.
+** SHIPPED [#A] if I change job-post company, all the questions, answers, etc. should change too.
+- State "SHIPPED"    from "TODO"       [2026-04-28]
+Shipped 2026-04-28 in api PR #60 (parent =26e424e=, Deploy
+25011155104 green). =PATCH /job-posts/:id/= that changes the
+=company_id= cascades the FK to all four child tables that carry
+their own =company_id=: =Question=, =Scrape=, =CoverLetter=,
+=JobApplication=. Bulk =.update()= so it's one SQL statement per
+child, no signals/save. Cascade fires only when =company_id=
+actually changes (guards against UPDATE storm on every edit).
+Children's textual content is intentionally NOT rewritten — Q&A,
+cover letters, applications are write-once-and-forget in practice.
+
 ** TODO [#B] cover-letter spinner looks way cooler.  put it everywhere
 ** STRT [#A] Surface apply destination per host (seed ScrapeProfile.apply_resolver_config) :bug:
 :PROPERTIES:
@@ -457,9 +515,15 @@ Remaining:
   behind the apply button)=. No per-host configs seeded yet — hosts
   remain =unknown= until profile owners populate the field; same
   no-op-until-configured shape as =url_rewrites=.
-- [ ] Shadow cleanup — once primary is stable, remove
-  =GraphMode.SHADOW= branches from =PersistJobPost=/=UpdateProfile=
-  and delete =_process_scrape_legacy= in the poller.
+- [X] *Shadow cleanup* [SHIPPED 2026-04-27] — full collapse, not
+  just SHADOW. =GraphMode= enum + =get_mode= + =SCRAPE_GRAPH_MODE=
+  env all gone; SHADOW branches in =PersistJobPost= /
+  =UpdateProfile= / =_patch_scrape_status= deleted; legacy
+  =_process_scrape_legacy= + =_update_profile_from_results= +
+  =_apply_probation_gate= + probation thresholds removed from the
+  poller; graph runs unconditionally for every scrape. ai PR #18 +
+  api PR #61 (graph_static.json regen) + parent =bfa4139=, Deploy
+  25011646387 green. Net −290 lines in ai.
 
 Side work landed on the same branch:
 - Attended poller saves sessions on Ctrl-C (=ResidentBrowser.save_sessions=
