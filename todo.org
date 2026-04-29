@@ -56,7 +56,7 @@ Quick navigation across this file. Counts are a snapshot — re-run with
 
 ** Priority queue
 - Recently SHIPPED [2026-04-28..29]: cascade company changes · synchronous browser-MCP scrape deprecation · scrape-graph shadow+OFF collapse · scrape-graph dagre layout (LR + native scroll) · scrape diag MCP tools (graph_trace, scrape_statuses) · linkedin rememberme_candidates seeded · 409 dedupe contract (skip when job-post relationship sent) · =JobPost.posting_status= (open/closed) + list-default hides closed · bounded scrape-graph wait (Navigate domcontentloaded + 240s poller cap) · MCP slim-response refactor (YAML, no envelope, =TOOL_SHAPES= audit, every tool slimmed) · apply_resolver_config seeded for top 8 hosts · scrape-graph reorder (Navigate → DetectObstacle → ResolveFinalUrl)
-- =[#A]= in flight: [[*STRT [#A] Surface apply destination per host (seed ScrapeProfile.apply_resolver_config) :bug:][per-host apply-resolver configs]]
+- =[#A]= in flight: (none — apply-resolver seed shipped [2026-04-29]; obstacle reorder shipped [2026-04-29])
 - =[#B]= open: [[*TODO [#B] cover-letter spinner looks way cooler.  put it everywhere][cover-letter spinner everywhere]] · [[*TODO [#B] Canonicalize tracker URLs on scrape ingest [api]][canonicalize tracker URLs]]
 
 ** Section index
@@ -491,38 +491,44 @@ Children's textual content is intentionally NOT rewritten — Q&A,
 cover letters, applications are write-once-and-forget in practice.
 
 ** TODO [#B] cover-letter spinner looks way cooler.  put it everywhere
-** STRT [#A] Surface apply destination per host (seed ScrapeProfile.apply_resolver_config) :bug:
+** SHIPPED [#A] Surface apply destination per host (seed ScrapeProfile.apply_resolver_config) :bug:
+- State "SHIPPED"    from "STRT"       [2026-04-29]
 :PROPERTIES:
 :STARTED:  [2026-04-26]
 :END:
-Foundation shipped today via apply-resolver Phase 2 (parent PR #41 +
-parent #48 tool-layer enforcement). What's actionable now:
+Foundation: apply-resolver Phase 2 (parent #41 + #48 tool-layer
+enforcement). Seed shipped [2026-04-28] via api migration 0062 +
+parent #52: =linkedin.com=, =greenhouse.io=, =boards.greenhouse.io=,
+=lever.co=, =jobs.lever.co=, =jobot.com=, =indeed.com=,
+=ziprecruiter.com=. Conservative selector subset per host; idempotent
+— operator overrides survive. Inventory + shape locked by
+=test_seed_apply_resolver_configs=. Tweaks land via follow-up
+migrations or =/admin= edits as drift surfaces.
 
-- [X] Seed =ScrapeProfile.apply_resolver_config= for the hosts we
-  see most: =linkedin.com=, =greenhouse.io=, =lever.co=,
-  =boards.greenhouse.io=, =jobs.lever.co=, =jobot.com=,
-  =indeed.com=, =ziprecruiter.com=. Shipped via api migration 0062
-  on branch =feature/seed-apply-resolver-configs= [2026-04-28].
-  Conservative selector subset per host; idempotent — operator
-  overrides survive. Inventory + shape locked by
-  =test_seed_apply_resolver_configs=. Tweaks land via follow-up
-  migrations or =/admin= edits as drift surfaces.
-- [ ] Verify on a real scrape per host: queue, let the poller
-  pick up, confirm =JobPost.apply_url{,_status,_resolved_at}=
-  populates and =<ApplyDestination>= chip renders correctly on
-  =/job-posts/:id=.
-- [ ] Reports rollup: add an "applies-by-hostname" cut to the
-  sources sankey distinct from the entry-URL hostname (the
-  posting may live on a tracker but resolve to a real ATS).
+Follow-ups (each a separate TODO, not blockers on the seed):
+- [[*TODO Verify apply-resolver on a real scrape per seeded host][verify per host]]
+- [[*TODO Reports: applies-by-hostname cut on sources sankey][applies-by-hostname rollup]]
 
-Out of scope (deferred to follow-ups in =:LOGBOOK:= when surfaced):
-- Stale-link health checker (cron 4xx-pings resolved =apply_url=
-  and demotes to =stale=).
-- ScrapeProfile UI editor in =/admin= so non-staff can extend
-  per-host configs.
+Out of scope:
+- Stale-link health checker (cron 4xx-pings resolved =apply_url= and
+  demotes to =stale=).
+- ScrapeProfile UI editor in =/admin= so non-staff can extend per-host
+  configs.
 - Phase 3 learning loop: when the resolver fails on a host, batch
-  candidate selectors for offline review and promote into the
-  profile.
+  candidate selectors for offline review and promote into the profile.
+
+** TODO Verify apply-resolver on a real scrape per seeded host
+Queue one job URL per seeded host (linkedin, greenhouse + boards,
+lever + jobs, jobot, indeed, ziprecruiter), let the poller pick up,
+confirm =JobPost.apply_url{,_status,_resolved_at}= populates and
+the =<ApplyDestination>= chip renders correctly on
+=/job-posts/:id=. Tweak the seed when a host doesn't match.
+
+** TODO Reports: applies-by-hostname cut on sources sankey
+Add an "applies-by-hostname" cut on the sources sankey distinct
+from the entry-URL hostname — postings often live on a tracker but
+resolve through to a real ATS, and the rollup should reflect the
+*destination* host, not the entry host.
 
 [[file:notes.org::*Apply-destination resolution (final URL behind the apply button)][Plan → notes.org]]
 
