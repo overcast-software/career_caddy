@@ -48,7 +48,7 @@ Quick navigation across this file. Counts are a snapshot — re-run with
 |------------------+----+-------|
 | SHIPPED          | 18 | =DONE= → =SHIPPED= once verified in prod. =SPC m t S= |
 | STRT             |  0 | nothing actively in progress |
-| TODO             | 25 | by-priority breakdown below |
+| TODO             | 26 | by-priority breakdown below |
 | LOOP             |  3 | research-needed before starting |
 | PROJ             |  2 | =/plan= mode before code |
 | WAIT             |  1 | external blocker |
@@ -346,6 +346,42 @@ Fix (ai PR #29): switch =hold_poller.poll_once= / =_fetch_profile= and
 =score_poller._collect_candidates= / =_score_one= to =yaml.safe_load=,
 check =resp.get("error")=, and read the slim list path =data["data"]=.
 Drop the unused =json= import in hold_poller; add =yaml= to score_poller.
+** TODO [#A] Harden =make ci= so it cannot return green-but-broken [dagger]
+[2026-04-29] Tally #9/#13/#14/#19 are all the same shape: Dagger
+=call build-api= / =call build-frontend= summarize a successful build
+as a single =Container!= line and hide the per-step output. =make ci=
+exits 0 the moment every =with_exec= in the chain exits 0 — but
+=npm test= / =python manage.py test= can produce a failing TAP/Django
+report and STILL exit 0 in some configurations (e.g. xfail-marked
+runtime errors, test runner config that swallows certain failures,
+abbreviated output the agent can't grep for pass counts). Today the
+canonical local gate is "did Dagger print Container!" — that is not
+the same as "did the tests actually pass."
+
+Concrete fix: bake the assertion into the pipeline itself, not the
+caller. In =dagger/src/career_caddy_pipeline.py= the
+=build_frontend= chain currently ends with
+=.with_exec(["xvfb-run", "-a", "npm", "run", "test:ember"])=. Tee the
+output to a file inside the container and add a final
+=.with_exec(["sh", "-c", "grep -qE '^# fail 0$' /tap.log && grep -qE '^# pass [1-9]' /tap.log"])=
+that fails the build if the TAP doesn't show non-zero passes and zero
+failures. Same shape on =build_api= against Django's =Ran N tests= +
+=OK= line. After landing, =make ci= exit 0 *means* something — the
+trust gap closes at the pipeline level instead of relying on every
+agent/dev remembering to grep summarized output.
+
+Why it matters: every parent Deploy that fails after a green local
+=make ci= burns user attention AND freezes parent main per the
+"failed Deploy freezes main" rule. The cost of one missed TAP fail
+is a backlog amplifier.
+
+Acceptance:
+- Pipeline asserts both per-step. Removing the assertion (proving
+  it's load-bearing) makes a deliberately-failing test still produce
+  exit 0 from the wrapping =make ci=.
+- README / agent guidance updates to drop the "grep for # pass N
+  yourself" workaround — the tally rules can stop chasing it.
+- New tally entry retiring tally #9/#13/#14/#19 as superseded.
 ** TODO Seed linkedin =rememberme_candidates= for the account-chooser tile [api]
 [2026-04-29] Scrape 202 (=https://www.linkedin.com/uas/login?session_redirect=...=)
 landed on the LinkedIn "Welcome Back" account chooser with the
