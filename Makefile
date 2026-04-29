@@ -66,6 +66,9 @@ test-api: ## Run Django test suite (requires running db service)
 test-frontend: ## Run Ember QUnit tests
 	docker compose exec frontend npm run test:ember
 
+lint-api: ## Ruff-lint api code (PATHS=... for a subset; defaults to whole tree)
+	docker compose exec api ruff check $(if $(PATHS),$(PATHS),.)
+
 # ── CI (Dagger) ────────────────────────────────────────────────────────────
 # Requires Dagger CLI: curl -fsSL https://dl.dagger.io/dagger/install.sh | sh
 
