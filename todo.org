@@ -249,15 +249,14 @@ Queue button sets scrape to =hold= for poller pickup. Status notes on all transi
 CLOSED: [2026-04-16 Wed]
 Tested locally: queue scrape 59, poller scraped + uploaded screenshot, clicked filename in UI, image displayed.
 
-* PROJ Feature sorting tables
 
 * Features — PENDING APPROVAL
 
-** TODO tool tips — where could they be useful? :PENDING_APPROVAL:
+** PENDING_APPROVAL tool tips — where could they be useful? :PENDING_APPROVAL:
 I have not approved the list
 [[file:notes.org::*Tooltips][Considerations → notes.org]]
 
-** TODO Tackling deprecations :PENDING_APPROVAL:APPROVED:
+** READY Tackling deprecations :PENDING_APPROVAL:APPROVED:
 [[file:notes.org::*Tackling Ember deprecations][Considerations → notes.org]]
 
 ** TODO Ian Finnis letter :PENDING_APPROVAL:APPROVED:
@@ -282,16 +281,58 @@ feeds the eventual plugin PR.
 
 * Features — Open TODOs
 
-** WAIT Flash/highlight main content area on chat reload [frontend]
-** WAIT Flash message slide-wipe transition [frontend]
+** KILL Flash/highlight main content area on chat reload [frontend]
+CLOSED: [2026-04-28 Tue 18:33]
+** IDEA Flash message slide-wipe transition [frontend]
 Queue sequential display instead of stacking. First flash finishes its time, slides left, next slides in.
 ** TODO Audit redundant parent columns in child route list components [frontend]
+** PROJ Feature sorting tables
 * Inbox
-** TODO career caddy sidebar on small screen where it's full height is way better than partial height.
-** TODO when on a smaller screen the animation for chat looks like it's coming from the bottom
-I enjoy this but, CSS make the subnav bar contents slide over.  It's also incredibly tall and it covers all the content.
+** TODO fix-span-issue:019dd70d001149d665450e1682846341 :logfire:bug:
+** TODO lost connection while polling :bug:
+"Lost"
+https://careercaddy.online/scrapes/null
+** TODO scrape error :bug:
+2026-04-28 19:21:32,637 INFO httpx: HTTP Request: POST https://api.careercaddy.online/api/v1/scrapes/196/graph-transition/ "HTTP/1.1 201 Created"
+2026-04-28 19:22:02,649 WARNING lib.scrape_graph._artifacts: capture_debug_artifact: screenshot failed scrape_id=196 reason=obstacle_fail
+Traceback (most recent call last):
+  File "/home/oldbones/Network/syncthing/Projects/career_caddy/ai/lib/scrape_graph/_artifacts.py", line 80, in capture_debug_artifact
+    png_bytes = await page.screenshot(full_page=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/oldbones/Network/syncthing/Projects/career_caddy/ai/.venv/lib/python3.13/site-packages/playwright/async_api/_generated.py", line 9792, in screenshot
+    await self._impl_obj.screenshot(
+    ...<13 lines>...
+    )
+  File "/home/oldbones/Network/syncthing/Projects/career_caddy/ai/.venv/lib/python3.13/site-packages/playwright/_impl/_page.py", line 814, in screenshot
+    encoded_binary = await self._channel.send(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+        "screenshot", self._timeout_settings.timeout, params
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/oldbones/Network/syncthing/Projects/career_caddy/ai/.venv/lib/python3.13/site-packages/playwright/_impl/_connection.py", line 69, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/oldbones/Network/syncthing/Projects/career_caddy/ai/.venv/lib/python3.13/site-packages/playwright/_impl/_connection.py", line 559, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.TimeoutError: Page.screenshot: Timeout 30000ms exceeded.
+Call log:
+  - taking page screenshot
+  - waiting for fonts to load...
 
-** TODO clicking around.  if I go to jp.index i get the skeleton, if i then go to answers.index i get a skeleton.  in either case the page loads and it's good.  the weirdness if I go back to jp.index I don't see the loaded jps I get another skeleton.
+2026-04-28 19:22:02,845 INFO httpx: HTTP Request: GET https://api.careercaddy.online/api/v1/scrapes/196/ "HTTP/1.1 200 OK"
+
+** TODO https://careercaddy.online/scrapes/191 :bug:
+linkedin being dumb -investigate
+** TODO source (i.e. email for job-post.show)
+** TODO replace ↗ with {{link.hostname}} ↗
+** TODO [#A] career caddy sidebar on small screen where it's full height is way better than partial height.
+** TODO [#A] when on a smaller screen the animation for chat looks like it's coming from the bottom
+I enjoy this but, CSS make the subnav bar contents slide over.  It's also incredibly tall and it covers all the content.
+** TODO [#A] clicking around.  if I go to jp.index i get the skeleton, if i then go to answers.index i get a skeleton.  in either case the page loads and it's good.  the weirdness if I go back to jp.index I don't see the loaded jps I get another skeleton.
 ** SHIPPED vetted bad reason picker :bug:
 CLOSED: [2026-04-26]
 :LOGBOOK:
@@ -321,6 +362,23 @@ Follow-up: frontend PR #75 (merged =67e58a0=) consolidated =job-post.{js,ts}= �
 2026-04-24 06:06:44 INFO     HTTP Request: GET https://api.careercaddy.online/api/v1/job-posts/?filter%5Blink%5D=https%3A%2F%2Fjobot.com%2Fdetails%2Fdevops-engineer%2Ffdcc79bd01 "HTTP/1.1 200 OK"
 *** the website says I applied for this job 5 months ago
 You applied to this job on Nov 28, 2025 (5 months ago)
+** TODO [#A] Reorder scrape-graph: run obstacle handling before ResolveFinalUrl :scrape-graph:
+[2026-04-28] Today's bounded-wait fix (Navigate → =domcontentloaded=,
+240s poller cap) keeps a stuck scrape from wedging the queue, but it
+doesn't *recover* the run. Scrape 189 (=linkedin.com/comm/jobs/...=)
+landed on the LinkedIn account-chooser interstitial; obstacle
+handling could have clicked "Login as Doug" and proceeded, but it
+sits *downstream* of =ResolveFinalUrl=, so an interstitial that
+holds the page open never reaches the handler.
+
+Proposal: insert =DetectObstacle= → =Obstacle*= immediately after
+=Navigate= (or interleave: Navigate → DetectObstacle → if-resolved →
+ResolveFinalUrl). Tradeoff is shape change to the canonical graph
+(node order, mermaid/dagre snapshots, edge aggregates) — non-trivial
+but recovers more scrapes than today's timeout-then-fail approach.
+
+See =notes.org::*Scrape-graph: obstacles before ResolveFinalUrl=
+for the full sketch + alternatives considered.
 ** SHIPPED MCP slim-response refactor — YAML + TOOL_SHAPES audit :ai:mcp:
 - State "SHIPPED"    from "TODO"       [2026-04-29]
 Shipped 2026-04-29 across four ai PRs (#24, #25, #26, #27) and parent
@@ -357,23 +415,6 @@ Future work (NOT in scope):
   plan; if <10%, drop.
 
 Design + audit reference: =notes.org::*MCP slim-response refactor [2026-04-29]=.
-** TODO Reorder scrape-graph: run obstacle handling before ResolveFinalUrl :scrape-graph:
-[2026-04-28] Today's bounded-wait fix (Navigate → =domcontentloaded=,
-240s poller cap) keeps a stuck scrape from wedging the queue, but it
-doesn't *recover* the run. Scrape 189 (=linkedin.com/comm/jobs/...=)
-landed on the LinkedIn account-chooser interstitial; obstacle
-handling could have clicked "Login as Doug" and proceeded, but it
-sits *downstream* of =ResolveFinalUrl=, so an interstitial that
-holds the page open never reaches the handler.
-
-Proposal: insert =DetectObstacle= → =Obstacle*= immediately after
-=Navigate= (or interleave: Navigate → DetectObstacle → if-resolved →
-ResolveFinalUrl). Tradeoff is shape change to the canonical graph
-(node order, mermaid/dagre snapshots, edge aggregates) — non-trivial
-but recovers more scrapes than today's timeout-then-fail approach.
-
-See =notes.org::*Scrape-graph: obstacles before ResolveFinalUrl=
-for the full sketch + alternatives considered.
 ** TODO viewing a scrape from jp.show.scrapes.index should go to jp.show.scrapes.show
 ** WAIT need to ensure poller to save session
 ** SHIPPED Structured =accepting_applications= field on JobPost
@@ -455,15 +496,15 @@ cover letters, applications are write-once-and-forget in practice.
 Foundation shipped today via apply-resolver Phase 2 (parent PR #41 +
 parent #48 tool-layer enforcement). What's actionable now:
 
-- [ ] Seed =ScrapeProfile.apply_resolver_config= for the hosts we
+- [X] Seed =ScrapeProfile.apply_resolver_config= for the hosts we
   see most: =linkedin.com=, =greenhouse.io=, =lever.co=,
   =boards.greenhouse.io=, =jobs.lever.co=, =jobot.com=,
-  =indeed.com=, =ziprecruiter.com=. For each, identify:
-  - =internal_apply_markers= (e.g. linkedin's
-    =.jobs-apply-button--easy-apply= → status=internal, no nav).
-  - =apply_link_selectors= (preferred — read =href= directly).
-  - =apply_button_selectors= (last resort — click + capture
-    landing URL).
+  =indeed.com=, =ziprecruiter.com=. Shipped via api migration 0062
+  on branch =feature/seed-apply-resolver-configs= [2026-04-28].
+  Conservative selector subset per host; idempotent — operator
+  overrides survive. Inventory + shape locked by
+  =test_seed_apply_resolver_configs=. Tweaks land via follow-up
+  migrations or =/admin= edits as drift surfaces.
 - [ ] Verify on a real scrape per host: queue, let the poller
   pick up, confirm =JobPost.apply_url{,_status,_resolved_at}=
   populates and =<ApplyDestination>= chip renders correctly on
@@ -567,7 +608,7 @@ Side work landed on the same branch:
 - Pre-flight auth check in =hold_poller= aborts before browser launch
   if =CC_API_TOKEN= is rejected.
 
-** TODO JobApplication.tracking_url — per-user post-submit status link [api+automation]
+** TODO [#B] JobApplication.tracking_url — per-user post-submit status link [api+automation]
 [2026-04-22] Separate from the =JobPost.application_url= work (which is
 the pre-apply external destination). =tracking_url= is the URL returned
 to the user after they submit: Lever candidate portal, Greenhouse
@@ -588,7 +629,7 @@ Do NOT conflate with =JobPost.application_url= — one is the entry point
 (per-application). See =notes.org::*Apply-destination resolution= for
 the full semantic split.
 
-** TODO Subnav control sizing is inconsistent [frontend]
+** TODO [#C] Subnav control sizing is inconsistent [frontend]
 [2026-04-20] =/job-posts= subnav stacks =Search= (input), =Filters= (compact
 HyperUI-style dropdown trigger =px-2.5 py-1 text-xs= bordered), and
 =+ New Job Post= (app =.btn=, taller + bigger text). Heights don't line
@@ -654,7 +695,7 @@ solely for the dead surface. One PR, one concern.
 
 [[file:notes.org::*Resume Word-export jinja audit][Original audit]]
 
-** TODO [#B] Canonicalize tracker URLs on scrape ingest [api]
+** TODO [#A] Canonicalize tracker URLs on scrape ingest [api]
 [2026-04-18] Same root cause as the automation-side dedup bug: marketing
 emails (and, crucially, user-pasted links from those emails) use
 SendGrid-style click trackers — e.g. =url9751.alerts.jobot.com/ls/click?upn=…=,
@@ -928,3 +969,5 @@ chat-agent gap.
 Promote to SHIPPED after parent Deploy clears + live verify (paste a
 recruiter email containing a known JobPost URL → expect "Open existing
 job post" propose-actions instead of a new scrape).
+** https://careercaddy.online/scrapes/189
+its a stubbed that short circuted
