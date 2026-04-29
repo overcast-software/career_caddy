@@ -69,6 +69,12 @@ test-frontend: ## Run Ember QUnit tests
 lint-api: ## Ruff-lint api code (PATHS=... for a subset; defaults to whole tree)
 	docker compose exec api ruff check $(if $(PATHS),$(PATHS),.)
 
+lint-frontend: ## Prettier-check frontend (PATHS=... for files; defaults to whole tree)
+	docker compose exec frontend npm run lint:format $(if $(PATHS),-- --check $(PATHS),)
+
+format-frontend: ## Prettier auto-fix frontend (PATHS=... for files; defaults to whole tree)
+	docker compose exec frontend npm run lint:format -- --write $(if $(PATHS),$(PATHS),.)
+
 # ── CI (Dagger) ────────────────────────────────────────────────────────────
 # Requires Dagger CLI: curl -fsSL https://dl.dagger.io/dagger/install.sh | sh
 

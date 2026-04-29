@@ -288,7 +288,25 @@ feeds the eventual plugin PR.
 CLOSED: [2026-04-28 Tue 18:33]
 ** IDEA Flash message slide-wipe transition [frontend]
 Queue sequential display instead of stacking. First flash finishes its time, slides left, next slides in.
-** TODO Audit redundant parent columns in child route list components [frontend]
+** SHIPPED Audit redundant parent columns in child route list components [frontend]
+CLOSED: [2026-04-29 Wed]
+=JobApplications::Compact= now takes =@showCompany= (default true). Hidden on
+=companies.show.job-applications= where the Company is the route's parent and
+the column was repeating the same value on every row. Same shape as
+=JobPosts::List @showCompany={{false}}= already used on
+=companies.show.job-posts=. Frontend PR #87.
+** SHIPPED Search input flicker on /scrapes [frontend]
+CLOSED: [2026-04-29 Wed]
+=refreshModel: true= on the =search= QP triggered the loading substate every
+keystroke; =scrapes/index-loading.hbs= has no =<:subnav>= slot, so the search
+input was torn down + remounted (focus loss + visible flicker). Route now
+implements a =loading= action that returns =true= (suppresses the substate)
+when =transition.from.name === routeName= — i.e. in-route refreshes only;
+cold loads still get the skeleton. Frontend PR #88.
+** SHIPPED Resume export Tool/Platform typo [api]
+CLOSED: [2026-04-29 Wed]
+=Resume.to_export_context= had a stray =Tool/Platform= → =Tools/Platforms=
+fix. API PR #73.
 ** PROJ Feature sorting tables
 * Inbox
 ** TODO system light dark
