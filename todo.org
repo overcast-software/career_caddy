@@ -307,6 +307,28 @@ cold loads still get the skeleton. Frontend PR #88.
 CLOSED: [2026-04-29 Wed]
 =Resume.to_export_context= had a stray =Tool/Platform= → =Tools/Platforms=
 fix. API PR #73.
+** SHIPPED LinkedIn obstacle-agent: page_structure plumbing + glimmer-stable click bypass [ai]
+CLOSED: [2026-04-29 Wed]
+Three intertwined bugs unblocking LinkedIn =/uas/login= account-chooser
+clears (scrape 200 was the canary):
+- =ObstacleAgent= now consumes =ScrapeProfile.page_structure= (where
+  the actual obstacle-clearing selector list lives) — previously it
+  only read =interaction_hints=, which is unset on the LinkedIn
+  profile, so the LLM was flying blind.
+- =_detect_login_wall= short-circuited =word_count >= 200 → False=
+  BEFORE strong-signal checks, so long login walls slipped the gate
+  entirely and let the parser hallucinate "job posts" from welcome
+  copy. Strong signals now decisive at any length; weak-signal
+  threshold still gated on word count. Per-host strong phrases live
+  on =ScrapeProfile.css_selectors.login_wall_signals=.
+- Both =_try_rememberme_reauth= and =ObstacleAgent.try_click= were
+  failing with =waiting for element to be stable= because LinkedIn
+  wraps the chooser in =<div class="glimmer">= (perpetual
+  skeleton-load animation). Now =click(timeout=5_000, force=True)=
+  bypasses Playwright's actionability gate.
+Touched: =agents/obstacle_agent.py=, =lib/scrape_graph/nodes_obstacle.py=,
+=mcp_servers/browser_server.py=. Verified end-to-end on prod scrape 200.
+AI PR #33.
 ** PROJ Feature sorting tables
 * Inbox
 ** TODO system light dark
