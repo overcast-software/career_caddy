@@ -439,7 +439,24 @@ CLOSED: [2026-04-26]
 - parent PR #43 (merged =a3d8be7=) → Deploy.
 
 Follow-up: frontend PR #75 (merged =67e58a0=) consolidated =job-post.{js,ts}= → =.js=, fixing a latent bug where apply-resolver attrs were orphaned on a never-loadable =.ts= file. Parent bump PR #44 (merged =8013da6=). The =SPC m t S= → SHIPPED keybinding earned its keep on this very entry.
-** TODO what happend to this job post.  I'm very qualified and I can't find it in prod
+** SHIPPED what happend to this job post.  I'm very qualified and I can't find it in prod
+CLOSED: [2026-04-29]
+[2026-04-29] Root cause: =JobPost= is a shared resource (unique
+=link=); the list view filtered through per-user fields, hiding any
+post the caller hadn't created/applied/scored/scraped. cc_auto's
+=POST /job-posts= hit the link-dedupe at =create()= L425, returned
+200 echoing the canonical row, but the caller had no relation to it
+→ invisible in the frontend list.
+
+api/ (PR #71): new =JobPostDiscovery(user, job_post, source)= join
+with unique=(user, post). =create()= records a discovery for the
+caller on every branch (link-dedupe, fingerprint-dedupe, fresh save)
+via =get_or_create=. =list()= short-circuits for =is_staff=true= (sees
+all posts); non-staff filter now includes =discoveries__user_id=
+alongside the existing four signals. Migration =0065= backfills
+discoveries for =user_id=2= against every existing JobPost so
+historical posts surface immediately (no-op on fresh installs).
+
 2026-04-24 05:08:16 INFO     Run complete: 3 email(s), 3 ok, 0 failed, 5 job-post(s) created
   [ok  ] New Staff Engineer - RoR - Remote opportunity  →  0 new, 0 dup / 0 kept
   [ok  ] Doug, you may want to apply for this job!  →  0 new, 0 dup / 0 kept
