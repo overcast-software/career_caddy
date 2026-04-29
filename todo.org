@@ -856,6 +856,21 @@ Coordination follow-up (separate TODO): mirror the tracker host list
 into =cc_auto/src/agents/url_extractor.py= so an email-side resolution
 and a user-paste produce the same canonical form.
 
+** TODO Retire BaseSerializer.slim_attributes in favor of fields[type] [api]
+[2026-04-29] Once =fields[<type>]= sparse-fieldsets land (this PR), the
+=slim= flag and per-class =slim_attributes= become redundant — every
+caller that wants a slim representation can ask for exactly the
+fields it needs via JSON:API. Remove =slim=, =slim_attributes=,
+=to_slim_resource=, and =_is_slim_request=, then audit each frontend
+caller that currently passes =?slim=true= and replace with explicit
+=fields[<type>]=...=. Resume's =meta.counts= block (only emitted in
+slim mode today) needs a separate decision — either always emit, gate
+on a different param, or move to its own endpoint. Filed alongside
+the BaseSerializer fields[<type>] patch.
+
+Resume is different in that we presume includes most of the time.
+this problem seesaws on either remove slim and use includes explicitly and fields when you want slim.  removing implicit includes has it's own trade offs
+
 ** TODO Mirror tracker host list into cc_auto url_extractor
 [2026-04-28] Follow-up to the api ingest canonicalization. Both repos
 must share the same tracker host list (=TRACKER_HOST_SUFFIXES= +
