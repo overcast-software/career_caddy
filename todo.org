@@ -532,10 +532,23 @@ resolve through to a real ATS, and the rollup should reflect the
 
 [[file:notes.org::*Apply-destination resolution (final URL behind the apply button)][Plan → notes.org]]
 
-** LOOP [#A] Scrape-graph pydantic-graph refactor [api+ai+frontend]
+** SHIPPED [#A] Scrape-graph pydantic-graph refactor [api+ai+frontend]
+- State "SHIPPED"    from "LOOP"       [2026-04-29]
 :PROPERTIES:
 :STARTED:  [2026-04-23]
 :END:
+Every Remaining checkbox shipped: Phase 1d [2026-04-23], primary
+cutover [2026-04-23], =ResolveApplyUrl= Phase 2 [2026-04-26], shadow
+cleanup [2026-04-27]. Obstacle reorder (Navigate → DetectObstacle →
+ResolveFinalUrl) shipped [2026-04-29] as a follow-on, paired with
+the apply_resolver_config seed for the top 8 hosts. The graph runs
+unconditionally for every scrape; legacy =_process_scrape_legacy=
+and =SCRAPE_GRAPH_MODE= are gone.
+
+Open follow-ups (each its own TODO, not blockers on the refactor):
+- [[*TODO Verify apply-resolver on a real scrape per seeded host][verify per-host apply resolution]]
+- [[*TODO Reports: applies-by-hostname cut on sources sankey][applies-by-hostname rollup]]
+
 [[file:notes.org::*Session summary — scrape-graph Phase 1][Session summary → notes.org]]
 Plan: =~/.claude/plans/snazzy-crafting-whale.md=. Phases 1a/1b/1c shipped
 [2026-04-23] under =v0.0.1= baseline:
