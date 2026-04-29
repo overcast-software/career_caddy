@@ -23,10 +23,10 @@ every resource.
 |-----------|-------|------|
 | `frontend/` | Ember.js 6.x SPA | User interface, JSON:API client |
 | `api/` | Django REST Framework | Data layer, extraction, AI orchestration |
-| `ai/` | Pydantic-AI + MCP servers | Browser automation, email pipeline, agents |
-| Chat service | Starlette SSE (in `ai/`) | Streaming AI chat with page-context awareness |
-| MCP server | FastMCP (in `ai/`) | Public read-only career data tools for MCP clients |
-| Hold-poller | Standalone worker (in `ai/`) | Polls API for queued scrapes, runs browser locally |
+| `agents/` | Pydantic-AI + MCP servers | Browser automation, email pipeline, agents |
+| Chat service | Starlette SSE (in `agents/`) | Streaming AI chat with page-context awareness |
+| MCP server | FastMCP (in `agents/`) | Public read-only career data tools for MCP clients |
+| Hold-poller | Standalone worker (in `agents/`) | Polls API for queued scrapes, runs browser locally |
 
 **Why Ember.js?** The app has complex nested routes (job post → application → question →
 answer) and many inter-resource relationships. Ember's conventions for nested routing, the
@@ -41,7 +41,7 @@ them as MCP servers makes them composable with any MCP client (Claude Desktop, e
 
 ## Key Features
 
-- **Tiered extraction** — Domain profiles learn from past scrapes, auto-selecting from CSS-only ($0) to full LLM ($0.10). See `ai/CLAUDE.md` for model config.
+- **Tiered extraction** — Domain profiles learn from past scrapes, auto-selecting from CSS-only ($0) to full LLM ($0.10). See `agents/CLAUDE.md` for model config.
 - **Hold-poller** — Headless browser worker that runs on a desktop or Raspberry Pi, scraping jobs the VPS cannot handle. The VPS queues work; the poller executes it.
 - **AI chat** — SSE streaming assistant aware of your current page context, with elicitation buttons for guided workflows.
 - **MCP integration** — Public career data tools exposable to any MCP client (Claude Desktop, Cursor, etc.).
@@ -145,7 +145,7 @@ The hold-poller is a standalone Python process that bridges the gap between the 
 
 # 2. Run it
 make poller
-# Or directly: cd ai && uv run caddy-poller
+# Or directly: cd agents && uv run caddy-poller
 ```
 
 The poller polls the API every 30 seconds (configurable via `HOLD_POLL_INTERVAL`). It backs off exponentially when there's no work, and resets on success.

@@ -8,7 +8,7 @@ Three independently deployable components, each with its own `CLAUDE.md`:
 
 - `frontend/` — Ember.js 6.x SPA (see `frontend/CLAUDE.md`)
 - `api/` — Django REST Framework backend (see `api/CLAUDE.md` — not yet created)
-- `ai/` — Pydantic-AI agents + MCP servers (see `ai/CLAUDE.md`)
+- `agents/` — Pydantic-AI agents + MCP servers (see `agents/CLAUDE.md`)
 
 ## Getting Started (Full Local Dev)
 
@@ -31,8 +31,8 @@ docker compose up --build
 **With browser MCP server** (for Claude Desktop / MCP clients):
 
 ```bash
-# Ensure ai/secrets.yml exists (job site credentials for browser automation)
-cp ai/secrets.yml.example ai/secrets.yml
+# Ensure agents/secrets.yml exists (job site credentials for browser automation)
+cp agents/secrets.yml.example agents/secrets.yml
 
 make up-ai
 # Browser MCP:  http://localhost:3004/sse
@@ -92,14 +92,14 @@ frontend (Ember SPA :4200)
     ↕ JSON:API  Authorization: Bearer <jwt>
 api (Django + SQLAlchemy + PostgreSQL :8000)
     ↑ REST API calls (CC_API_TOKEN API key)
-ai (Pydantic-AI agents + MCP servers)
+agents (Pydantic-AI agents + MCP servers)
 ```
 
 The **frontend** is a JSON:API client. The `application` adapter injects JWT auth headers and handles 401 → token refresh → retry automatically.
 
 The **API** uses Django ORM for all models. Startup requires only `manage.py migrate`.
 
-The **AI layer** runs locally. Agents chain MCP servers as tool providers. Email→JobPost orchestration now lives in the sibling repo `~/Projects/career_caddy_automation`, which consumes tools from `mcp.careercaddy.online/mcp`; this repo's `ai/` only ships the local browser/scrape agents and the hold-poller. The AI layer authenticates to the API using a long-lived API key (`CC_API_TOKEN`), not a JWT.
+The **AI layer** runs locally. Agents chain MCP servers as tool providers. Email→JobPost orchestration now lives in the sibling repo `~/Projects/career_caddy_automation`, which consumes tools from `mcp.careercaddy.online/mcp`; this repo's `agents/` only ships the local browser/scrape agents and the hold-poller. The AI layer authenticates to the API using a long-lived API key (`CC_API_TOKEN`), not a JWT.
 
 ## Cross-Component Contracts
 
@@ -163,7 +163,7 @@ dagger -m ./dagger call deploy --ssh-key=file:~/.ssh/id_ed25519 --host=<vps> --a
 feature/*  →  main
 ```
 
-No `develop` branch in practice — feature branches are cut from `main` and PR'd back to `main`. Submodules (`api/`, `frontend/`, `ai/`) commit first; the parent repo bumps the submodule pointers after.
+No `develop` branch in practice — feature branches are cut from `main` and PR'd back to `main`. Submodules (`api/`, `frontend/`, `agents/`) commit first; the parent repo bumps the submodule pointers after.
 
 **Daily workflow:**
 ```bash

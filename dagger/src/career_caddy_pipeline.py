@@ -14,7 +14,7 @@ Usage (from repo root):
 In GitHub Actions, call via: dagger -m ./dagger call publish ...
 
 NOTE: Directory parameters use DefaultPath relative to the dagger/ module root.
-      Defaults: ../api → api/, ../frontend → frontend/, ../ai → ai/
+      Defaults: ../api → api/, ../frontend → frontend/, ../agents → agents/
       Override: --src=./path/to/dir (or --api-src=, --frontend-src=, etc.)
 """
 
@@ -150,7 +150,7 @@ class CareerCaddy:
     @function
     async def build_ai(
         self,
-        src: Annotated[dagger.Directory, DefaultPath("../ai")],
+        src: Annotated[dagger.Directory, DefaultPath("../agents")],
     ) -> dagger.Container:
         """Build the AI agent image (Python 3.13, no Camoufox).
 
@@ -187,7 +187,7 @@ class CareerCaddy:
     @function
     async def test_ai(
         self,
-        src: Annotated[dagger.Directory, DefaultPath("../ai")],
+        src: Annotated[dagger.Directory, DefaultPath("../agents")],
     ) -> dagger.Container:
         """Run AI test suite (toolsets, api_tools, public_server security)."""
         src = (
@@ -225,7 +225,7 @@ class CareerCaddy:
         registry_token: Secret,
         api_src: Annotated[dagger.Directory, DefaultPath("../api")],
         frontend_src: Annotated[dagger.Directory, DefaultPath("../frontend")],
-        ai_src: Annotated[dagger.Directory, DefaultPath("../ai")],
+        ai_src: Annotated[dagger.Directory, DefaultPath("../agents")],
         org: str = "overcast-software",
         tag: str = "latest",
         registry_username: str = "",

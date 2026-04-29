@@ -4,6 +4,6 @@
 [submodule "frontend"]
 	path = frontend
 	url = https://github.com/overcast-software/career_caddy_frontend.git
-[submodule "ai"]
-	path = ai
+[submodule "agents"]
+	path = agents
 	url = git@github.com:overcast-software/career_caddy_ai.git

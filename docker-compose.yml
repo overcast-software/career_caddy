@@ -90,13 +90,13 @@ services:
 
   chat:
     build:
-      context: ./ai
+      context: ./agents
       args:
         INSTALL_CAMOUFOX: "false"
     working_dir: /app
     command: sh -c "uv sync && uv run caddy-chat"
     volumes:
-      - ./ai:/app
+      - ./agents:/app
       - chat_venv:/app/.venv
     environment:
       CC_API_BASE_URL: "http://api:8000"
@@ -116,7 +116,7 @@ services:
 
   browser-mcp:
     build:
-      context: ./ai
+      context: ./agents
       args:
         INSTALL_CAMOUFOX: "${INSTALL_CAMOUFOX:-true}"
     working_dir: /app
@@ -130,7 +130,7 @@ services:
       CAMOUFOX_DATA_DIR: /opt/camoufox
       SCREENSHOT_DIR: /app/screenshots
     volumes:
-      - ./ai/secrets.yml:/app/secrets.yml:ro
+      - ./agents/secrets.yml:/app/secrets.yml:ro
 
 
 volumes:
