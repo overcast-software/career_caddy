@@ -55,7 +55,7 @@ Quick navigation across this file. Counts are a snapshot — re-run with
 | PENDING_APPROVAL |  5 | do NOT touch (see HOW TO USE rule) |
 
 ** Priority queue
-- Recently SHIPPED [2026-04-28]: cascade company changes · synchronous browser-MCP scrape deprecation · scrape-graph shadow+OFF collapse · scrape-graph dagre layout (LR + native scroll) · scrape diag MCP tools (graph_trace, scrape_statuses) · linkedin rememberme_candidates seeded · 409 dedupe contract (skip when job-post relationship sent) · =JobPost.posting_status= (open/closed) + list-default hides closed · bounded scrape-graph wait (Navigate domcontentloaded + 240s poller cap)
+- Recently SHIPPED [2026-04-28..29]: cascade company changes · synchronous browser-MCP scrape deprecation · scrape-graph shadow+OFF collapse · scrape-graph dagre layout (LR + native scroll) · scrape diag MCP tools (graph_trace, scrape_statuses) · linkedin rememberme_candidates seeded · 409 dedupe contract (skip when job-post relationship sent) · =JobPost.posting_status= (open/closed) + list-default hides closed · bounded scrape-graph wait (Navigate domcontentloaded + 240s poller cap) · MCP slim-response refactor (YAML, no envelope, =TOOL_SHAPES= audit, every tool slimmed)
 - =[#A]= in flight: [[*STRT [#A] Surface apply destination per host (seed ScrapeProfile.apply_resolver_config) :bug:][per-host apply-resolver configs]]
 - =[#B]= open: [[*TODO [#B] cover-letter spinner looks way cooler.  put it everywhere][cover-letter spinner everywhere]] · [[*TODO [#B] Canonicalize tracker URLs on scrape ingest [api]][canonicalize tracker URLs]]
 
@@ -321,6 +321,42 @@ Follow-up: frontend PR #75 (merged =67e58a0=) consolidated =job-post.{js,ts}= �
 2026-04-24 06:06:44 INFO     HTTP Request: GET https://api.careercaddy.online/api/v1/job-posts/?filter%5Blink%5D=https%3A%2F%2Fjobot.com%2Fdetails%2Fdevops-engineer%2Ffdcc79bd01 "HTTP/1.1 200 OK"
 *** the website says I applied for this job 5 months ago
 You applied to this job on Nov 28, 2025 (5 months ago)
+** SHIPPED MCP slim-response refactor — YAML + TOOL_SHAPES audit :ai:mcp:
+- State "SHIPPED"    from "TODO"       [2026-04-29]
+Shipped 2026-04-29 across four ai PRs (#24, #25, #26, #27) and parent
+bumps. Every career-caddy MCP tool now returns YAML with no
+={success, data, status_code}= envelope; lists return slim rows;
+single tools and writes collapse relationships to ids/counts; the
+=included= block is dropped. Audit dict =TOOL_SHAPES= in
+=ai/lib/api_tools.py= is the maintenance contract — one row per
+tool, agent never sees it.
+
+PRs:
+- #24 — helpers (=_respond=, =_relationships_to_counts=, =_slim_record=)
+  + populated =TOOL_SHAPES= dict, no behavior change.
+- #25 — global cutover: =_ok()= returns YAML via =_respond=; new
+  =get_data=/=post_data=/=patch_data= tuple-returning methods for
+  internal call-and-inspect; ~12 inline =json.dumps(APIResponse(...))=
+  blocks collapsed to =_respond(None, error=...)=.
+- #26 — list/table tools read =TOOL_SHAPES=. Audit tweak: list
+  =relationships= switched =omit= → =counts= so company-id et al
+  still surface as a single integer.
+- #27 — single, aggregate, write tools all read =TOOL_SHAPES=.
+  =get_career_data= per-section trim. =fetch_scrape_screenshot= meta
+  (no legacy success envelope).
+
+Net effect on a typical agent session: =get_current_user= drops from
+~10 KB → <1 KB; list tools shed ~80% of their bytes;
+=relationships= become single ints instead of arrays of
+={type, id}=. Agent reads YAML directly — no double-parse.
+
+Future work (NOT in scope):
+- TOON output. Plan defers; revisit after a week of YAML measurements
+  in =~/.claude/plans/cryptic-coalescing-spark.md=. If TOON would
+  shave >25% over YAML on representative tools, write a follow-up
+  plan; if <10%, drop.
+
+Design + audit reference: =notes.org::*MCP slim-response refactor [2026-04-29]=.
 ** TODO Reorder scrape-graph: run obstacle handling before ResolveFinalUrl :scrape-graph:
 [2026-04-28] Today's bounded-wait fix (Navigate → =domcontentloaded=,
 240s poller cap) keeps a stuck scrape from wedging the queue, but it
