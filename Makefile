@@ -89,13 +89,13 @@ ci-ai: ## Build the slim AI Docker image via Dagger (no camoufox — production 
 # Requires: CC_API_TOKEN and OPENAI_API_KEY set in .env or environment
 
 pipeline-url: ## Scrape a single job URL  (usage: make pipeline-url URL=https://...)
-	cd ai && uv run caddy-pipeline --url $(URL)
+	cd agents && uv run caddy-pipeline --url $(URL)
 
 poller: ## Poll for hold scrapes against prod (pass ARGS="--engine chrome --headless")
-	cd ai && uv run caddy-poller $(ARGS)
+	cd agents && uv run caddy-poller $(ARGS)
 
 poller-local: ## Poll for hold scrapes against local dev (localhost:8000; set CC_API_TOKEN_LOCAL to override prod token)
-	cd ai && CC_API_BASE_URL=http://localhost:8000 CC_API_TOKEN=$${CC_API_TOKEN_LOCAL:-$$CC_API_TOKEN} uv run caddy-poller $(ARGS)
+	cd agents && CC_API_BASE_URL=http://localhost:8000 CC_API_TOKEN=$${CC_API_TOKEN_LOCAL:-$$CC_API_TOKEN} uv run caddy-poller $(ARGS)
 
 # ── Bootstrap ──────────────────────────────────────────────────────────────
 

@@ -161,11 +161,11 @@ if $CHECK_POLLER || env_set CC_API_TOKEN 2>/dev/null; then
     fail "uv is not installed — see https://docs.astral.sh/uv/"
   fi
 
-  if [[ -d "$PROJECT_ROOT/ai" ]]; then
-    if (cd "$PROJECT_ROOT/ai" && uv run python -c "import camoufox" 2>/dev/null); then
+  if [[ -d "$PROJECT_ROOT/agents" ]]; then
+    if (cd "$PROJECT_ROOT/agents" && uv run python -c "import camoufox" 2>/dev/null); then
       pass "Camoufox is importable"
     else
-      fail "Camoufox not available — run: cd ai && uv sync && python -m camoufox fetch"
+      fail "Camoufox not available — run: cd agents && uv sync && python -m camoufox fetch"
     fi
   fi
 
@@ -189,13 +189,13 @@ if $CHECK_POLLER || env_set CC_API_TOKEN 2>/dev/null; then
 fi
 
 # ── Group 6: Browser Automation ──────────────────────────────────────────
-if [[ -d "$PROJECT_ROOT/ai" ]]; then
+if [[ -d "$PROJECT_ROOT/agents" ]]; then
   header "Browser Automation"
 
-  if [[ -f "$PROJECT_ROOT/ai/secrets.yml" ]]; then
-    pass "ai/secrets.yml exists"
+  if [[ -f "$PROJECT_ROOT/agents/secrets.yml" ]]; then
+    pass "agents/secrets.yml exists"
   else
-    warn "ai/secrets.yml missing — needed for login automation (cp ai/secrets.yml.example ai/secrets.yml)"
+    warn "agents/secrets.yml missing — needed for login automation (cp agents/secrets.yml.example agents/secrets.yml)"
   fi
 fi
 
