@@ -1523,3 +1523,100 @@ camoufox subprocess died mid-scrape and Playwright surfaced
 Tests: =tests/test_browser_server_retry.py= covers the matcher, the
 retry-then-succeed path, no-retry on terminal errors, and persistent
 crashes still surfacing.
+
+* SHIPPED [#A] Loading-skeleton substates for all parent paths [frontend]
+CLOSED: [2026-04-24]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-28 Tue 22:59
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:END:
+Trigger: user reported =/job-posts= (and other sidebar nav targets)
+felt unresponsive on prod — clicking the link hung on the previous
+page while the =model= hook resolved. Prod is compute-constrained,
+so a client-side perceived-latency fix was the right lever.
+
+Pattern: Ember renders a =<route>-loading.hbs= substate
+automatically when the model hook promise is pending. No route JS
+changes needed.
+
+frontend/ (PR #70 then PR #72):
+- =components/loading-skeleton.hbs= — shared 8-card animated-pulse
+  skeleton. =Tailwind= only, HyperUI-style. Renders via
+  ={{#each (array 1 2 ... 8)}}= (no unused block param, per lint
+  tally #14).
+- 13 per-route loading templates, each 6 lines
+  (=<RouteLayout><:main><LoadingSkeleton /></:main></RouteLayout>=):
+  - =templates/job-posts/index-loading.hbs= (first to ship, PR #70)
+  - =templates/job-applications/index-loading.hbs=
+  - =templates/companies/index-loading.hbs=
+  - =templates/cover-letters/index-loading.hbs=
+  - =templates/resumes/index-loading.hbs=
+  - =templates/scores/index-loading.hbs=
+  - =templates/scrapes/index-loading.hbs=
+  - =templates/questions/index-loading.hbs=
+  - =templates/answers/index-loading.hbs=
+  - =templates/career-data/index-loading.hbs=
+  - =templates/favorites-loading.hbs= (leaf top-level)
+  - =templates/caddy-loading.hbs= (leaf top-level)
+  - =templates/reports/activity/loading.hbs= (matches existing
+    =reports/application-flow/= and =reports/sources/= convention)
+
+Skipped for now: =admin.*= and =settings.*= — multi-tab containers
+that deserve their own loading shape rather than the generic
+8-card skeleton.
+
+User-reported outcome on prod after #40 Deploy landed: "love the
+skeleton fix."
+
+* SHIPPED [#A] Chat: detect duplicate JobPost by link, offer navigate instead of re-create [ai] :bug:
+CLOSED: [2026-04-26]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-04-28 Tue 22:59
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Bugs 🐛
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:END:
+ai PR #14 (merged =fc3b2c8=): tightened the main chat =SYSTEM_PROMPT=:
+- Top-level rule names ALL create paths (job-post, scrape, application)
+  and explicitly covers URLs embedded inside pasted text.
+- New "Scraping URLs / handling pasted text that CONTAINS a URL"
+  section gates =create_scrape= on =find_job_post_by_link= first; on
+  hit emits =propose_actions= with an "Open existing job post"
+  navigate action and skips the create entirely.
+- 3 regression tests pin the literal phrases in =SYSTEM_PROMPT= so
+  vague instructions can't creep back.
+Paste/scrape side already shipped [2026-04-22]; this closes the
+chat-agent gap.
+
+Promote to SHIPPED after parent Deploy clears + live verify (paste a
+recruiter email containing a known JobPost URL → expect "Open existing
+job post" propose-actions instead of a new scrape).
+
+* SHIPPED IN_PROGRESS Hold poller + multi-model pipeline :APPROVED:
+CLOSED: [2026-04-23 Thu 19:50]
+:PROPERTIES:
+:STARTED:  [2026-04-14 ai+api+frontend]
+:ARCHIVE_TIME: 2026-04-28 Tue 23:00
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Features — APPROVED (ready to work)
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:END:
+[[file:notes.org::*Hold Poller, Screenshots, Multi-Model Pipeline][Plan → notes.org]]
+All subtasks done except end-to-end test.
+** DONE Pluggable browser engine (Camoufox or Playwright Chromium + stealth)
+CLOSED: [2026-04-16 Wed]
+=--engine camoufox|chrome= + =--headless/--headed= CLI args on browser_server, hold_poller, manual_login.
+Sessions portable across engines. Chromium path ARM-compatible for Pibu.
+** DONE Screenshot upload via API + on-demand viewer
+CLOSED: [2026-04-16 Wed]
+Poller uploads screenshots via =POST /scrapes/{id}/screenshots/=. API stores in =screenshots/{id}/= folders.
+Frontend: staff sees filename list, click to reveal image (fetched with auth via blob URL).
+Queue button sets scrape to =hold= for poller pickup. Status notes on all transitions.
+** DONE End-to-end test: queue → poller → screenshot → viewer
+CLOSED: [2026-04-16 Wed]
+Tested locally: queue scrape 59, poller scraped + uploaded screenshot, clicked filename in UI, image displayed.

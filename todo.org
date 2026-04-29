@@ -46,9 +46,9 @@ Quick navigation across this file. Counts are a snapshot — re-run with
 ** State counts [2026-04-28]
 | State            |  # | Notes |
 |------------------+----+-------|
-| SHIPPED          | 16 | =DONE= → =SHIPPED= once verified in prod. =SPC m t S= |
+| SHIPPED          | 18 | =DONE= → =SHIPPED= once verified in prod. =SPC m t S= |
 | STRT             |  0 | nothing actively in progress |
-| TODO             | 27 | by-priority breakdown below |
+| TODO             | 25 | by-priority breakdown below |
 | LOOP             |  3 | research-needed before starting |
 | PROJ             |  2 | =/plan= mode before code |
 | WAIT             |  1 | external blocker |
@@ -58,7 +58,7 @@ Quick navigation across this file. Counts are a snapshot — re-run with
 | KILL             |  1 | dropped |
 
 ** Priority queue
-- Recently SHIPPED [2026-04-28..29]: cascade company changes · synchronous browser-MCP scrape deprecation · scrape-graph shadow+OFF collapse · scrape-graph dagre layout (LR + native scroll) · scrape diag MCP tools (graph_trace, scrape_statuses) · linkedin rememberme_candidates seeded · 409 dedupe contract (skip when job-post relationship sent) · =JobPost.posting_status= (open/closed) + list-default hides closed · bounded scrape-graph wait (Navigate domcontentloaded + 240s poller cap) · MCP slim-response refactor (YAML, no envelope, =TOOL_SHAPES= audit, every tool slimmed) · apply_resolver_config seeded for top 8 hosts · scrape-graph reorder (Navigate → DetectObstacle → ResolveFinalUrl) · canonicalize tracker URLs on scrape ingest (api =Scrape.source_link= + frontend chip)
+- Recently SHIPPED [2026-04-28..29]: cascade company changes · synchronous browser-MCP scrape deprecation · scrape-graph shadow+OFF collapse · scrape-graph dagre layout (LR + native scroll) · scrape diag MCP tools (graph_trace, scrape_statuses) · linkedin rememberme_candidates seeded · 409 dedupe contract (skip when job-post relationship sent) · =JobPost.posting_status= (open/closed) + list-default hides closed · bounded scrape-graph wait (Navigate domcontentloaded + 240s poller cap) · MCP slim-response refactor (YAML, no envelope, =TOOL_SHAPES= audit, every tool slimmed) · apply_resolver_config seeded for top 8 hosts · scrape-graph reorder (Navigate → DetectObstacle → ResolveFinalUrl) · canonicalize tracker URLs on scrape ingest (api =Scrape.source_link= + frontend chip) · sidebar + chat as universal slide-in panels (full-height drawer, 45dvh chat bottom-sheet, list-skeleton cached on re-entry) · hold/score-poller YAML response parse fix (was =JSONDecodeError= every cycle since the MCP YAML cutover)
 - =[#A]= in flight: (none — apply-resolver seed shipped [2026-04-29]; obstacle reorder shipped [2026-04-29]; tracker-URL canonicalization shipped [2026-04-28])
 - =[#B]= open: [[*TODO [#B] cover-letter spinner looks way cooler.  put it everywhere][cover-letter spinner everywhere]]
 
@@ -291,6 +291,7 @@ Queue sequential display instead of stacking. First flash finishes its time, sli
 ** TODO Audit redundant parent columns in child route list components [frontend]
 ** PROJ Feature sorting tables
 * Inbox
+** TODO system light dark
 ** TODO fix-span-issue:019dd70d001149d665450e1682846341 :logfire:bug:
 ** TODO lost connection while polling :bug:
 "Lost"
@@ -332,10 +333,64 @@ Call log:
 linkedin being dumb -investigate
 ** TODO source (i.e. email for job-post.show)
 ** TODO replace ↗ with {{link.hostname}} ↗
-** TODO [#A] career caddy sidebar on small screen where it's full height is way better than partial height.
-** TODO [#A] when on a smaller screen the animation for chat looks like it's coming from the bottom
-I enjoy this but, CSS make the subnav bar contents slide over.  It's also incredibly tall and it covers all the content.
-** TODO [#A] clicking around.  if I go to jp.index i get the skeleton, if i then go to answers.index i get a skeleton.  in either case the page loads and it's good.  the weirdness if I go back to jp.index I don't see the loaded jps I get another skeleton.
+** SHIPPED [#A] Hold-poller / score-poller broken: api_tools YAML cutover unparseable as JSON :bug:ai:
+- State "SHIPPED"    from "TODO"       [2026-04-29]
+CLOSED: [2026-04-29]
+Surfaced [2026-04-29] from =make poller ARGS='--attended'= traceback
+=json.decoder.JSONDecodeError: Expecting value: line 1 column 1=. The
+MCP slim-response cutover (#25) flipped =api_tools._respond= to YAML
+with no ={success, data}= envelope; both pollers were still
+=json.loads(raw)= and dereferencing the old envelope. Every poll cycle
+threw and was retried — prod hold queue was effectively idle.
+Fix (ai PR #29): switch =hold_poller.poll_once= / =_fetch_profile= and
+=score_poller._collect_candidates= / =_score_one= to =yaml.safe_load=,
+check =resp.get("error")=, and read the slim list path =data["data"]=.
+Drop the unused =json= import in hold_poller; add =yaml= to score_poller.
+** TODO Seed linkedin =rememberme_candidates= for the account-chooser tile [api]
+[2026-04-29] Scrape 202 (=https://www.linkedin.com/uas/login?session_redirect=...=)
+landed on the LinkedIn "Welcome Back" account chooser with the
+remembered identity rendered (Doug Headley row + "Sign in using
+another account" row). =ObstacleRememberMe= ran twice and didn't match
+any selector in the existing seed; ObstacleAgent burned ~66s and
+=ObstacleFail=-ed with =selector_tried=null=. Live profile patched on
+=mcp.careercaddy.online= via =update_scrape_profile= to add candidate
+selectors (=button[aria-label*='Sign in as']=,
+=button[data-tracking-control-name*='rememberme_account']=,
+=[data-tracking-control-name*='homepage_basic_member_profile']=,
+=div[role='button'][aria-label*='Sign in']=). Follow-up: backfill the
+seed migration in =api/job_hunting/management/commands/seed_apply_resolver_configs.py=
+(or wherever the linkedin =rememberme_candidates= seed lives) with the
+new candidates, plus a test fixture asserting the chooser-tile DOM is
+matched. Then re-queue scrape 202 to verify before promoting to SHIPPED.
+** SHIPPED [#A] Sidebar + chat as universal slide-in panels [frontend]
+- State "SHIPPED"    from "TODO"       [2026-04-28]
+CLOSED: [2026-04-28]
+Rolls up three #A complaints into one frontend ship:
+
+1. =Sidebar on small screen — full height >> partial height=. Sidebar
+   now renders as a slide-in drawer (the mobile pattern) at all
+   viewport sizes. Drawer is z:80 above =.site-header= (z:70) and
+   =.mobile-overlay= (z:75) — the user sees the entire sidebar top to
+   bottom. Persistent grid =.course-sidebar= column hidden. Close via
+   the back-arrow inside the drawer or by clicking the dimmed overlay.
+2. =Chat animation comes from bottom (good!) but subnav crowded from
+   the right=. Chat panel is now a bottom-sheet at all viewport sizes,
+   45dvh (under half the visible screen). It never claims a grid
+   column, so route-main keeps full width whether chat is open or
+   closed. Subnav cap on `(width <= 767px)`: =.tee-box= max 2.5lh,
+   =overflow-x: auto=, =.tee-center= no wrap.
+3. =List skeleton re-fires on return visit=. New
+   =app/utils/list-model.js= caches the InfinityModel on the route
+   instance keyed by stringified params. Applied to all 8 list routes
+   (job-posts, job-applications, companies, answers, questions,
+   scores, scrapes, summaries). Cache invalidates when refreshModel
+   queryParams change. Skeleton fires only on first visit; return
+   visits show the previous data instantly.
+
+Switching: =course--chat-open= hides =.route-footer= so the chat
+input doesn't overlap the footer. One-click switches:
+- chat open + click hamburger → chat slides down, drawer slides in.
+- drawer open + back-arrow → close, then click chat in footer.
 ** SHIPPED vetted bad reason picker :bug:
 CLOSED: [2026-04-26]
 :LOGBOOK:
