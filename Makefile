@@ -21,7 +21,7 @@
 -include .env.local
 export
 
-.PHONY: up up-core up-full down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai pipeline-url doctor doctor-poller list help
+.PHONY: up up-core up-full down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai scrape-url doctor doctor-poller list help
 
 # ── Dev stack ──────────────────────────────────────────────────────────────
 
@@ -88,7 +88,7 @@ ci-ai: ## Build the slim AI Docker image via Dagger (no camoufox — production 
 # ── AI Pipeline ────────────────────────────────────────────────────────────
 # Requires: CC_API_TOKEN and OPENAI_API_KEY set in .env or environment
 
-pipeline-url: ## Scrape a single job URL  (usage: make pipeline-url URL=https://...)
+scrape-url: ## Scrape a single job URL  (usage: make scrape-url URL=https://...)
 	cd agents && uv run caddy-pipeline --url $(URL)
 
 poller: ## Poll for hold scrapes against prod (pass ARGS="--engine chrome --headless")
