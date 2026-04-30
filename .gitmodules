@@ -6,4 +6,4 @@
 	url = https://github.com/overcast-software/career_caddy_frontend.git
 [submodule "agents"]
 	path = agents
-	url = git@github.com:overcast-software/career_caddy_ai.git
+	url = git@github.com:overcast-software/career_caddy_agents.git
