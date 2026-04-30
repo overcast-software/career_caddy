@@ -352,6 +352,18 @@ the existing stub has a NULL company (Microsoft regression #22 in the
 =stage5.fingerprint_null_risk= warnings once the introspection PR
 (E+F+H) ships, so we'll have data on how often the precondition fires
 before designing the fix.
+** SHIPPED Coerce JobPost.apply_url_status None → "unknown" on save [api]
+CLOSED: [2026-04-30 Thu]
+Frontend manual-create POSTs were 500ing with =null value in column
+"apply_url_status" of relation "job_post" violates not-null
+constraint=. Ember Data serializes unset string =@attr= as =null= on
+=createRecord=, so the JSON:API body carried =apply_url_status: null=.
+The model =default="unknown"= is Python-side only — Django's =AddField=
+backfills existing rows then drops the DB DEFAULT, so an explicit
+=None= bypasses the default and lands as =NULL= in the INSERT. Coerced
+in =JobPost.save()= so every write path is protected, not just the
+viewset =create=. Regression test in
+=test_job_post.test_apply_url_status_none_coerces_to_unknown=.
 ** SHIPPED scrape.show: drop redundant Queue button, rename Parse → Re-parse [frontend]
 CLOSED: [2026-04-30 Thu]
 The /scrapes/:id subnav had three near-synonymous buttons: Retry
