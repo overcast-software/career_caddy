@@ -19,14 +19,26 @@ every resource.
 
 ## Architecture Overview
 
-| Component | Stack | Role |
+Three independently deployable submodules:
+
+| Submodule | Stack | Role |
 |-----------|-------|------|
 | `frontend/` | Ember.js 6.x SPA | User interface, JSON:API client |
-| `api/` | Django REST Framework | Data layer, extraction, AI orchestration |
-| `agents/` | Pydantic-AI + MCP servers | Browser automation, email pipeline, agents |
-| Chat service | Starlette SSE (in `agents/`) | Streaming AI chat with page-context awareness |
-| MCP server | FastMCP (in `agents/`) | Public read-only career data tools for MCP clients |
-| Hold-poller | Standalone worker (in `agents/`) | Polls API for queued scrapes, runs browser locally |
+| `api/` | Django REST Framework + PostgreSQL | Data layer, extraction, AI orchestration |
+| `agents/` | Pydantic-AI + MCP + Camoufox | Agent runtime, MCP servers, browser scraper, hold-poller |
+
+Inside `agents/` (see `agents/README.md` for full layout):
+
+| Folder | Role |
+|--------|------|
+| `agents/agents/` | Pydantic-AI agent definitions (job_extractor, obstacle, onboarding, career_caddy CRUD) |
+| `agents/mcp_servers/` | 4 MCP servers — `chat_server` and `public_server` ship to **prod** (`:8031` chat, `:8030` public at `mcp.careercaddy.online`); `browser_server` and `career_caddy_server` are **local-only** |
+| `agents/browser/` | Camoufox + Playwright engine (local-only) |
+| `agents/scrape_graph/` | pydantic-graph state machine for scrape + extract |
+| `agents/pollers/` | Long-running daemons (`hold_poller`, `score_poller`) |
+| `agents/tools/` | One-shot operator scripts (`manual_login`, `discover_sites`, etc.) |
+
+A sibling toolkit, [`career_caddy_automation`](https://github.com/overcast-software/career_caddy_automation) ("cc_auto"), drives Career Caddy entirely over HTTP for email triage and other personal automation. It's not a submodule — self-hosters point it at any Career Caddy domain via the `CC_API_BASE_URL` / `CC_MCP_URL` / `CC_API_TOKEN` env trio.
 
 **Why Ember.js?** The app has complex nested routes (job post → application → question →
 answer) and many inter-resource relationships. Ember's conventions for nested routing, the
@@ -120,7 +132,7 @@ make down
 
 ```bash
 make up              # Start the full dev stack
-make up-full         # Dev stack + hold-poller (scrapes hold jobs locally)
+make up-full         # Dev stack + browser-mcp service (port 3004)
 make down            # Stop everything
 make logs            # Follow live logs from all services
 make doctor          # Check your environment is set up correctly
