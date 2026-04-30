@@ -1,9 +1,9 @@
 [submodule "api"]
 	path = api
-	url = https://github.com/overcast-software/career_caddy_api.git
+	url = git@github.com:overcast-software/career_caddy_api.git
 [submodule "frontend"]
 	path = frontend
-	url = https://github.com/overcast-software/career_caddy_frontend.git
+	url = git@github.com:overcast-software/career_caddy_frontend.git
 [submodule "agents"]
 	path = agents
 	url = git@github.com:overcast-software/career_caddy_agents.git
