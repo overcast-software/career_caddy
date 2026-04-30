@@ -332,6 +332,37 @@ Touched: =agents/obstacle_agent.py=, =lib/scrape_graph/nodes_obstacle.py=,
 AI PR #33.
 ** PROJ Feature sorting tables
 * Inbox
+** TODO JobPost dedupe — merge company_id into NULL-fingerprint stubs [api]
+:PROPERTIES:
+:CREATED: [2026-04-30]
+:END:
+Followup from the cc_auto pipeline migration plan
+([[file:~/.claude/plans/zippy-booping-donut.md]]). When
+=create_job_post_with_company_check= finds an existing post with link match
+but the existing post has =company_id=NULL= while the incoming request
+supplies =company_id=, prefer merging the company_id into the existing post
+rather than creating a duplicate. PR #74's =merge_empty_fields_from_attrs=
+covered the link-match path on full posts; this extends to the case where
+the existing stub has a NULL company (Microsoft regression #22 in the
+:IMPORTANT: tally). cc_auto's stage-5 introspection will surface
+=stage5.fingerprint_null_risk= warnings once the introspection PR
+(E+F+H) ships, so we'll have data on how often the precondition fires
+before designing the fix.
+** TODO Scrape diagnostic panel on /scrapes/<id> [frontend]
+:PROPERTIES:
+:CREATED: [2026-04-30]
+:END:
+When a scrape ends in =ExtractFail= or =ObstacleFail=, the user has to dig
+through logfire to see what happened (Tier0CSS / Tier1Mini / Tier2Haiku
+outputs, screenshot, page text the extractor saw). The dev-side answer is
+=caddy-trace-scrape <id>= (G in the migration plan); the durable
+user-facing answer is a small diagnostic panel on =/scrapes/<id>= that
+pulls the graph trace + screenshots + LLM tier outputs into one view.
+Scope: read-only, gated to staff or scrape-owner. Source of motivation:
+[[https://careercaddy.online/scrapes/217][scrape 217]] (LinkedIn GitHub
+"Senior Software Engineer Code Scanning", correctly landed but extractor
+failed on both tiers — no JobPost created, user couldn't tell why
+without external tooling).
 ** TODO system light dark
 ** TODO fix-span-issue:019dd70d001149d665450e1682846341 :logfire:bug:
 ** TODO lost connection while polling :bug:
