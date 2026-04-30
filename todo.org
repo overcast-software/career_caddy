@@ -462,6 +462,18 @@ feedback_async_hasmany_js). Defense-in-depth in =services/pollable.js=
 =/null= or =/undefined= and wraps the message in a single =<span>= so the
 =.alert= flex container doesn't collapse the whitespace before the link
 text (visible as e.g. "Lostconnection while polling.").
+** SHIPPED Spinner contrast + scrapes/list SpinnerInline swap :frontend:
+CLOSED: [2026-04-30]
+Two follow-ups to the SpinnerInline batch:
+- =components/spinner-inline.hbs= — bumped =dark:text-gray-400= →
+  =dark:text-gray-200= so the "Generating…" label reads on the dark
+  subnav (was washing out on the mid-blue band).
+- =components/scrapes/list.hbs= — was missed in the original
+  SpinnerInline rollout; still rendered the inline animated-SVG block
+  with =text-gray-400= on the wrapper, so the SVG inherited gray and
+  the spinner had no accent color at all on /scrapes (visible in the
+  "hold" status row). Replaced with =<SpinnerInline @label={{or
+  scrape.status "pending"}} />= so it picks up the accent ring.
 ** SHIPPED Topbar spinner: dedicated reserved row beneath header :frontend:
 CLOSED: [2026-04-30]
 The "AI is generating your answer…" indicator used to share the
@@ -595,6 +607,7 @@ lever + jobs, jobot, indeed, ziprecruiter), let the poller pick up,
 confirm =JobPost.apply_url{,_status,_resolved_at}= populates and
 the =<ApplyDestination>= chip renders correctly on
 =/job-posts/:id=. Tweak the seed when a host doesn't match.
+** TODO deleting a job-post makes job-posts.index freak out and claim job-post doesn't have a company
 
 ** TODO Reports: applies-by-hostname cut on sources sankey
 Add an "applies-by-hostname" cut on the sources sankey distinct
