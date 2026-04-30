@@ -146,52 +146,7 @@ Career Data this session. Still TODO:
   the current one so Career Data picks it up; then add a job post")
   and embed it as an App Guide section the agent can quote.
 
-** SHIPPED Deprecate synchronous browser-MCP scrape; poller is the one true path :APPROVED:
-- State "SHIPPED"    from "TODO"       [2026-04-28]
-Shipped 2026-04-28 across api PR #65 + frontend PR #80 + ai PR #22
-(parent =3ca5003=, Deploy 25076723433 green). api removed Scraper +
-a2a_client + mcp_client + BROWSER_SERVICE_URL (~660 LOC); =POST
-/scrapes/= now defaults all creates to =status='hold'= and =redo=
-flips to hold instead of dispatching. Frontend two stragglers
-(=actions.js= jp toolbar, =controllers/job-posts/show/scrapes.js=
-jp.show.scrapes new-scrape) flipped to explicit =status: 'hold'=
-with 409 dedupe handling. ai/CLAUDE.md marks the synchronous path as
-removed; =browser_server.py='s =scrape_page= MCP tool stays for
-ad-hoc / exploratory use only.
-
-[2026-04-18 api+ai] Surfaced during AW e2e. When the user asked the
-chat agent to "scrape this LinkedIn URL", the API tried a direct
-=POST http://localhost:3012/scrape_job= and failed with
-=ConnectionError= because the browser-MCP service wasn't running — we
-run hold-pollers now, not browser-MCP.
-
-The synchronous-scrape path is legacy. The hold-poller pattern is the
-supported architecture: scrape records are created with =status="hold"=,
-the poller picks them up, extracts, and updates the record. No direct
-HTTP-to-scrape-service calls needed.
-
-Tasks:
-- [ ] Find every call site that hits =localhost:3012= / the scrape
-  service directly. Likely candidates: some scrape action on the
-  ScrapeViewSet, a retry path, an extract path. Grep for =3012= and
-  =scrape_job=.
-- [ ] Replace each with the hold-poller pattern: create/update the
-  scrape with =status="hold"=, return 202, and let the poller handle
-  it. Already the path =create_scrape= takes on new scrapes; bring
-  legacy triggers into line.
-- [ ] Remove the browser-MCP SSE server from =docker-compose.yml= (or
-  flag it as optional-not-recommended). Currently lives at port 3004;
-  the 3012 call may be a different legacy listener — audit.
-- [ ] Update =ai/CLAUDE.md= to state that the hold-poller is the only
-  supported scrape path. Mark the synchronous scrape API as deprecated
-  there.
-- [ ] Update AW behavior (and main chat) so "scrape this URL" produces
-  a =create_scrape(url=..., status="hold")= + "Queued for scraping,
-  the poller will pick it up" reply. No synchronous wait, no localhost
-  call.
-- [ ] Remove legacy browser-MCP client code once no callers remain.
-
-** TODO AW: navigate on intent, don't just instruct                :APPROVED:
+** WAIT AW: navigate on intent, don't just instruct :APPROVED:
 [2026-04-18 ai+frontend] Hit during Agent Wizard e2e: AW says "Head
 over to Job Postings to add a job post" without emitting a navigate
 marker or a clickable link. The user still has to find the page. Two
@@ -229,30 +184,9 @@ Tasks:
 Use more recent conventions.
 *** nuclear delete is and the other buttons in that dialogue box are in the wrong spot.  should be above paste.
 
-** LOOP As a superuser I want to be able to manage user accounts :APPROVED:
+** LOOP [#C] As a superuser I want to be able to manage user accounts :APPROVED:
 [[file:notes.org::*Superuser account management][Considerations → notes.org]]
 *** TODO decide on user roles and be able to manage them as admin
-
-** SHIPPED IN_PROGRESS Hold poller + multi-model pipeline :APPROVED:
-CLOSED: [2026-04-23 Thu 19:50]
-:PROPERTIES:
-:STARTED:  [2026-04-14 ai+api+frontend]
-:END:
-[[file:notes.org::*Hold Poller, Screenshots, Multi-Model Pipeline][Plan → notes.org]]
-All subtasks done except end-to-end test.
-*** DONE Pluggable browser engine (Camoufox or Playwright Chromium + stealth)
-CLOSED: [2026-04-16 Wed]
-=--engine camoufox|chrome= + =--headless/--headed= CLI args on browser_server, hold_poller, manual_login.
-Sessions portable across engines. Chromium path ARM-compatible for Pibu.
-*** DONE Screenshot upload via API + on-demand viewer
-CLOSED: [2026-04-16 Wed]
-Poller uploads screenshots via =POST /scrapes/{id}/screenshots/=. API stores in =screenshots/{id}/= folders.
-Frontend: staff sees filename list, click to reveal image (fetched with auth via blob URL).
-Queue button sets scrape to =hold= for poller pickup. Status notes on all transitions.
-*** DONE End-to-end test: queue → poller → screenshot → viewer
-CLOSED: [2026-04-16 Wed]
-Tested locally: queue scrape 59, poller scraped + uploaded screenshot, clicked filename in UI, image displayed.
-
 
 * Features — PENDING APPROVAL
 
@@ -266,13 +200,13 @@ I have not approved the list
 ** TODO Ian Finnis letter :PENDING_APPROVAL:APPROVED:
 [[file:notes.org::*Ian Finnis letter][Considerations → notes.org]]
 
-** PROJ Electron desktop app feasibility                          :PENDING_APPROVAL:
+** PROJ [#C] Electron desktop app feasibility :PENDING_APPROVAL:
 [[file:notes.org::*Electron Desktop App — Feasibility Study][Architecture + trade-offs → notes.org]]
 
-** TODO Reactive Resume plugin resumerx :PENDING_APPROVAL:
+** TODO [#C] Reactive Resume plugin resumerx :PENDING_APPROVAL:
 [[file:notes.org::*Reactive Resume as a PDF-render plugin][Plugin architecture + scope → notes.org]]
 
-** TODO ResumeRX MVP spike [api]
+*** TODO ResumeRX MVP spike [api]
 [2026-04-20] Pre-plugin round-trip proof on =feature/rxresume-mvp=.
 Steps: (1) =api/rxresume-dev.yml= compose brings up rxresume +
 postgres + minio + chromium on localhost:3333; (2) manual API-key
@@ -285,10 +219,25 @@ feeds the eventual plugin PR.
 
 * Features — Open TODOs
 
-** KILL Flash/highlight main content area on chat reload [frontend]
-CLOSED: [2026-04-28 Tue 18:33]
 ** IDEA Flash message slide-wipe transition [frontend]
 Queue sequential display instead of stacking. First flash finishes its time, slides left, next slides in.
+** SHIPPED Surface =canonical_link= on JobPostSerializer [api]
+CLOSED: [2026-04-30 Thu]
+=JobPostSerializer.attributes= now includes =canonical_link= (the api-computed
+dedupe key, auto-populated in =JobPost.save()= via =canonicalize_link()=).
+Lets cc_auto's email pipeline drop its local URL-strip duplicate of
+=_TRACKING_PARAMS= and read the canonical key back from the response —
+eliminates the long-standing drift class where local + server canonicalizers
+diverged. Test added: =test_job_post_canonical_link_serialized.py= covers
+utm-stripping + null-link cases. API PR #76.
+** SHIPPED Closed chip on /job-posts list rows [frontend]
+CLOSED: [2026-04-30 Thu]
+Small red "Closed" chip in =app/components/job-posts/list.hbs= when
+=jobPost.postingStatus === "closed"=. Detail page already surfaced this; the
+list didn't. Only visible when the user toggles =include_closed=true= via
+the existing FilterPill — without it, closed/open posts mixed indistinguishably.
+HyperUI/Tailwind utilities only; matches the existing duplicate-of and
+needs-scrape chip styling. Frontend PR #91.
 ** SHIPPED Audit redundant parent columns in child route list components [frontend]
 CLOSED: [2026-04-29 Wed]
 =JobApplications::Compact= now takes =@showCompany= (default true). Hidden on
@@ -332,6 +281,21 @@ Touched: =agents/obstacle_agent.py=, =lib/scrape_graph/nodes_obstacle.py=,
 AI PR #33.
 ** PROJ Feature sorting tables
 * Inbox
+** TODO AI chat still uses career data when grabbing my name
+** TODO AI still decided to update_anser tool instead of create_answer.  It did pull the correct context and gave a generic answer blowing away the one I wanted to interate on.
+** TODO I have two answers for a question on https://careercaddy.online/companies/10/questions/70/answers
+answers do not pull up
+then when I click <- questions button
+https://careercaddy.online/companies/10/questions
+it's completely blank
+https://careercaddy.online/companies/10/questions/70
+will show me answers however.
+** TODO companies.show.job-applcations.index needs a "+new"  button
+** TODO AI chat will put answers in the chat but not write new answers with MCP
+** TODO when adding "vetted bad/good' the current filters on jp.index filter out the item dynamically
+** TODO move spinner to header.  doesn't block subnav
+** TODO result from scrape https://careercaddy.online/scrapes/218:
+If are copying this link from a mail reader please ensure that you have copied all the lines in the link.
 ** TODO JobPost dedupe — merge company_id into NULL-fingerprint stubs [api]
 :PROPERTIES:
 :CREATED: [2026-04-30]
@@ -348,6 +312,8 @@ the existing stub has a NULL company (Microsoft regression #22 in the
 =stage5.fingerprint_null_risk= warnings once the introspection PR
 (E+F+H) ships, so we'll have data on how often the precondition fires
 before designing the fix.
+** TODO scrape.show
+queue retry and parse are very redundant sounding
 ** TODO Scrape diagnostic panel on /scrapes/<id> [frontend]
 :PROPERTIES:
 :CREATED: [2026-04-30]
@@ -363,12 +329,16 @@ Scope: read-only, gated to staff or scrape-owner. Source of motivation:
 "Senior Software Engineer Code Scanning", correctly landed but extractor
 failed on both tiers — no JobPost created, user couldn't tell why
 without external tooling).
+** TODO didn't we want mailto: as a link ?
 ** TODO system light dark
-** TODO fix-span-issue:019dd70d001149d665450e1682846341 :logfire:bug:
+** KILL fix-span-issue:019dd70d001149d665450e1682846341 :logfire:bug:
+CLOSED: [2026-04-30 Thu 12:36]
+TOO OLD
 ** TODO lost connection while polling :bug:
-"Lost"
+"Lost" had href of
 https://careercaddy.online/scrapes/null
-** TODO scrape error :bug:
+** KILL scrape error :bug:
+CLOSED: [2026-04-30 Thu 12:36]
 2026-04-28 19:21:32,637 INFO httpx: HTTP Request: POST https://api.careercaddy.online/api/v1/scrapes/196/graph-transition/ "HTTP/1.1 201 Created"
 2026-04-28 19:22:02,649 WARNING lib.scrape_graph._artifacts: capture_debug_artifact: screenshot failed scrape_id=196 reason=obstacle_fail
 Traceback (most recent call last):
@@ -401,23 +371,12 @@ Call log:
 
 2026-04-28 19:22:02,845 INFO httpx: HTTP Request: GET https://api.careercaddy.online/api/v1/scrapes/196/ "HTTP/1.1 200 OK"
 
-** TODO https://careercaddy.online/scrapes/191 :bug:
+** KILL https://careercaddy.online/scrapes/191 :bug:
+CLOSED: [2026-04-30 Thu 12:37]
 linkedin being dumb -investigate
 ** TODO source (i.e. email for job-post.show)
+surface this as a little bad
 ** TODO replace ↗ with {{link.hostname}} ↗
-** SHIPPED [#A] Hold-poller / score-poller broken: api_tools YAML cutover unparseable as JSON :bug:ai:
-- State "SHIPPED"    from "TODO"       [2026-04-29]
-CLOSED: [2026-04-29]
-Surfaced [2026-04-29] from =make poller ARGS='--attended'= traceback
-=json.decoder.JSONDecodeError: Expecting value: line 1 column 1=. The
-MCP slim-response cutover (#25) flipped =api_tools._respond= to YAML
-with no ={success, data}= envelope; both pollers were still
-=json.loads(raw)= and dereferencing the old envelope. Every poll cycle
-threw and was retried — prod hold queue was effectively idle.
-Fix (ai PR #29): switch =hold_poller.poll_once= / =_fetch_profile= and
-=score_poller._collect_candidates= / =_score_one= to =yaml.safe_load=,
-check =resp.get("error")=, and read the slim list path =data["data"]=.
-Drop the unused =json= import in hold_poller; add =yaml= to score_poller.
 ** TODO [#A] Harden =make ci= so it cannot return green-but-broken [dagger]
 [2026-04-29] Tally #9/#13/#14/#19 are all the same shape: Dagger
 =call build-api= / =call build-frontend= summarize a successful build
@@ -454,213 +413,11 @@ Acceptance:
 - README / agent guidance updates to drop the "grep for # pass N
   yourself" workaround — the tally rules can stop chasing it.
 - New tally entry retiring tally #9/#13/#14/#19 as superseded.
-** TODO Seed linkedin =rememberme_candidates= for the account-chooser tile [api]
-[2026-04-29] Scrape 202 (=https://www.linkedin.com/uas/login?session_redirect=...=)
-landed on the LinkedIn "Welcome Back" account chooser with the
-remembered identity rendered (Doug Headley row + "Sign in using
-another account" row). =ObstacleRememberMe= ran twice and didn't match
-any selector in the existing seed; ObstacleAgent burned ~66s and
-=ObstacleFail=-ed with =selector_tried=null=. Live profile patched on
-=mcp.careercaddy.online= via =update_scrape_profile= to add candidate
-selectors (=button[aria-label*='Sign in as']=,
-=button[data-tracking-control-name*='rememberme_account']=,
-=[data-tracking-control-name*='homepage_basic_member_profile']=,
-=div[role='button'][aria-label*='Sign in']=). Follow-up: backfill the
-seed migration in =api/job_hunting/management/commands/seed_apply_resolver_configs.py=
-(or wherever the linkedin =rememberme_candidates= seed lives) with the
-new candidates, plus a test fixture asserting the chooser-tile DOM is
-matched. Then re-queue scrape 202 to verify before promoting to SHIPPED.
-** SHIPPED [#A] Sidebar + chat as universal slide-in panels [frontend]
-- State "SHIPPED"    from "TODO"       [2026-04-28]
-CLOSED: [2026-04-28]
-Rolls up three #A complaints into one frontend ship:
-
-1. =Sidebar on small screen — full height >> partial height=. Sidebar
-   now renders as a slide-in drawer (the mobile pattern) at all
-   viewport sizes. Drawer is z:80 above =.site-header= (z:70) and
-   =.mobile-overlay= (z:75) — the user sees the entire sidebar top to
-   bottom. Persistent grid =.course-sidebar= column hidden. Close via
-   the back-arrow inside the drawer or by clicking the dimmed overlay.
-2. =Chat animation comes from bottom (good!) but subnav crowded from
-   the right=. Chat panel is now a bottom-sheet at all viewport sizes,
-   45dvh (under half the visible screen). It never claims a grid
-   column, so route-main keeps full width whether chat is open or
-   closed. Subnav cap on `(width <= 767px)`: =.tee-box= max 2.5lh,
-   =overflow-x: auto=, =.tee-center= no wrap.
-3. =List skeleton re-fires on return visit=. New
-   =app/utils/list-model.js= caches the InfinityModel on the route
-   instance keyed by stringified params. Applied to all 8 list routes
-   (job-posts, job-applications, companies, answers, questions,
-   scores, scrapes, summaries). Cache invalidates when refreshModel
-   queryParams change. Skeleton fires only on first visit; return
-   visits show the previous data instantly.
-
-Switching: =course--chat-open= hides =.route-footer= so the chat
-input doesn't overlap the footer. One-click switches:
-- chat open + click hamburger → chat slides down, drawer slides in.
-- drawer open + back-arrow → close, then click chat in footer.
-** SHIPPED vetted bad reason picker :bug:
-CLOSED: [2026-04-26]
-:LOGBOOK:
-- State "SHIPPED"    from "DONE"       [2026-04-26]
-:END:
-[2026-04-26] Rebased the long-stale =feature/vetted-bad-reason= branches off current main and shipped:
-- api PR #55 (merged =fdac09a=): =JobApplicationStatus.reason_code= + =vetting_reasons.py= + migration =0057_job_application_status_reason_code=. Tests +15.
-- api PR #56 (merged =4386477=) — hotfix: 0057's dependency was incorrectly =0055_jobpost_dedupe_fields= (would two-leaf the migration graph and break =manage.py migrate= against prod's existing 0056). One-line fix to depend on =0056_scrapeprofile_apply_resolver_config=. Local CI passed because Dagger spins fresh DBs each run.
-- frontend PR #74 (merged =09b8d9b=): =<PowerSelectWithCreate>= reason picker on =<TriageActions>=, =@attr triage= reads from =meta.triage=, =Vetted Bad — Other= chip with truncate+hover.
-- parent PR #43 (merged =a3d8be7=) → Deploy.
-
-Follow-up: frontend PR #75 (merged =67e58a0=) consolidated =job-post.{js,ts}= → =.js=, fixing a latent bug where apply-resolver attrs were orphaned on a never-loadable =.ts= file. Parent bump PR #44 (merged =8013da6=). The =SPC m t S= → SHIPPED keybinding earned its keep on this very entry.
-** SHIPPED what happend to this job post.  I'm very qualified and I can't find it in prod
-CLOSED: [2026-04-29]
-[2026-04-29] Root cause: =JobPost= is a shared resource (unique
-=link=); the list view filtered through per-user fields, hiding any
-post the caller hadn't created/applied/scored/scraped. cc_auto's
-=POST /job-posts= hit the link-dedupe at =create()= L425, returned
-200 echoing the canonical row, but the caller had no relation to it
-→ invisible in the frontend list.
-
-api/ (PR #71): new =JobPostDiscovery(user, job_post, source)= join
-with unique=(user, post). =create()= records a discovery for the
-caller on every branch (link-dedupe, fingerprint-dedupe, fresh save)
-via =get_or_create=. =list()= short-circuits for =is_staff=true= (sees
-all posts); non-staff filter now includes =discoveries__user_id=
-alongside the existing four signals. Migration =0065= backfills
-discoveries for =user_id=2= against every existing JobPost so
-historical posts surface immediately (no-op on fresh installs).
-
-2026-04-24 05:08:16 INFO     Run complete: 3 email(s), 3 ok, 0 failed, 5 job-post(s) created
-  [ok  ] New Staff Engineer - RoR - Remote opportunity  →  0 new, 0 dup / 0 kept
-  [ok  ] Doug, you may want to apply for this job!  →  0 new, 0 dup / 0 kept
-  [ok  ] Data Engineering Solution Architect (Consulting) openings are available. Apply Now.  →  5 new, 0 dup / 5 kept
-2026-04-24 05:08:16 INFO     Next run in 58 minutes
-2026-04-24 06:06:20 INFO     Starting caddy-process run (limit=3)
-2026-04-24 06:06:20 INFO     Found 1 pending email(s)
-2026-04-24 06:06:20 INFO       1. [39 mins. ago] New DevOps Engineer opportunity  <Jobot Alerts>
-2026-04-24 06:06:20 INFO     Processing email: 7pDS_xlrQ_qwgZCUlj-D_g@geopod-ismtpd-108
-2026-04-24 06:06:43 INFO     HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
-2026-04-24 06:06:43 INFO     HTTP Request: GET https://url9751.alerts.jobot.com/ls/click?upn=u001.nzDSnI8Q0Y9UfX4wWW5-2BpLmDLJUw5zsWrRP9ba15kqrR71dcQvSkMZsi93OgqEl1GR-2BumVA48lmYvHGTzFLoAtDwCi8gLAj-2BYkZuxwP1kP5DyNoM9UFFbZkvLQEWuacP8gKFbvFPwpaJ675wvMlxj-2FyEL-2Bmn1AuqCNl4vmLefWPRusH1DmzDS1DEIj5P33CBNu4-_NE755C4sNRUd1jBQo-2BOPb25tnSx-2FZVStHCzurLhDLfRECb9UBFHWpCDz4V7HI5p6jysPqJ8U8vpHH9Hr-2BeKleDxDzHK9q-2FGIAfNtT-2FKdfnoiwnX6lSyufoJRPt6mdtrMrBje1hkRyOw6oYojCeyHJb0-2F0TJ9FfWz3E5Rn3uT-2BFqNNE9oOFGiUm5waSH5FtbGst9iPsEnsndo4TyfHhvswH8jPlPKLZo3EQ9inywXmGSV-2Blid0rtqE72GvtcLyp5GIZKSLAr4JJ3jN6nfh8-2FeDQ-3D-3D "HTTP/1.1 302 Found"
-2026-04-24 06:06:44 INFO     HTTP Request: GET https://jobot.com/details/devops-engineer/fdcc79bd01?utm_source=DigestAlert&utm_campaign=A&utm_medium=SimilarCandidate_JobTitle "HTTP/1.1 200 OK"
-2026-04-24 06:06:44 INFO       extractor kept 1 url(s): 1 job kept, 0 dropped, all links were valid job postings.
-2026-04-24 06:06:44 INFO     HTTP Request: GET https://api.careercaddy.online/api/v1/job-posts/?filter%5Blink%5D=https%3A%2F%2Fjobot.com%2Fdetails%2Fdevops-engineer%2Ffdcc79bd01 "HTTP/1.1 200 OK"
-*** the website says I applied for this job 5 months ago
-You applied to this job on Nov 28, 2025 (5 months ago)
-** SHIPPED [#A] Reorder scrape-graph: run obstacle handling before ResolveFinalUrl :scrape-graph:
-- State "SHIPPED"    from "STRT"       [2026-04-29]
-[2026-04-29] Shipped: =Navigate= now hands directly to
-=DetectObstacle= (was → =ResolveFinalUrl=). Clean detection routes
-to =ResolveFinalUrl=; walled detection routes through =Obstacle*=
-recovery and re-checks. =ExpandTruncations= drops its post-content
-obstacle re-check and goes straight to =Capture= (obstacles are
-caught upstream now).
-
-Recovers scrapes that land on auth interstitials (LinkedIn
-account-chooser, soft login walls) — previously the handler sat
-downstream of =ResolveFinalUrl + WaitReadySelector +
-ExpandTruncations=, so a wall that held the page open never
-reached it. Scrape 189 was the motivating case.
-
-PRs: ai #28 (topology + NODE_META refresh) + api #69
-(=graph_static.json= regen). Snapshot still 27 nodes / 37 edges.
-Drift test + =test_obstacle_agent_node= + =test_scrape_graph_state=
-all green; full ai suite 262 pass / 1 pre-existing failure.
-** SHIPPED MCP slim-response refactor — YAML + TOOL_SHAPES audit :ai:mcp:
-- State "SHIPPED"    from "TODO"       [2026-04-29]
-Shipped 2026-04-29 across four ai PRs (#24, #25, #26, #27) and parent
-bumps. Every career-caddy MCP tool now returns YAML with no
-={success, data, status_code}= envelope; lists return slim rows;
-single tools and writes collapse relationships to ids/counts; the
-=included= block is dropped. Audit dict =TOOL_SHAPES= in
-=ai/lib/api_tools.py= is the maintenance contract — one row per
-tool, agent never sees it.
-
-PRs:
-- #24 — helpers (=_respond=, =_relationships_to_counts=, =_slim_record=)
-  + populated =TOOL_SHAPES= dict, no behavior change.
-- #25 — global cutover: =_ok()= returns YAML via =_respond=; new
-  =get_data=/=post_data=/=patch_data= tuple-returning methods for
-  internal call-and-inspect; ~12 inline =json.dumps(APIResponse(...))=
-  blocks collapsed to =_respond(None, error=...)=.
-- #26 — list/table tools read =TOOL_SHAPES=. Audit tweak: list
-  =relationships= switched =omit= → =counts= so company-id et al
-  still surface as a single integer.
-- #27 — single, aggregate, write tools all read =TOOL_SHAPES=.
-  =get_career_data= per-section trim. =fetch_scrape_screenshot= meta
-  (no legacy success envelope).
-
-Net effect on a typical agent session: =get_current_user= drops from
-~10 KB → <1 KB; list tools shed ~80% of their bytes;
-=relationships= become single ints instead of arrays of
-={type, id}=. Agent reads YAML directly — no double-parse.
-
-Future work (NOT in scope):
-- TOON output. Plan defers; revisit after a week of YAML measurements
-  in =~/.claude/plans/cryptic-coalescing-spark.md=. If TOON would
-  shave >25% over YAML on representative tools, write a follow-up
-  plan; if <10%, drop.
-
-Design + audit reference: =notes.org::*MCP slim-response refactor [2026-04-29]=.
 ** TODO viewing a scrape from jp.show.scrapes.index should go to jp.show.scrapes.show
-** WAIT need to ensure poller to save session
-** SHIPPED Structured =accepting_applications= field on JobPost
-- State "SHIPPED"    from "TODO"       [2026-04-28]
-Shipped 2026-04-28 as =JobPost.posting_status= (open / closed / null).
-Renamed from initial =application_status= via api PR #67 + frontend
-PR #83 to avoid collision with =JobApplication.status= (the user's
-per-application state). =text_signals.detect_posting_status= +
-sticky-once-closed in =JobPostExtractor.persist=. List view hides
-closed by default with =?include_closed=true= opt-in.
-Follow-ups (separate TODOs):
-- disable Score / Cover Letter / Tailor buttons on =job-posts.show=
-  when =posting_status == "closed"=
-- Sankey "Closed" terminal node
-- poller log line on open → closed transition
-[2026-04-23] Companion to the linkedin =extraction_hints= update that
-makes the LLM lead closed-post descriptions with =[CLOSED — applications
-no longer accepted]=. The hint solves *visibility* (user sees it on the
-page) but the signal is still trapped in the description text — not
-queryable, not actionable.
-
-Why a column:
-- Filter the job-posts list to hide closed posts (default), with a
-  toggle to show.
-- Disable Score / Cover Letter / Tailor my resume buttons on
-  =job-posts.show= when closed — currently all three are live on dead
-  postings.
-- Sankey: a "Closed" terminal node so we can see what fraction of
-  hold-poller traffic lands on dead jobs.
-- Hold-poller bug-squash: if a post we already had goes from open →
-  closed on a re-scrape, we'd want to know.
-
-Sketch:
-- =JobPost.accepting_applications= (Boolean, null=True default null —
-  null = "unknown" so we don't lie about historical rows we never
-  scanned).
-- Extractor (=ParsedJobData= + =JobPostExtractor.persist=) populates
-  the field from the same phrase list now in the linkedin profile
-  hints. Hoist the phrase list into =job_hunting/lib/text_signals.py=
-  so the API extractor and (eventually) other host profiles share it.
-- Migration: backfill =null= (don't text-scan existing
-  =Scrape.job_content= eagerly — let next re-scrape fill it). Optional
-  management command for an aggressive backfill.
-- Frontend: tiny chip on =job-posts.show= header + filter on the
-  list view.
-- Tests: extractor sets =False= on each phrase, =True= on a normal
-  post; persist round-trips through the JSON:API serializer.
-
-Blast radius: 1 model field, 1 migration, 1 extractor function, 1
-serializer key, 1 chip + filter on the frontend. Bigger than the
-profile hint but not large.
 ** TODO I want to see the final_url in the UI
 We previously worked on getting the application_url
 but I want to see it on the screen.
 I would want to fix a scrape that didn't attempt to find that link
-** TODO I want to say why vetted bad
-It's going to be a good metric.
-
-
-** [?] I'm not seeing sources coming through.
-not enough info
 ** SHIPPED [#A] if I change job-post company, all the questions, answers, etc. should change too.
 - State "SHIPPED"    from "TODO"       [2026-04-28]
 Shipped 2026-04-28 in api PR #60 (parent =26e424e=, Deploy
@@ -674,32 +431,6 @@ Children's textual content is intentionally NOT rewritten — Q&A,
 cover letters, applications are write-once-and-forget in practice.
 
 ** TODO [#B] cover-letter spinner looks way cooler.  put it everywhere
-** SHIPPED [#A] Surface apply destination per host (seed ScrapeProfile.apply_resolver_config) :bug:
-- State "SHIPPED"    from "STRT"       [2026-04-29]
-:PROPERTIES:
-:STARTED:  [2026-04-26]
-:END:
-Foundation: apply-resolver Phase 2 (parent #41 + #48 tool-layer
-enforcement). Seed shipped [2026-04-28] via api migration 0062 +
-parent #52: =linkedin.com=, =greenhouse.io=, =boards.greenhouse.io=,
-=lever.co=, =jobs.lever.co=, =jobot.com=, =indeed.com=,
-=ziprecruiter.com=. Conservative selector subset per host; idempotent
-— operator overrides survive. Inventory + shape locked by
-=test_seed_apply_resolver_configs=. Tweaks land via follow-up
-migrations or =/admin= edits as drift surfaces.
-
-Follow-ups (each a separate TODO, not blockers on the seed):
-- [[*TODO Verify apply-resolver on a real scrape per seeded host][verify per host]]
-- [[*TODO Reports: applies-by-hostname cut on sources sankey][applies-by-hostname rollup]]
-
-Out of scope:
-- Stale-link health checker (cron 4xx-pings resolved =apply_url= and
-  demotes to =stale=).
-- ScrapeProfile UI editor in =/admin= so non-staff can extend per-host
-  configs.
-- Phase 3 learning loop: when the resolver fails on a host, batch
-  candidate selectors for offline review and promote into the profile.
-
 ** TODO Verify apply-resolver on a real scrape per seeded host
 Queue one job URL per seeded host (linkedin, greenhouse + boards,
 lever + jobs, jobot, indeed, ziprecruiter), let the poller pick up,
@@ -714,103 +445,6 @@ resolve through to a real ATS, and the rollup should reflect the
 *destination* host, not the entry host.
 
 [[file:notes.org::*Apply-destination resolution (final URL behind the apply button)][Plan → notes.org]]
-
-** SHIPPED [#A] Scrape-graph pydantic-graph refactor [api+ai+frontend]
-- State "SHIPPED"    from "LOOP"       [2026-04-29]
-:PROPERTIES:
-:STARTED:  [2026-04-23]
-:END:
-Every Remaining checkbox shipped: Phase 1d [2026-04-23], primary
-cutover [2026-04-23], =ResolveApplyUrl= Phase 2 [2026-04-26], shadow
-cleanup [2026-04-27]. Obstacle reorder (Navigate → DetectObstacle →
-ResolveFinalUrl) shipped [2026-04-29] as a follow-on, paired with
-the apply_resolver_config seed for the top 8 hosts. The graph runs
-unconditionally for every scrape; legacy =_process_scrape_legacy=
-and =SCRAPE_GRAPH_MODE= are gone.
-
-Open follow-ups (each its own TODO, not blockers on the refactor):
-- [[*TODO Verify apply-resolver on a real scrape per seeded host][verify per-host apply resolution]]
-- [[*TODO Reports: applies-by-hostname cut on sources sankey][applies-by-hostname rollup]]
-
-[[file:notes.org::*Session summary — scrape-graph Phase 1][Session summary → notes.org]]
-Plan: =~/.claude/plans/snazzy-crafting-whale.md=. Phases 1a/1b/1c shipped
-[2026-04-23] under =v0.0.1= baseline:
-- 1a (api): persistence endpoints, graph fields on ScrapeStatus,
-  structure/mermaid/aggregate/trace reads, per-tier helper factoring,
-  dump_graph_traces command, api-repo =--keepdb= CI fix. PR #46.
-- 1b (ai): =ai/lib/scrape_graph/= skeleton — state, tracing, URL
-  canonicalize, scrape/obstacle/extract nodes, runner. Feature flag
-  =SCRAPE_GRAPH_MODE= defaults off. PR #5.
-- 1c (frontend): =/admin/scrape-graph= mermaid view +
-  =/scrapes/:id/graph= per-scrape trace. Lazy-imported mermaid.js
-  component. PR #63.
-- Parent bump #29 deployed.
-
-Remaining:
-- [X] *Phase 1d* — [2026-04-23] shipped on branch
-  =chore/bump-scrape-graph-phase-1=:
-  - Graph build fixed: cross-module forward refs now resolve because
-    =graph.py= constructs the =Graph= at module scope with every node
-    class in globals; pydantic-graph reads =f_locals= of the caller.
-  - =PersistScrape.run= gained explicit return annotation; xfail smoke
-    test flipped to passing.
-  - Dispatch wired via =hold_poller._maybe_dispatch_graph=; runs the
-    extract-only sub-graph after the legacy scrape when
-    =SCRAPE_GRAPH_MODE != off=.
-  - =POST /api/v1/scrapes/:id/llm-extract/= endpoint landed (delegates
-    to =JobPostExtractor.analyze_with_ai(model_override=...)=); 3 new
-    =LlmExtractTests= green.
-  - Shadow-mode suppression in =PersistJobPost= / =UpdateProfile= so
-    parity testing never mutates real data.
-  - Single source of truth: =ai/lib/scrape_graph/graph.py::NODE_META=
-    + =export_graph_structure()= → committed =graph_static.json= in
-    api/. =caddy-export-graph= CLI regenerates; drift test in ai/ CI.
-  - Hand-maintained api snapshot replaced; 3 phantom edges removed.
-- [X] *Primary cutover* — [2026-04-23] shipped. =SCRAPE_GRAPH_MODE=
-  now defaults to =primary=. Hold-poller opens a Playwright page,
-  builds =ScrapeGraphState=, and hands off to =run_scrape_graph= —
-  legacy =scrape_page= path is preserved as a kill-switch behind
-  =SCRAPE_GRAPH_MODE=off=. Moved into graph nodes as part of the
-  cutover:
-  - Screenshot + upload → =Capture= node.
-  - Selector discovery (discovered_selectors + candidate_ready_selector
-    probation) → =Capture= (reads) + =UpdateProfile= (writes with
-    probation gates ported from =_update_profile_from_results=).
-  - Final scrape status transitions (=completed=/=failed=) →
-    terminal nodes (=ResolveApplyUrl=, =DuplicateShortCircuit=,
-    =ExtractFail=, =ObstacleFail=) via =_patch_scrape_status= helper.
-  - =PersistScrape= now writes a poller-equivalent delivery note.
-  Soak as it runs; fix bugs as they appear. Once steady, prune
-  =_process_scrape_legacy= and the =off= mode.
-- [X] =ResolveApplyUrl= Phase 2 [SHIPPED 2026-04-26] — real resolver
-  landed [2026-04-25]; consolidated job-post model [2026-04-26] so the
-  attrs are actually live. =ai/lib/scrape_graph/apply_resolver.py=
-  reads profile-driven =apply_resolver_config= (internal markers →
-  link selectors → button click), PATCHes new
-  =/api/v1/scrapes/:id/apply-url/= endpoint which writes through to
-  =JobPost.apply_url{,_status,_resolved_at}=. New
-  =ScrapeProfile.apply_resolver_config= JSONField (migration 0056).
-  Frontend =<ApplyDestination>= chip on =/job-posts/:id= (resolved →
-  emerald "Apply →" external link; internal/stale/failed → status
-  chips). Plan: =notes.org::*Apply-destination resolution (final URL
-  behind the apply button)=. No per-host configs seeded yet — hosts
-  remain =unknown= until profile owners populate the field; same
-  no-op-until-configured shape as =url_rewrites=.
-- [X] *Shadow cleanup* [SHIPPED 2026-04-27] — full collapse, not
-  just SHADOW. =GraphMode= enum + =get_mode= + =SCRAPE_GRAPH_MODE=
-  env all gone; SHADOW branches in =PersistJobPost= /
-  =UpdateProfile= / =_patch_scrape_status= deleted; legacy
-  =_process_scrape_legacy= + =_update_profile_from_results= +
-  =_apply_probation_gate= + probation thresholds removed from the
-  poller; graph runs unconditionally for every scrape. ai PR #18 +
-  api PR #61 (graph_static.json regen) + parent =bfa4139=, Deploy
-  25011646387 green. Net −290 lines in ai.
-
-Side work landed on the same branch:
-- Attended poller saves sessions on Ctrl-C (=ResidentBrowser.save_sessions=
-  writes per-domain cookies to =~/.career_caddy/sessions/=).
-- Pre-flight auth check in =hold_poller= aborts before browser launch
-  if =CC_API_TOKEN= is rejected.
 
 ** TODO [#B] JobApplication.tracking_url — per-user post-submit status link [api+automation]
 [2026-04-22] Separate from the =JobPost.application_url= work (which is
@@ -845,29 +479,6 @@ up. Same mismatch will land anywhere else we add more subnav controls
 Pick one and roll out so subnav reads as a single bar. Blocks clean
 filter-menu rollout beyond job-posts.
 ** LOOP toolbar list of candidates
-*** DONE filter stubs — explanation of stubs
-CLOSED: [2026-04-20 Mon]
-[2026-04-20 frontend] Added native =title= tooltips to the "Hide
-stubs" buttons (both the top-right variant and the filter-pill
-variant) and to the active =hide stubs / stubs only= filter chip on
-=/job-posts=. Tooltip text: "Stub = job post with a thin description
-(<60 words) — usually a tracker-click or partial paste, scoring is
-unreliable." Threshold mirrors =STUB_MIN_WORDS= in
-=application_flow.py=. Non-blocking if we later want a richer popover.
-*** TODO review stubs
-
-** SHIPPED [#A] Add title + date_range to docx template Experience/Project blocks [api]
-CLOSED: [2026-04-26]
-[2026-04-26 audit] Already resolved on main. The live export path
-(=GET /api/v1/resumes/:id/export/=) uses
-=lib/services/resume_docx_render.render_docx=, NOT the jinja template
-the TODO described. The renderer reads =exp["header_line"]= /
-=proj["header_line"]= from =resume_export_context.build_context=,
-which already includes =e.title= (=resume_export_context.py:97=) and
-=p.title= (=resume_export_context.py:178=). Test assertions:
-=test_resume_docx_render.py:78= ("Widget Lead") and =:82= ("Widget
-CLI"). Codepath shipped before today's audit.
-
 ** TODO Retire dead jinja resume-export path [api]
 [2026-04-26] Cleanup follow-up after [#A] audit. Three orphaned
 artifacts of the deprecated docxtpl-based export, all reachable only
@@ -899,36 +510,7 @@ solely for the dead surface. One PR, one concern.
 
 [[file:notes.org::*Resume Word-export jinja audit][Original audit]]
 
-** SHIPPED [#A] Canonicalize tracker URLs on scrape ingest [api+frontend]
-- State "SHIPPED"    from "TODO"       [2026-04-28]
-CLOSED: [2026-04-28]
-Shipped 2026-04-28 across api =feature/canonicalize-tracker-urls-on-ingest=
-+ matching frontend branch + parent bump.
-
-api/:
-- =job_hunting/lib/tracker_resolver.py=: =TRACKER_HOST_SUFFIXES= (sendgrid
-  ls/click variants, =click.ziprecruiter.com=, =email.mg.*=) plus a
-  LinkedIn =/comm/= path rule. HEAD-follow with GET fallback on 405,
-  3s timeout. Resolved URL piped through =job_post_dedupe.canonicalize_link=
-  so query-string trackers on the destination drop too.
-- =ScrapeViewSet.create()= resolves before the dedupe gate so two distinct
-  trackers that resolve to the same destination collapse on
-  =canonical_link=. 4xx/5xx → 400 =tracker_unresolved= (no doomed scrape).
-- New =Scrape.source_link= column preserves the original tracker URL.
-  Migration =0063_scrape_source_link=. Serializer exposes =source_link=.
-- Tests: 8 new resolver unit + 7 new view integration; existing 19
-  scrape tests still green.
-
-frontend/:
-- =models/scrape.js=: =sourceLink= attr.
-- =components/scrapes/item.hbs=: "Source Link" row below "URL", shown
-  only when =source_link= is present and differs from the canonical URL.
-
-Coordination follow-up (separate TODO): mirror the tracker host list
-into =cc_auto/src/agents/url_extractor.py= so an email-side resolution
-and a user-paste produce the same canonical form.
-
-** TODO Retire BaseSerializer.slim_attributes in favor of fields[type] [api]
+** WAIT Retire BaseSerializer.slim_attributes in favor of fields[type] [api]
 [2026-04-29] Once =fields[<type>]= sparse-fieldsets land (this PR), the
 =slim= flag and per-class =slim_attributes= become redundant — every
 caller that wants a slim representation can ask for exactly the
@@ -940,17 +522,8 @@ slim mode today) needs a separate decision — either always emit, gate
 on a different param, or move to its own endpoint. Filed alongside
 the BaseSerializer fields[<type>] patch.
 
-Resume is different in that we presume includes most of the time.
+*** Resume is different in that we presume includes most of the time.
 this problem seesaws on either remove slim and use includes explicitly and fields when you want slim.  removing implicit includes has it's own trade offs
-
-** TODO Mirror tracker host list into cc_auto url_extractor
-[2026-04-28] Follow-up to the api ingest canonicalization. Both repos
-must share the same tracker host list (=TRACKER_HOST_SUFFIXES= +
-LinkedIn =/comm/= rule), otherwise dedupe still cracks when an
-email-extracted link and a user-pasted link reach the API through
-different paths. Either lift the list into a shared config or
-duplicate verbatim with a comment pointing at
-=api/job_hunting/lib/tracker_resolver.py= as the canonical source.
 
 ** REFERENCE Jinja markup for the word template
 Source transcription of =api/templates/resume_export.docx=. Kept for audit
@@ -1017,187 +590,8 @@ Projects
 {%- endfor -%}
 {% endfor %}
 {% endif %}
-
-** SHIPPED Proactive chat nudge when onboarding incomplete + user idle [frontend]
-CLOSED: [2026-04-18 Sat]
-[2026-04-18 frontend] New =services/idle-nudge.js= subscribes to
-=routeDidChange=. On chime-eligible pages (gated by
-=onboarding.chimeInOnPage=) with the chat sidebar closed and
-=hasUnread= clear, arms a 30s idle timer (5s on empty onboarding-relevant
-indexes: =resumes/cover-letters/job-posts/answers .index=). User
-activity (=pointermove/keydown/scroll/touchstart=) resets it; on fire,
-flips =chat.hasUnread=true= so the footer button shimmers via the
-existing =aw-shimmer= class. Zero LLM cost. Booted from
-=routes/application.js= alongside =session.startActivityWatch()=.
-10 unit tests in =tests/unit/services/idle-nudge-test.js=.
-[[file:notes.org::*Proactive chat nudge for idle onboarding users][Plan → notes.org]]
-Plan file: =~/.claude/plans/frolicking-zooming-shell.md=.
-
-Follow-ups:
-- Auto-=sendMessage= synthetic prompt to pre-generate AW reply.
-- localStorage memory so dismissed shimmers don't re-fire on next visit.
-
-** NO dynamic OG tags
-CLOSED: [2026-04-20 Mon 20:46]
-
-** SHIPPED [#A] Scrape-quality gate + profile url_rewrites [api+ai+automation]
-CLOSED: [2026-04-23]
-Trigger: scrapes 172 (ziprecruiter =ekm/…= → Salesforce Lightning
-bootstrap shell) and 175 (indeed =?vjk=X= tracker → logged-in homepage
-job list) both terminated with =outcome=success=, hallucinated a
-JobPost, and poisoned =ScrapeProfile.update-from-outcome= learning.
-DetectObstacle's login-wall detector missed the loading shell; the
-extract LLM filled in plausible fields from 1KB of JS.
-
-api/:
-- =ScrapeProfile.url_rewrites=: new =JSONField=. Migration
-  =0054_scrapeprofile_url_rewrites.py=. Serializer attribute added.
-  Consumed by ai/ before Navigate; target audience is the offline
-  profile-sharpening script.
-
-ai/:
-- =url_canonicalize.apply_url_rewrites(url, rules)= — list of
-  ={match, rewrite}= regex pairs; first match wins; invalid regex
-  skipped silently.
-- Navigate node applies profile =url_rewrites= to =state.submitted_url=
-  BEFORE =page.goto=, sets =state.rewritten_url= breadcrumb. Indeed
-  vjk case now lands on =/viewjob?jk=X= directly.
-- New =ValidateExtraction= node between =EvaluateExtraction=-passed
-  and =PersistJobPost=. Rejects on =source_too_short= (<40 words) or
-  =loading_shell_fingerprint= (≥2 of: "sorry to interrupt", "css
-  error", "cookieenabled", "enable cookies", "please enable
-  javascript", "wd-body-loading"). Failures route to =ExtractFail= so
-  PR 35's debug-artifact invariant fires.
-- =graph_static.json= regenerated (27 nodes, 37 edges).
-- Tests: 4 new =apply_url_rewrites= cases in
-  =test_scrape_graph_state.py= incl. Indeed vjk; new
-  =test_validate_extraction.py= with Salesforce-shell repro. 25/25
-  scrape-graph tests pass; ruff clean.
-
-career_caddy_automation/:
-- =scripts/sharpen_profiles.py= — per-hostname, MCP-driven. Pulls
-  recent scrapes, groups by URL shape
-  (=path?sorted_query_keys=), classifies clean /
-  suspicious-thin / suspicious-list / failed, prints a table, and
-  emits =url_rewrites= suggestions. Seeded with the Indeed
-  =?vjk=X → /viewjob?jk=\1= rule. Dry-run only — write path lands
-  once suggestions are validated on more hosts.
-
-Intentionally deferred per user: rollback of JobPost 1201 and the
-two poisoned =ScrapeProfile.update-from-outcome= promotions.
-
-** SHIPPED [#A] Job-post dedupe — canonical link + content fingerprint [api+frontend]
-CLOSED: [2026-04-24]
-Trigger: =/job-posts/1184= (applied) and =/job-posts/1206= (scraping)
-were the same ziprecruiter posting minted twice because the
-=/ekm/<token>= URL differs per recruiter send and =link=-equality
-dedupe missed it. User asked for automatic detection with a soft
-label so a multi-tenant environment stays coherent.
-
-api/ (PR #52):
-- =job_hunting/models/job_post.py=: new =canonical_link= (indexed),
-  =content_fingerprint=, =duplicate_of= self-FK (=SET_NULL=).
-  Auto-populated in =save()=.
-- =job_hunting/models/job_post_dedupe.py= (new):
-  - =canonicalize_link()= strips known tracking query params
-    (=utm_*=, =gh_src=, =trk=, etc.); opaque tokens left alone.
-  - =fingerprint()= = =sha1(company_id | title | location)= with
-    =usedforsecurity=False= (per fix PR #53). Description is NOT
-    hashed — recruiter wording tweaks shouldn't break the match.
-  - =find_duplicate()= checks =canonical_link= first, then
-    fingerprint within a 30-day window. Null-fingerprint rows
-    skip dedupe.
-- =job_hunting/api/views/jobs.py= + =from_json= call
-  =find_duplicate= BEFORE insert; on hit returns the existing
-  canonical post (200), never mints a dupe.
-- =job_hunting/api/serializers.py=: exposes =duplicate_of_id=.
-- Migration =0055_jobpost_dedupe_fields.py= with composite
-  =(fingerprint, -created_at)= index + backfill of existing rows.
-- Kept fully separate from the =apply_url*= resolver fields —
-  dedupe reads =link= only, resolver reads/writes =apply_url=
-  only, no shared helpers, no cross-field lookups.
-- 14 new tests in =test_job_post_dedupe.py= pass; 10 existing
-  JobPost tests pass.
-
-frontend/ (PR #69):
-- =app/models/job-post.ts=: =duplicateOfId= attr.
-- =templates/job-posts/show.hbs=: amber "Duplicate of #N" chip
-  below the meta line, =LinkTo= to the canonical post.
-- =components/job-posts/list.hbs=: same chip inline next to the
-  title in the table view.
-- Chip is tenant-neutral (the relationship between two posts is
-  global); per-user "you applied to this" overlays still key off
-  =Score= / =JobApplication= records.
-
-Known limitations (left intentionally per user):
-- Different =Company= rows (e.g. "Disney" vs "Disney Software
-  Division") produce different fingerprints — those dupes survive.
-  Acceptable soft/ambiguous case; no auto-resolution.
-- Description tweaks (single-word changes) don't break the hash
-  since description isn't in the fingerprint.
-
-Follow-up ship PR #53 (api) / #71 (frontend) / #39 (parent) fixed
-bandit =B324= (sha1 usedforsecurity flag) and
-=ember-template-lint= =no-unused-block-params= that broke the
-first Deploy attempt.
-
-** SHIPPED [#A] Loading-skeleton substates for all parent paths [frontend]
-CLOSED: [2026-04-24]
-Trigger: user reported =/job-posts= (and other sidebar nav targets)
-felt unresponsive on prod — clicking the link hung on the previous
-page while the =model= hook resolved. Prod is compute-constrained,
-so a client-side perceived-latency fix was the right lever.
-
-Pattern: Ember renders a =<route>-loading.hbs= substate
-automatically when the model hook promise is pending. No route JS
-changes needed.
-
-frontend/ (PR #70 then PR #72):
-- =components/loading-skeleton.hbs= — shared 8-card animated-pulse
-  skeleton. =Tailwind= only, HyperUI-style. Renders via
-  ={{#each (array 1 2 ... 8)}}= (no unused block param, per lint
-  tally #14).
-- 13 per-route loading templates, each 6 lines
-  (=<RouteLayout><:main><LoadingSkeleton /></:main></RouteLayout>=):
-  - =templates/job-posts/index-loading.hbs= (first to ship, PR #70)
-  - =templates/job-applications/index-loading.hbs=
-  - =templates/companies/index-loading.hbs=
-  - =templates/cover-letters/index-loading.hbs=
-  - =templates/resumes/index-loading.hbs=
-  - =templates/scores/index-loading.hbs=
-  - =templates/scrapes/index-loading.hbs=
-  - =templates/questions/index-loading.hbs=
-  - =templates/answers/index-loading.hbs=
-  - =templates/career-data/index-loading.hbs=
-  - =templates/favorites-loading.hbs= (leaf top-level)
-  - =templates/caddy-loading.hbs= (leaf top-level)
-  - =templates/reports/activity/loading.hbs= (matches existing
-    =reports/application-flow/= and =reports/sources/= convention)
-
-Skipped for now: =admin.*= and =settings.*= — multi-tab containers
-that deserve their own loading shape rather than the generic
-8-card skeleton.
-
-User-reported outcome on prod after #40 Deploy landed: "love the
-skeleton fix."
+** TODO color code the job-application status in ja.index
 
 * Bugs 🐛
-** SHIPPED [#A] Chat: detect duplicate JobPost by link, offer navigate instead of re-create [ai] :bug:
-CLOSED: [2026-04-26]
-ai PR #14 (merged =fc3b2c8=): tightened the main chat =SYSTEM_PROMPT=:
-- Top-level rule names ALL create paths (job-post, scrape, application)
-  and explicitly covers URLs embedded inside pasted text.
-- New "Scraping URLs / handling pasted text that CONTAINS a URL"
-  section gates =create_scrape= on =find_job_post_by_link= first; on
-  hit emits =propose_actions= with an "Open existing job post"
-  navigate action and skips the create entirely.
-- 3 regression tests pin the literal phrases in =SYSTEM_PROMPT= so
-  vague instructions can't creep back.
-Paste/scrape side already shipped [2026-04-22]; this closes the
-chat-agent gap.
-
-Promote to SHIPPED after parent Deploy clears + live verify (paste a
-recruiter email containing a known JobPost URL → expect "Open existing
-job post" propose-actions instead of a new scrape).
 ** https://careercaddy.online/scrapes/189
 its a stubbed that short circuted
