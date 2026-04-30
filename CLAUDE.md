@@ -4,11 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Structure
 
-Three independently deployable components, each with its own `CLAUDE.md`:
+Three independently deployable submodules, each with its own `CLAUDE.md`:
 
 - `frontend/` — Ember.js 6.x SPA (see `frontend/CLAUDE.md`)
 - `api/` — Django REST Framework backend (see `api/CLAUDE.md` — not yet created)
-- `agents/` — Pydantic-AI agents + MCP servers (see `agents/CLAUDE.md`)
+- `agents/` — Pydantic-AI agents + MCP servers + browser scraper + hold-poller (see `agents/CLAUDE.md`)
+
+Inside the `agents/` submodule, top-level peer folders advertise the heterogeneity:
+
+- `agents/agents/` — Pydantic-AI agent definitions (the spine: job_extractor, obstacle, onboarding, career_caddy CRUD)
+- `agents/mcp_servers/` — Four MCP servers; `chat_server.py` and `public_server.py` ship to prod (`:8031` chat, `:8030` public at `mcp.careercaddy.online`); `browser_server.py` and `career_caddy_server.py` are local-only
+- `agents/browser/` — Camoufox + Playwright engine, credentials, sessions (local-only)
+- `agents/scrape_graph/` — pydantic-graph state machine for scrape + extract
+- `agents/pollers/` — long-running daemons (`hold_poller.py`, `score_poller.py`)
+- `agents/tools/` — one-shot operator scripts (`manual_login`, `discover_sites`, `export_graph_structure`, `fetch_chromium`)
+- `agents/lib/` — shared utilities (`api_tools.py` HTTP client, `toolsets.py`, `models/`, `history.py`, etc.)
+
+### Sibling consumer (not a submodule)
+
+`~/Network/syncthing/Projects/career_caddy_automation/` ("cc_auto") is a sibling toolkit for email triage and other workflows that drives Career Caddy entirely over HTTP — no Python imports cross the boundary. Self-hosters set the `CC_API_BASE_URL` / `CC_MCP_URL` / `CC_API_TOKEN` env trio and point cc_auto at their own Career Caddy domain.
 
 ## Getting Started (Full Local Dev)
 
@@ -44,7 +58,7 @@ make up-ai
 
 ```bash
 # Scrape a single job URL
-make pipeline-url URL=https://example.com/job
+make scrape-url URL=https://example.com/job
 ```
 
 ## Makefile Shortcuts
@@ -64,7 +78,7 @@ make test-api         # run API test suite
 make test-frontend    # run Ember QUnit tests
 make ci               # Dagger: lint + test API and frontend locally
 make ci-ai            # Dagger: build slim AI image (no camoufox)
-make pipeline-url URL=https://...   # scrape one job URL → add to Career Caddy
+make scrape-url URL=https://...   # scrape one job URL → add to Career Caddy
 make poller                          # hold-poller against prod (Camoufox default)
 make poller ARGS="--engine chrome"   # hold-poller with Chromium + stealth (ARM/Pi)
 make poller ARGS="--attended"        # headed browser with per-domain tabs; solve captchas manually (add --attended-delay for a 5s pre-preseed pause, or --attended-delay N for a custom wait)
@@ -164,6 +178,8 @@ feature/*  →  main
 ```
 
 No `develop` branch in practice — feature branches are cut from `main` and PR'd back to `main`. Submodules (`api/`, `frontend/`, `agents/`) commit first; the parent repo bumps the submodule pointers after.
+
+The `agents/` submodule is hosted at `github.com/overcast-software/career_caddy_agents` (over SSH); `api/` and `frontend/` are HTTPS. The GHCR image for the agents image keeps its historical name `ghcr.io/overcast-software/career_caddy_ai` so prod pulls don't break.
 
 **Daily workflow:**
 ```bash
