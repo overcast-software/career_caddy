@@ -283,17 +283,57 @@ AI PR #33.
 * Inbox
 ** TODO AI chat still uses career data when grabbing my name
 ** TODO AI still decided to update_anser tool instead of create_answer.  It did pull the correct context and gave a generic answer blowing away the one I wanted to interate on.
-** TODO I have two answers for a question on https://careercaddy.online/companies/10/questions/70/answers
-answers do not pull up
-then when I click <- questions button
-https://careercaddy.online/companies/10/questions
-it's completely blank
-https://careercaddy.online/companies/10/questions/70
-will show me answers however.
-** TODO companies.show.job-applcations.index needs a "+new"  button
+** SHIPPED companies questions: blank index + dead-end answers URL [frontend]
+CLOSED: [2026-04-30 Thu]
+Three knotted bugs around =/companies/:id/questions=:
+- =/companies/:id/questions= rendered blank — there was no template for
+  =companies.show.questions.index= because the questions list lived on the
+  legacy =companies.show.answers= route (filename mismatch from earlier
+  refactor).
+- The answer-count badge in the questions list linked to
+  =companies.show.questions.show.answers= (no answer id), which had no
+  index template → blank.
+- The "← Questions" back link on the question-show page pointed at
+  =companies.show.questions= and inherited the same blank-index problem.
+
+Fix: moved =routes/companies/show/answers.js= → =questions/index.js=,
+=templates/companies/show/answers.hbs= → =questions/index.hbs=, dropped
+the legacy =answers= sub-route from the parent router. Updated 5 callers
+(=companies/tabs.hbs=, =companies/show.hbs=, =questions/form.js=,
+=companies/show/questions/new.hbs=) to point at =companies.show.questions=.
+Repointed the answer-count badge at =companies.show.questions.show=
+(that page already inlines the answers list). Added a thin
+=companies.show.questions.show.answers.index= redirect route so any
+direct nav to the bare =/answers/= URL bounces to the question detail.
+** SHIPPED companies.show.job-applications: nested =new= w/ company prefilled [frontend]
+CLOSED: [2026-04-30 Thu]
+=companies.show.job-applications= used to be a leaf route that just listed
+applications and had no "+New" affordance. Two changes:
+- Added a "+New Application" button on the index, deep-linking the new
+  nested =companies.show.job-applications.new= route — same pattern as
+  =job-posts.show.questions.new=.
+- The new route createRecord with =company= pre-set (=appliedAt=today=,
+  =status='Applied'=) and exposes =sortedJobPosts= as
+  =@jobPostOptions=. =JobApplications::Edit= grew an opt-in
+  =@jobPostOptions= arg: when provided, the previously-disabled job-post
+  text input becomes a searchable PowerSelect filtered to that
+  company's posts. Existing callers (=jp.show.job-applications.new=,
+  =ja.edit=) pass nothing → unchanged behavior.
+
+Required splitting =companies.show.job-applications= into a parent
+route with =index= + =new=; the existing list moved to
+=index.{js,hbs}= with default-outlet passthrough on the parent.
 ** TODO AI chat will put answers in the chat but not write new answers with MCP
 ** TODO when adding "vetted bad/good' the current filters on jp.index filter out the item dynamically
-** TODO move spinner to header.  doesn't block subnav
+** SHIPPED Move global spinner from subnav to header [frontend]
+CLOSED: [2026-04-30 Thu]
+=route-layout.hbs= used to render the spinner-status indicator in the
+=:right= slot of =Menus::SubnavBar=, which visually blocked any subnav
+control on its row whenever a route was loading. Moved the spinner into
+=top-bar.hbs= (next to the username/login button); subnav stays fully
+interactive during loads. Same =.spinner-status= markup, same service —
+just a different mount point. Dropped the now-unused =@service spinner=
+from =route-layout.js=; injected it on =top-bar.js=.
 ** TODO result from scrape https://careercaddy.online/scrapes/218:
 If are copying this link from a mail reader please ensure that you have copied all the lines in the link.
 ** TODO JobPost dedupe — merge company_id into NULL-fingerprint stubs [api]
@@ -312,8 +352,17 @@ the existing stub has a NULL company (Microsoft regression #22 in the
 =stage5.fingerprint_null_risk= warnings once the introspection PR
 (E+F+H) ships, so we'll have data on how often the precondition fires
 before designing the fix.
-** TODO scrape.show
-queue retry and parse are very redundant sounding
+** SHIPPED scrape.show: drop redundant Queue button, rename Parse → Re-parse [frontend]
+CLOSED: [2026-04-30 Thu]
+The /scrapes/:id subnav had three near-synonymous buttons: Retry
+(=POST /redo/= → flips status=hold, logs audit note), Queue
+(frontend-only =scrape.status='hold'= + save), Parse
+(=POST /parse/= → re-extract from existing content, no re-fetch). Retry
+and Queue were functionally identical from the user's POV; Queue was
+strictly less (no audit note). Removed Queue + the =queueScrape=
+controller action; renamed Parse to Re-parse to disambiguate from
+Retry; added =title= tooltips on both surviving buttons spelling out
+the network-vs-no-network distinction.
 ** TODO Scrape diagnostic panel on /scrapes/<id> [frontend]
 :PROPERTIES:
 :CREATED: [2026-04-30]
@@ -330,7 +379,20 @@ Scope: read-only, gated to staff or scrape-owner. Source of motivation:
 failed on both tiers — no JobPost created, user couldn't tell why
 without external tooling).
 ** TODO didn't we want mailto: as a link ?
-** TODO system light dark
+** TODO I had this https://careercaddy.online/job-posts/1490
+I created a new job post with the parse method.  My copy paste was more complete, however, when it finsihed parsing (4-5 seconds) it didn't even update the job description.  wasted parse, no notification of what happened.
+** SHIPPED Theme: System / Light / Dark segmented control [frontend]
+CLOSED: [2026-04-30 Thu]
+=ThemeService= now has a third mode =system= (default for new users)
+that follows =matchMedia('(prefers-color-scheme: dark)')= and re-applies
+on OS-level theme change. Existing =toggle()= preserved for back-compat;
+new =setMode(mode)= is the canonical action. New
+=<ThemeModeToggle />= component renders a HyperUI segmented button group
+with desktop / sun / moon Heroicons, =role=radiogroup= +
+=aria-checked= for a11y. Dropped the boolean switch from both
+=settings/appearance.hbs= and =sidebar.hbs= footer in favor of the new
+component. Settings row uses =flex-wrap= so the segmented control wraps
+under the label inside the =max-w-lg= panel-card.
 ** KILL fix-span-issue:019dd70d001149d665450e1682846341 :logfire:bug:
 CLOSED: [2026-04-30 Thu 12:36]
 TOO OLD
