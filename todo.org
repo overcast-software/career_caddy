@@ -32,6 +32,7 @@ Rules:
 - All =manage.py= commands run inside Docker (=make shell-api=), never locally with =uv run=.
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defiend color palletes when writing UI html.
+- Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
 - AW is a term referring to Agent Wizard for the agent that is focused on onboarding
 
 
@@ -281,6 +282,7 @@ Touched: =agents/obstacle_agent.py=, =lib/scrape_graph/nodes_obstacle.py=,
 AI PR #33.
 ** PROJ Feature sorting tables
 * Inbox
+** TODO adding a log to job-application doesn't show it after save.
 ** TODO AI chat still uses career data when grabbing my name
 ** TODO AI still decided to update_anser tool instead of create_answer.  It did pull the correct context and gave a generic answer blowing away the one I wanted to interate on.
 ** SHIPPED companies questions: blank index + dead-end answers URL [frontend]
@@ -391,8 +393,46 @@ Scope: read-only, gated to staff or scrape-owner. Source of motivation:
 failed on both tiers — no JobPost created, user couldn't tell why
 without external tooling).
 ** TODO didn't we want mailto: as a link ?
-** TODO I had this https://careercaddy.online/job-posts/1490
-I created a new job post with the parse method.  My copy paste was more complete, however, when it finsihed parsing (4-5 seconds) it didn't even update the job description.  wasted parse, no notification of what happened.
+** SHIPPED Paste flow: fall back to raw paste when LLM omits description [api]
+CLOSED: [2026-04-30]
+:PROPERTIES:
+:CREATED: [2026-04-30]
+:END:
+Implemented both fixes in =api/job_hunting/lib/parsers/job_post_extractor.py=:
+=effective_description= falls back to =scrape.job_content= when the LLM
+returns =None= and =scrape.source == "paste"= (browser-fetched scrapes
+still can't fall back — their =job_content= is HTML noise). Force-parse
+that produces no =update_fields= now sets =last_outcome="force_noop"=
+and =parse_scrape= writes a distinct status note
+(=force_noop: re-parse of JobPost #N found no new fields=) so the
+frontend's =latestStatusNote= can flash "nothing changed" instead of a
+generic success. Three new tests in =test_job_post_extractor.py= cover
+paste fallback, browser-no-fallback, and the force_noop note.
+
+Original report below for context.
+
+Inbox: =job-posts/1490=. User pasted a complete description; after the
+4-5s parse the JobPost.description was empty/short and no flash
+explained why. Two bugs:
+
+- *A. Silent description drop.* =JobPostExtractor.process_evaluation=
+  only writes =description= into =job_defaults= when
+  =validated_data.description= is truthy
+  (=lib/parsers/job_post_extractor.py:175=). If the LLM returned
+  =None=, the force-parse update set has no description, so
+  =JobPost.description= stays whatever it was. For =source="paste"=
+  scrapes, =scrape.job_content= IS the description the user pasted —
+  fall back to it. (Browser-fetched scrapes can't safely use
+  =job_content= as a description — it's HTML/page text including
+  nav/footer.)
+
+- *B. No "nothing changed" feedback.* When the force-parse =update_fields=
+  list is empty, the user gets a generic "Parsed successfully" status
+  note. They can't tell the LLM produced nothing useful. Surface a
+  =completed (no-op)= note when no JobPost fields were written so the
+  frontend's =latestStatusNote= can flash a warning.
+
+Scope: api-only fix to extractor.
 ** SHIPPED Theme: System / Light / Dark segmented control [frontend]
 CLOSED: [2026-04-30 Thu]
 =ThemeService= now has a third mode =system= (default for new users)
@@ -408,9 +448,44 @@ under the label inside the =max-w-lg= panel-card.
 ** KILL fix-span-issue:019dd70d001149d665450e1682846341 :logfire:bug:
 CLOSED: [2026-04-30 Thu 12:36]
 TOO OLD
-** TODO lost connection while polling :bug:
-"Lost" had href of
-https://careercaddy.online/scrapes/null
+** SHIPPED lost connection while polling :frontend:bug:
+CLOSED: [2026-04-30 Thu]
+"Lost" had href of =https://careercaddy.online/scrapes/null=. Root cause:
+=components/job-posts/actions.hbs= rendered =<LinkTo @route="scrapes.show"
+@model={{get @jobPost.scrapes "0"}}>=. =@jobPost.scrapes= is an async hasMany
+(PromiseManyArray); =get …  "0"= returns an unresolved proxy with no usable
+=.id=, so Ember's serialize produced =/scrapes/null= and the user landed
+there. Fixed by computing =firstScrapeId= in =actions.js= via
+=hasMany('scrapes').value()= and passing the id (memory rule
+feedback_async_hasmany_js). Defense-in-depth in =services/pollable.js=
+=_flashLink=: drops the anchor when the captured returnUrl contains
+=/null= or =/undefined= and wraps the message in a single =<span>= so the
+=.alert= flex container doesn't collapse the whitespace before the link
+text (visible as e.g. "Lostconnection while polling.").
+** SHIPPED Topbar spinner: dedicated reserved row beneath header :frontend:
+CLOSED: [2026-04-30]
+The "AI is generating your answer…" indicator used to share the
+right-cluster of =top-bar.hbs= with the username/logout, so on long
+chats the brand title was visually crowded by a wrapping label. Moved
+the spinner to a second row beneath the topbar — right-aligned, muted
+text. =site-header= is now =flex-direction: column=; =topbar-row= is the
+original three-column layout taking =flex: 1=; =topbar-spinner-row=
+sits below with a reserved =min-height: 1.25rem= and only the inner
+=spinner-dot=/=spinner-label= are conditional. The reserved height
+prevents the topbar-row from jolting upward when the spinner toggles.
+Header keeps its =min-height: 4lh=; bottom padding is 4px to keep the
+spinner row tight against the border.
+** SHIPPED completed doesn't need a spinner :frontend:
+CLOSED: [2026-04-30 Thu]
+Re-scoring with new data showed BOTH the old completed score and the new
+pending score spinning in =scores/list.hbs=. The spinner gate was just
+=(@isPending score)= → =pollable.isPending(record)= → =pendingIds.has(id)=,
+which doesn't account for stale pendingIds entries or for a record whose
+local status has been updated to terminal but whose =onStop= hasn't yet
+removed it. Fix in =services/pollable.js=: =isPending= short-circuits when
+=isTerminal(record)= — completed/done/failed/error rows can never spin
+regardless of bookkeeping. One-line fix; covers cover-letters / scores /
+scrapes / answers in one place.
 ** KILL scrape error :bug:
 CLOSED: [2026-04-30 Thu 12:36]
 2026-04-28 19:21:32,637 INFO httpx: HTTP Request: POST https://api.careercaddy.online/api/v1/scrapes/196/graph-transition/ "HTTP/1.1 201 Created"
@@ -504,8 +579,17 @@ actually changes (guards against UPDATE storm on every edit).
 Children's textual content is intentionally NOT rewritten — Q&A,
 cover letters, applications are write-once-and-forget in practice.
 
-** TODO [#B] cover-letter spinner looks way cooler.  put it everywhere
+** SHIPPED [#B] cover-letter spinner looks way cooler.  put it everywhere :frontend:
+CLOSED: [2026-04-30 Thu]
+Extracted the cover-letter list's "Generating…" spinner (animated SVG ring
++ label) into a shared =<SpinnerInline @label="…" @title="…" />= at
+=app/components/spinner-inline.hbs=. Uses =text-accent-500= so it follows
+whatever palette is active (jade → green for the user). Replaced the
+ad-hoc SVG block in =cover-letters/list.hbs= and the gray spinner in
+=scores/list.hbs= with the shared component — scoring rows now match the
+cover-letter look in the active theme color.
 ** TODO Verify apply-resolver on a real scrape per seeded host
+/home/oldbones/Pictures/screenshot-2026-04-30_12-15-42.png
 Queue one job URL per seeded host (linkedin, greenhouse + boards,
 lever + jobs, jobot, indeed, ziprecruiter), let the poller pick up,
 confirm =JobPost.apply_url{,_status,_resolved_at}= populates and
@@ -664,7 +748,14 @@ Projects
 {%- endfor -%}
 {% endfor %}
 {% endif %}
-** TODO color code the job-application status in ja.index
+** SHIPPED color code the job-application status in ja.index :frontend:
+CLOSED: [2026-04-30 Thu]
+New helper =helpers/job-application-status-class.js= maps the 15
+JobApplication statuses into four pill groups (good / progress / bad /
+neutral) using the same =inline-block whitespace-nowrap px-2 py-0.5
+rounded-full text-xs font-medium= shape as the existing score-status
+pill, with dark-mode variants. Applied in =job-applications/compact.hbs=
+(ja.index rows) and =job-applications/item.hbs= (ja.show field).
 
 * Bugs 🐛
 ** https://careercaddy.online/scrapes/189
