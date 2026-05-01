@@ -15,7 +15,6 @@ Rules:
 - *Memory is imperative.* =~/.claude/projects/.../memory/= contains hard rules. Read them, follow them. Do not fall back to system defaults.
 - Never use compound bash commands (=&&=, =;=). One command per tool call. Use =-C= flags or absolute paths instead of =cd=.
 - Never add =Co-Authored-By= to commit messages.
-- Always run =uv run ruff check .= in =api/= and =make ci= before pushing. Lint and CI come before push, not after.
 - Commit inside submodules first, then the parent repo. Push submodules first, then the parent.
 - When you begin a task: change =TODO= → STRT and use the drawer to add dates
 - When you finish: mark =DONE= with =CLOSED:= timestamp in org-mode parlance
@@ -24,17 +23,16 @@ Rules:
 - Feature branches cut from =main=; PRs target =main=
 - Do NOT touch items marked =[PENDING APPROVAL]=
 - *Max 2 CI attempts rule*: if tests/lint fail twice on the same problem, stop, document what failed and why in notes.org, and surface to the product owner. Do not loop indefinitely.
-- DONE tasks older than 30 days are archived to =todo_archive.org=. Last prune: [2026-04-15].
+- SHIPPED tasks older than 5 days are archived to =todo_archive.org=. Last prune: [2026-04-15].
 - =PROJ= prefix on todo items means "use /plan mode" — enter planning, design the architecture, write the plan to notes.org, then exit.
-- LOOP prefix are items whos work needs research about where it is.
+- LOOP prefix are items whose work needs research about where it is.
 - Prefer amending recent commits for small fixes rather than creating new commits.
 - Update =todo.org= to reflect completed work before pushing. =notes.org= is LOCAL-ONLY — NEVER commit it (holds server IPs / internal info). It is gitignored in parent + every submodule; unstage it if it ever shows up.
 - All =manage.py= commands run inside Docker (=make shell-api=), never locally with =uv run=.
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
-- Use hyperui, tailwind, and defiend color palletes when writing UI html.
+- Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
 - AW is a term referring to Agent Wizard for the agent that is focused on onboarding
-
 
 
 * Status snapshot
@@ -59,10 +57,6 @@ Quick navigation across this file. Counts are a snapshot — re-run with
 | KILL             |  1 | dropped |
 
 ** Priority queue
-- Recently SHIPPED [2026-04-29]: JobPost universal-visibility audit (api) — 5 places had inconsistent per-user filter clauses (`retrieve()`, `CompanySerializer.get_related`, `companies.job_posts`, `reports._user_scoped_job_posts`, extractor) all now mirror `JobPostViewSet.list` (created_by | applications | scores | scrapes | discoveries + staff bypass); dedupe-merge consistency — extracted `lib/job_post_merge.merge_empty_fields_from_attrs`, called from `views/jobs.py:create()` link/fp branches, extractor's "duplicate-full-description" branch, and `career_data.py` import; extractor + import now record JobPostDiscovery for the caller; cc_auto dropped client-side `find_job_post_by_link → 409` short-circuit so every email-pipeline POST hits the API merge. 13 new tests; 598 total green. Reproduces and pins the cc_auto Microsoft regression where a stub post (link known, company NULL) stayed off /companies/78/job-posts.
-- Recently SHIPPED [2026-04-28..29]: cascade company changes · synchronous browser-MCP scrape deprecation · scrape-graph shadow+OFF collapse · scrape-graph dagre layout (LR + native scroll) · scrape diag MCP tools (graph_trace, scrape_statuses) · linkedin rememberme_candidates seeded · 409 dedupe contract (skip when job-post relationship sent) · =JobPost.posting_status= (open/closed) + list-default hides closed · bounded scrape-graph wait (Navigate domcontentloaded + 240s poller cap) · MCP slim-response refactor (YAML, no envelope, =TOOL_SHAPES= audit, every tool slimmed) · apply_resolver_config seeded for top 8 hosts · scrape-graph reorder (Navigate → DetectObstacle → ResolveFinalUrl) · canonicalize tracker URLs on scrape ingest (api =Scrape.source_link= + frontend chip) · sidebar + chat as universal slide-in panels (full-height drawer, 45dvh chat bottom-sheet, list-skeleton cached on re-entry) · hold/score-poller YAML response parse fix (was =JSONDecodeError= every cycle since the MCP YAML cutover)
-- =[#A]= in flight: (none — apply-resolver seed shipped [2026-04-29]; obstacle reorder shipped [2026-04-29]; tracker-URL canonicalization shipped [2026-04-28])
-- =[#B]= open: [[*TODO [#B] cover-letter spinner looks way cooler.  put it everywhere][cover-letter spinner everywhere]]
 
 ** Section index
 - [[*Features — APPROVED (ready to work)][Features — APPROVED]] — 7 ready, all reviewed
@@ -226,71 +220,51 @@ import→print→delete round-trip; (5) =?format=pdf= on existing
 feeds the eventual plugin PR.
 [[file:notes.org::*Reactive Resume — MVP spike][Full plan → notes.org]]
 
+** PROJ Feature sorting tables
 * Features — Open TODOs
 
 ** IDEA Flash message slide-wipe transition [frontend]
 Queue sequential display instead of stacking. First flash finishes its time, slides left, next slides in.
-** SHIPPED Surface =canonical_link= on JobPostSerializer [api]
-CLOSED: [2026-04-30 Thu]
-=JobPostSerializer.attributes= now includes =canonical_link= (the api-computed
-dedupe key, auto-populated in =JobPost.save()= via =canonicalize_link()=).
-Lets cc_auto's email pipeline drop its local URL-strip duplicate of
-=_TRACKING_PARAMS= and read the canonical key back from the response —
-eliminates the long-standing drift class where local + server canonicalizers
-diverged. Test added: =test_job_post_canonical_link_serialized.py= covers
-utm-stripping + null-link cases. API PR #76.
-** SHIPPED Closed chip on /job-posts list rows [frontend]
-CLOSED: [2026-04-30 Thu]
-Small red "Closed" chip in =app/components/job-posts/list.hbs= when
-=jobPost.postingStatus === "closed"=. Detail page already surfaced this; the
-list didn't. Only visible when the user toggles =include_closed=true= via
-the existing FilterPill — without it, closed/open posts mixed indistinguishably.
-HyperUI/Tailwind utilities only; matches the existing duplicate-of and
-needs-scrape chip styling. Frontend PR #91.
-** SHIPPED Audit redundant parent columns in child route list components [frontend]
-CLOSED: [2026-04-29 Wed]
-=JobApplications::Compact= now takes =@showCompany= (default true). Hidden on
-=companies.show.job-applications= where the Company is the route's parent and
-the column was repeating the same value on every row. Same shape as
-=JobPosts::List @showCompany={{false}}= already used on
-=companies.show.job-posts=. Frontend PR #87.
 ** SHIPPED Search input flicker on /scrapes [frontend]
-CLOSED: [2026-04-29 Wed]
+CLOSED: [2026-04-30 Thu 17:47]
 =refreshModel: true= on the =search= QP triggered the loading substate every
 keystroke; =scrapes/index-loading.hbs= has no =<:subnav>= slot, so the search
 input was torn down + remounted (focus loss + visible flicker). Route now
 implements a =loading= action that returns =true= (suppresses the substate)
 when =transition.from.name === routeName= — i.e. in-route refreshes only;
 cold loads still get the skeleton. Frontend PR #88.
-** SHIPPED Resume export Tool/Platform typo [api]
-CLOSED: [2026-04-29 Wed]
-=Resume.to_export_context= had a stray =Tool/Platform= → =Tools/Platforms=
-fix. API PR #73.
-** SHIPPED LinkedIn obstacle-agent: page_structure plumbing + glimmer-stable click bypass [ai]
-CLOSED: [2026-04-29 Wed]
-Three intertwined bugs unblocking LinkedIn =/uas/login= account-chooser
-clears (scrape 200 was the canary):
-- =ObstacleAgent= now consumes =ScrapeProfile.page_structure= (where
-  the actual obstacle-clearing selector list lives) — previously it
-  only read =interaction_hints=, which is unset on the LinkedIn
-  profile, so the LLM was flying blind.
-- =_detect_login_wall= short-circuited =word_count >= 200 → False=
-  BEFORE strong-signal checks, so long login walls slipped the gate
-  entirely and let the parser hallucinate "job posts" from welcome
-  copy. Strong signals now decisive at any length; weak-signal
-  threshold still gated on word count. Per-host strong phrases live
-  on =ScrapeProfile.css_selectors.login_wall_signals=.
-- Both =_try_rememberme_reauth= and =ObstacleAgent.try_click= were
-  failing with =waiting for element to be stable= because LinkedIn
-  wraps the chooser in =<div class="glimmer">= (perpetual
-  skeleton-load animation). Now =click(timeout=5_000, force=True)=
-  bypasses Playwright's actionability gate.
-Touched: =agents/obstacle_agent.py=, =lib/scrape_graph/nodes_obstacle.py=,
-=mcp_servers/browser_server.py=. Verified end-to-end on prod scrape 200.
-AI PR #33.
-** PROJ Feature sorting tables
 * Inbox
-** TODO a few bugs in this output
+** SHIPPED job-description.show isn't style compliant :frontend:
+CLOSED: [2026-04-30 Thu]
+Reference: =~/Pictures/screenshot-2026-04-30_18-08-24.png= (LinkedIn).
+Lifted the description out of the header card into its own =Panel::Card=
+with an "About the job" h2; the Copy + Expand controls now live in the
+card header. Description paragraph renders with =whitespace-pre-line=
+(source line breaks preserved instead of one wall-of-text =<p>=),
+=max-w-prose= for measure, =line-clamp-[8]= for collapse (dropped the
+=max-h-24/max-h-screen= transition carrier — it left a hollow ribbon
+when text was shorter than 4 lines). Card hidden when no description.
+Out of scope (broader audit): header still uses =panel-card= + =btn= CSS
+classes instead of =<Panel::Card>= / Tailwind button utilities; no
+company avatar (data-side question, not a template fix).
+=frontend/app/templates/job-posts/show.hbs=.
+** boot IP 130.12.180.144
+attempted /.env
+** SHIPPED search still disappears :frontend:
+CLOSED: [2026-04-30 Thu]
+PR #88 only fixed =scrapes/index=. The other six list routes with a
+=search= QP + =refreshModel: true= (=job-posts=, =companies=, =answers=,
+=questions=, =summaries=, =job-applications=) had the same symptom: in-route
+refresh on each keystroke rendered =index-loading.hbs= (or =loading.hbs=),
+which has no =<:subnav>= slot, so the SearchBar was torn down + remounted
+(focus loss + flicker). Mirrored the =scrapes/index.js= =loading()=
+action override into all six routes — return =true= when the transition
+is in-route (=transition.from.name === this.routeName=) so the substate
+is suppressed; cold loads still get the skeleton.
+[[*Search input flicker on /scrapes \[frontend\]][Original PR #88 — only covered /scrapes]]
+** TODO I want to see if camoufox can get passed click blockers
+detectobsticle
+** TODO a few bugs in this output :important:
 frontend-1  | 172.19.0.1 - - [01/May/2026:00:21:08 +0000] "GET /resumes/36 HTTP/1.1" 200 5007 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:150.0) Gecko/20100101 Firefox/150.0" "67.185.49.200"
 api-1       |     return await self._run_node_with_hooks(node, self._advance_graph)
 api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -358,37 +332,19 @@ api-1       | 172.19.0.1 - - [30/Apr/2026:16:57:50 -0700] "POST /api/v1/scrapes/
 *** My resume never parsed :(
 
 
-** TODO when pasting a url for a new job-post
+** TODO when pasting a url for a new job-post :bug:
 https://careercaddy.online/job-posts/1481
 the url submitted and I was taken to the job post.
 I should be taken to job-post.show.scrapes.show
 however I had to go to job-post.show.scrapes.index and I did not see my scrape there
 I refreshed the page and saw it then in "hold"
 when it completed, I had to reload the page to see the updated job-post.description
-** SHIPPED saving a job-application from job-posts goes to jp.show.ja.index :frontend:
-CLOSED: [2026-04-30 Thu]
-=controllers/job-posts/show/job-applications/new.js= now transitions to
-=job-posts.show.job-applications.index= (using =model.jobPost.id=)
-instead of the top-level =job-applications.show=. Keeps the user
-"inside" the parent job-post after creating a JA.
-** SHIPPED adding a log to job-application shows it after save :frontend:bug:
-CLOSED: [2026-04-30 Thu]
-Two-part fix in =components/job-applications/status-log.{hbs,js}=:
-- Reactivity: =_sortedRecords= now reads
-  =ja.hasMany('applicationStatuses').value()= (sync materialized view)
-  instead of =.toArray()= on the async proxy. Newly =createRecord='d
-  status entries pushed via the inverse =application= relationship
-  appear in the timeline immediately after =save()=.
-- UX: added an optional note =<textarea>= to the log-status form. The
-  note attaches to the explicitly selected status (chain gap-fillers
-  stay note-less). Means a "Vetted Bad — why" can live on the status
-  entry instead of the user dumping it into =ja.notes= as a workaround.
-** AI chat work [/]
+** PROJ AI chat work [0/3]
 *** TODO AI chat still uses career data when grabbing my name
 *** TODO AI still decided to update_anser tool instead of create_answer.  It did pull the correct context and gave a generic answer blowing away the one I wanted to interate on.
 *** TODO AI chat will put answers in the chat but not write new answers with MCP
-** TODO [#B] when adding "vetted bad/good' the current filters on jp.index filter out the item dynamically
-** TODO result from scrape https://careercaddy.online/scrapes/218:
+** PROJ [#B] when adding "vetted bad/good' the current filters on jp.index filter out the item dynamically
+** LOOP result from scrape https://careercaddy.online/scrapes/218:
 If are copying this link from a mail reader please ensure that you have copied all the lines in the link.
 ** TODO JobPost dedupe — merge company_id into NULL-fingerprint stubs [api]
 :PROPERTIES:
@@ -406,29 +362,6 @@ the existing stub has a NULL company (Microsoft regression #22 in the
 =stage5.fingerprint_null_risk= warnings once the introspection PR
 (E+F+H) ships, so we'll have data on how often the precondition fires
 before designing the fix.
-** SHIPPED Coerce JobPost.apply_url_status None → "unknown" on save [api]
-CLOSED: [2026-04-30 Thu]
-Frontend manual-create POSTs were 500ing with =null value in column
-"apply_url_status" of relation "job_post" violates not-null
-constraint=. Ember Data serializes unset string =@attr= as =null= on
-=createRecord=, so the JSON:API body carried =apply_url_status: null=.
-The model =default="unknown"= is Python-side only — Django's =AddField=
-backfills existing rows then drops the DB DEFAULT, so an explicit
-=None= bypasses the default and lands as =NULL= in the INSERT. Coerced
-in =JobPost.save()= so every write path is protected, not just the
-viewset =create=. Regression test in
-=test_job_post.test_apply_url_status_none_coerces_to_unknown=.
-** SHIPPED scrape.show: drop redundant Queue button, rename Parse → Re-parse [frontend]
-CLOSED: [2026-04-30 Thu]
-The /scrapes/:id subnav had three near-synonymous buttons: Retry
-(=POST /redo/= → flips status=hold, logs audit note), Queue
-(frontend-only =scrape.status='hold'= + save), Parse
-(=POST /parse/= → re-extract from existing content, no re-fetch). Retry
-and Queue were functionally identical from the user's POV; Queue was
-strictly less (no audit note). Removed Queue + the =queueScrape=
-controller action; renamed Parse to Re-parse to disambiguate from
-Retry; added =title= tooltips on both surviving buttons spelling out
-the network-vs-no-network distinction.
 ** TODO Scrape diagnostic panel on /scrapes/<id> [frontend]
 :PROPERTIES:
 :CREATED: [2026-04-30]
@@ -445,165 +378,6 @@ Scope: read-only, gated to staff or scrape-owner. Source of motivation:
 failed on both tiers — no JobPost created, user couldn't tell why
 without external tooling).
 ** TODO didn't we want mailto: as a link ?
-** SHIPPED Paste flow: fall back to raw paste when LLM omits description [api]
-CLOSED: [2026-04-30]
-:PROPERTIES:
-:CREATED: [2026-04-30]
-:END:
-Implemented both fixes in =api/job_hunting/lib/parsers/job_post_extractor.py=:
-=effective_description= falls back to =scrape.job_content= when the LLM
-returns =None= and =scrape.source == "paste"= (browser-fetched scrapes
-still can't fall back — their =job_content= is HTML noise). Force-parse
-that produces no =update_fields= now sets =last_outcome="force_noop"=
-and =parse_scrape= writes a distinct status note
-(=force_noop: re-parse of JobPost #N found no new fields=) so the
-frontend's =latestStatusNote= can flash "nothing changed" instead of a
-generic success. Three new tests in =test_job_post_extractor.py= cover
-paste fallback, browser-no-fallback, and the force_noop note.
-
-Original report below for context.
-
-Inbox: =job-posts/1490=. User pasted a complete description; after the
-4-5s parse the JobPost.description was empty/short and no flash
-explained why. Two bugs:
-
-- *A. Silent description drop.* =JobPostExtractor.process_evaluation=
-  only writes =description= into =job_defaults= when
-  =validated_data.description= is truthy
-  (=lib/parsers/job_post_extractor.py:175=). If the LLM returned
-  =None=, the force-parse update set has no description, so
-  =JobPost.description= stays whatever it was. For =source="paste"=
-  scrapes, =scrape.job_content= IS the description the user pasted —
-  fall back to it. (Browser-fetched scrapes can't safely use
-  =job_content= as a description — it's HTML/page text including
-  nav/footer.)
-
-- *B. No "nothing changed" feedback.* When the force-parse =update_fields=
-  list is empty, the user gets a generic "Parsed successfully" status
-  note. They can't tell the LLM produced nothing useful. Surface a
-  =completed (no-op)= note when no JobPost fields were written so the
-  frontend's =latestStatusNote= can flash a warning.
-
-Scope: api-only fix to extractor.
-** SHIPPED Theme: System / Light / Dark segmented control [frontend]
-CLOSED: [2026-04-30 Thu]
-=ThemeService= now has a third mode =system= (default for new users)
-that follows =matchMedia('(prefers-color-scheme: dark)')= and re-applies
-on OS-level theme change. Existing =toggle()= preserved for back-compat;
-new =setMode(mode)= is the canonical action. New
-=<ThemeModeToggle />= component renders a HyperUI segmented button group
-with desktop / sun / moon Heroicons, =role=radiogroup= +
-=aria-checked= for a11y. Dropped the boolean switch from both
-=settings/appearance.hbs= and =sidebar.hbs= footer in favor of the new
-component. Settings row uses =flex-wrap= so the segmented control wraps
-under the label inside the =max-w-lg= panel-card.
-** KILL fix-span-issue:019dd70d001149d665450e1682846341 :logfire:bug:
-CLOSED: [2026-04-30 Thu 12:36]
-TOO OLD
-** SHIPPED lost connection while polling :frontend:bug:
-CLOSED: [2026-04-30 Thu]
-"Lost" had href of =https://careercaddy.online/scrapes/null=. Root cause:
-=components/job-posts/actions.hbs= rendered =<LinkTo @route="scrapes.show"
-@model={{get @jobPost.scrapes "0"}}>=. =@jobPost.scrapes= is an async hasMany
-(PromiseManyArray); =get …  "0"= returns an unresolved proxy with no usable
-=.id=, so Ember's serialize produced =/scrapes/null= and the user landed
-there. Fixed by computing =firstScrapeId= in =actions.js= via
-=hasMany('scrapes').value()= and passing the id (memory rule
-feedback_async_hasmany_js). Defense-in-depth in =services/pollable.js=
-=_flashLink=: drops the anchor when the captured returnUrl contains
-=/null= or =/undefined= and wraps the message in a single =<span>= so the
-=.alert= flex container doesn't collapse the whitespace before the link
-text (visible as e.g. "Lostconnection while polling.").
-** SHIPPED Spinner contrast + scrapes/list SpinnerInline swap :frontend:
-CLOSED: [2026-04-30]
-Two follow-ups to the SpinnerInline batch:
-- =components/spinner-inline.hbs= — bumped =dark:text-gray-400= →
-  =dark:text-gray-200= so the "Generating…" label reads on the dark
-  subnav (was washing out on the mid-blue band).
-- =components/scrapes/list.hbs= — was missed in the original
-  SpinnerInline rollout; still rendered the inline animated-SVG block
-  with =text-gray-400= on the wrapper, so the SVG inherited gray and
-  the spinner had no accent color at all on /scrapes (visible in the
-  "hold" status row). Replaced with =<SpinnerInline @label={{or
-  scrape.status "pending"}} />= so it picks up the accent ring.
-** SHIPPED Topbar spinner: dedicated reserved row beneath header :frontend:
-CLOSED: [2026-04-30]
-The "AI is generating your answer…" indicator used to share the
-right-cluster of =top-bar.hbs= with the username/logout, so on long
-chats the brand title was visually crowded by a wrapping label. Moved
-the spinner to a second row beneath the topbar — right-aligned, muted
-text. =site-header= is now =flex-direction: column=; =topbar-row= is the
-original three-column layout taking =flex: 1=; =topbar-spinner-row=
-sits below with a reserved =min-height: 1.25rem= and only the inner
-=spinner-dot=/=spinner-label= are conditional. The reserved height
-prevents the topbar-row from jolting upward when the spinner toggles.
-Header keeps its =min-height: 4lh=; bottom padding is 4px to keep the
-spinner row tight against the border.
-** SHIPPED completed doesn't need a spinner :frontend:
-CLOSED: [2026-04-30 Thu]
-Re-scoring with new data showed BOTH the old completed score and the new
-pending score spinning in =scores/list.hbs=. The spinner gate was just
-=(@isPending score)= → =pollable.isPending(record)= → =pendingIds.has(id)=,
-which doesn't account for stale pendingIds entries or for a record whose
-local status has been updated to terminal but whose =onStop= hasn't yet
-removed it. Fix in =services/pollable.js=: =isPending= short-circuits when
-=isTerminal(record)= — completed/done/failed/error rows can never spin
-regardless of bookkeeping. One-line fix; covers cover-letters / scores /
-scrapes / answers in one place.
-** KILL scrape error :bug:
-CLOSED: [2026-04-30 Thu 12:36]
-2026-04-28 19:21:32,637 INFO httpx: HTTP Request: POST https://api.careercaddy.online/api/v1/scrapes/196/graph-transition/ "HTTP/1.1 201 Created"
-2026-04-28 19:22:02,649 WARNING lib.scrape_graph._artifacts: capture_debug_artifact: screenshot failed scrape_id=196 reason=obstacle_fail
-Traceback (most recent call last):
-  File "/home/oldbones/Network/syncthing/Projects/career_caddy/ai/lib/scrape_graph/_artifacts.py", line 80, in capture_debug_artifact
-    png_bytes = await page.screenshot(full_page=False)
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/oldbones/Network/syncthing/Projects/career_caddy/ai/.venv/lib/python3.13/site-packages/playwright/async_api/_generated.py", line 9792, in screenshot
-    await self._impl_obj.screenshot(
-    ...<13 lines>...
-    )
-  File "/home/oldbones/Network/syncthing/Projects/career_caddy/ai/.venv/lib/python3.13/site-packages/playwright/_impl/_page.py", line 814, in screenshot
-    encoded_binary = await self._channel.send(
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^
-        "screenshot", self._timeout_settings.timeout, params
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/home/oldbones/Network/syncthing/Projects/career_caddy/ai/.venv/lib/python3.13/site-packages/playwright/_impl/_connection.py", line 69, in send
-    return await self._connection.wrap_api_call(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ...<3 lines>...
-    )
-    ^
-  File "/home/oldbones/Network/syncthing/Projects/career_caddy/ai/.venv/lib/python3.13/site-packages/playwright/_impl/_connection.py", line 559, in wrap_api_call
-    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
-playwright._impl._errors.TimeoutError: Page.screenshot: Timeout 30000ms exceeded.
-Call log:
-  - taking page screenshot
-  - waiting for fonts to load...
-
-2026-04-28 19:22:02,845 INFO httpx: HTTP Request: GET https://api.careercaddy.online/api/v1/scrapes/196/ "HTTP/1.1 200 OK"
-
-** KILL https://careercaddy.online/scrapes/191 :bug:
-CLOSED: [2026-04-30 Thu 12:37]
-linkedin being dumb -investigate
-** SHIPPED source (i.e. email) for job-post.show :frontend:
-CLOSED: [2026-04-30 Thu]
-Surfaced =JobPost.source= as a small gray pill ("Source: <value>")
-inline with the Posted/Added meta line on jp.show. Reads the existing
-attr — no api change needed. Email-pipeline posts are now distinguishable
-at a glance from manual / paste / scrape / import.
-** SHIPPED jp.show header action cleanup (Run scrape removed, Copy moved) :frontend:
-CLOSED: [2026-04-30 Thu]
-=templates/job-posts/show.hbs=: dropped the standalone "Run scrape" and
-"Copy" buttons from the header action row. "Scrape & Score" survives
-(stubs only — same condition as before, just unwrapped from the parent
-=#if= now that "Run scrape" is gone). Copy moved to a small inline
-button next to Expand/Collapse beneath the description, separated by a
-=·= and =gap-4=. =controllers/job-posts/show.js=: shortened
-=copyButtonText= default to "Copy" and removed the now-orphaned
-=runScrape= action (~60 LOC) plus tightened two stale comments in
-=scrapeAndScore=.
 ** TODO replace ↗ with {{link.hostname}} ↗
 https://job-boards.greenhouse.io/defenseunicorns?error=true
 ** TODO [#A] Harden =make ci= so it cannot return green-but-broken [dagger]
@@ -642,67 +416,25 @@ Acceptance:
 - README / agent guidance updates to drop the "grep for # pass N
   yourself" workaround — the tally rules can stop chasing it.
 - New tally entry retiring tally #9/#13/#14/#19 as superseded.
-** SHIPPED viewing a scrape from jp.show.scrapes.index goes to jp.show.scrapes.show :frontend:
-CLOSED: [2026-04-30 Thu]
-Added a nested =show= route under =jp.show.scrapes=:
-- =router.js=: =scrapes= became a parent with =show= at =/:scrape_id=.
-- =git mv='d existing route/controller/template into =scrapes/index.*=
-  (class names renamed to *IndexController/*IndexRoute).
-- New parent =templates/job-posts/show/scrapes.hbs= = =\{\{outlet\}\}=.
-- New =routes|controllers|templates/job-posts/show/scrapes/show.{js,js,hbs}=
-  with route doing =findRecord= + sideloads, controller carrying
-  =retryScrape= / =parseScrape=, template rendering =Scrapes::Item= +
-  the same form-actions row + a "← Back to scrapes" breadcrumb.
-- =Scrapes::List= takes an optional =@viewRoute=; jp index passes
-  ="job-posts.show.scrapes.show"=. Other callers default to top-level.
-** SHIPPED Final URL surfaced in the scrape UI :frontend:
-CLOSED: [2026-04-30 Thu]
-Added a "Final URL" row to =components/scrapes/item.hbs= that renders
-when there's a redirect child whose url differs from the parent's
-(reads =scrape.scrapes[0].url= written by =ResolveFinalUrl=). For
-non-redirected scrapes the existing "URL" row is already the final URL.
-No backend / migration work — uses the existing source-scrape chain.
-Caveat: the row depends on the redirect child being sideloaded; the new
-nested jp.show.scrapes.show route includes =scrapes= so it's covered.
-The top-level =scrapes.show= route may still need the include added if
-the row should appear there too.
-** SHIPPED [#A] if I change job-post company, all the questions, answers, etc. should change too.
-- State "SHIPPED"    from "TODO"       [2026-04-28]
-Shipped 2026-04-28 in api PR #60 (parent =26e424e=, Deploy
-25011155104 green). =PATCH /job-posts/:id/= that changes the
-=company_id= cascades the FK to all four child tables that carry
-their own =company_id=: =Question=, =Scrape=, =CoverLetter=,
-=JobApplication=. Bulk =.update()= so it's one SQL statement per
-child, no signals/save. Cascade fires only when =company_id=
-actually changes (guards against UPDATE storm on every edit).
-Children's textual content is intentionally NOT rewritten — Q&A,
-cover letters, applications are write-once-and-forget in practice.
-
-** SHIPPED [#B] cover-letter spinner looks way cooler.  put it everywhere :frontend:
-CLOSED: [2026-04-30 Thu]
-Extracted the cover-letter list's "Generating…" spinner (animated SVG ring
-+ label) into a shared =<SpinnerInline @label="…" @title="…" />= at
-=app/components/spinner-inline.hbs=. Uses =text-accent-500= so it follows
-whatever palette is active (jade → green for the user). Replaced the
-ad-hoc SVG block in =cover-letters/list.hbs= and the gray spinner in
-=scores/list.hbs= with the shared component — scoring rows now match the
-cover-letter look in the active theme color.
-** TODO Verify apply-resolver on a real scrape per seeded host
-/home/oldbones/Pictures/screenshot-2026-04-30_12-15-42.png
+** TODO Verify apply-resolver on a real scrape per seeded host :tier6:
 Queue one job URL per seeded host (linkedin, greenhouse + boards,
 lever + jobs, jobot, indeed, ziprecruiter), let the poller pick up,
 confirm =JobPost.apply_url{,_status,_resolved_at}= populates and
 the =<ApplyDestination>= chip renders correctly on
 =/job-posts/:id=. Tweak the seed when a host doesn't match.
-** TODO deleting a job-post makes job-posts.index freak out and claim job-post doesn't have a company
+** TODO deleting a job-post makes job-posts.index freak out and claim job-post doesn't have a company :bug:
+I had two job-posts with teh same name and the same company
+I deleted one, when it redirected, I saw one with 'missing company' for company
+I refreshed and it went away.
 
-** TODO Reports: applies-by-hostname cut on sources sankey
+** TODO Reports: applies-by-hostname cut on sources sankey :tier6:
 Add an "applies-by-hostname" cut on the sources sankey distinct
 from the entry-URL hostname — postings often live on a tracker but
 resolve through to a real ATS, and the rollup should reflect the
 *destination* host, not the entry host.
 
 [[file:notes.org::*Apply-destination resolution (final URL behind the apply button)][Plan → notes.org]]
+*** Tier 6: Plans & proposals
 
 ** TODO [#B] JobApplication.tracking_url — per-user post-submit status link [api+automation]
 [2026-04-22] Separate from the =JobPost.application_url= work (which is
@@ -736,7 +468,6 @@ up. Same mismatch will land anywhere else we add more subnav controls
 - downsize =.btn= on list/index pages to match the compact control.
 Pick one and roll out so subnav reads as a single bar. Blocks clean
 filter-menu rollout beyond job-posts.
-** LOOP toolbar list of candidates
 ** TODO Retire dead jinja resume-export path [api]
 [2026-04-26] Cleanup follow-up after [#A] audit. Three orphaned
 artifacts of the deprecated docxtpl-based export, all reachable only
@@ -783,6 +514,8 @@ the BaseSerializer fields[<type>] patch.
 *** Resume is different in that we presume includes most of the time.
 this problem seesaws on either remove slim and use includes explicitly and fields when you want slim.  removing implicit includes has it's own trade offs
 
+** nuclear placement :frontend:
+/home/oldbones/Pictures/screenshot-2026-04-30_17-43-49.png
 ** REFERENCE Jinja markup for the word template
 Source transcription of =api/templates/resume_export.docx=. Kept for audit
 reference — see DONE entry above + notes.org audit.
@@ -848,15 +581,14 @@ Projects
 {%- endfor -%}
 {% endfor %}
 {% endif %}
-** SHIPPED color code the job-application status in ja.index :frontend:
-CLOSED: [2026-04-30 Thu]
-New helper =helpers/job-application-status-class.js= maps the 15
-JobApplication statuses into four pill groups (good / progress / bad /
-neutral) using the same =inline-block whitespace-nowrap px-2 py-0.5
-rounded-full text-xs font-medium= shape as the existing score-status
-pill, with dark-mode variants. Applied in =job-applications/compact.hbs=
-(ja.index rows) and =job-applications/item.hbs= (ja.show field).
-
 * Bugs 🐛
 ** https://careercaddy.online/scrapes/189
 its a stubbed that short circuted
+** notes fro job-description.show isn't style compliant
+/home/oldbones/Pictures/screenshot-2026-04-30_18-08-24.png
+** why did it decide it was closed?
+https://www.linkedin.com/jobs/view/4408226465/
+https://careercaddy.online/job-posts/1533/scrapes/240
+/home/oldbones/Pictures/screenshot-2026-04-30_18-08-24.png
+why did it fail?
+why did the description suck?
