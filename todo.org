@@ -234,6 +234,55 @@ implements a =loading= action that returns =true= (suppresses the substate)
 when =transition.from.name === routeName= — i.e. in-route refreshes only;
 cold loads still get the skeleton. Frontend PR #88.
 * Inbox
+** STRT JobPost.source clobber fix + jp.show URL aliases panel :api:frontend:
+Job-post 1483 (Senior SWE, Optum/UnitedHealth) showed =source: scrape=
+in prod despite originating from a Jobright digest email
+(2026-04-30 16:22 UTC). cc_auto created the JobPost with
+=source="email"= the same evening; the next day a hold-poller scrape
+on the dice.com canonical URL clobbered the column to ="scrape"= via
+the stub-upgrade branch in =job_post_extractor.parse()=. Same posting
+is reachable via three URLs (jobright tracker, careers.unitedhealth
+apply page, dice canonical) and =job-posts.show= had no way to surface
+that — only the canonical link's ↗ and the resolved apply chip via
+=<ApplyDestination>=.
+
+Two coupled fixes:
+
+- *api*: =api/job_hunting/lib/parsers/job_post_extractor.py= — pull
+  =source= out of =job_defaults= into =create_only_source=, add
+  =_NO_OVERWRITE_FIELDS= ({=created_by=, =source=}) and skip those in
+  the force-merge + stub-upgrade loops, drop =source= from the
+  duplicate-merge dict. Cold-create branch still pins source from the
+  scrape so genuinely scrape-originated JobPosts keep their provenance.
+  Four new unit tests in =api/job_hunting/tests/test_job_post_extractor.py=
+  =TestSourcePreservation=: stub-upgrade preserves, force-reparse preserves,
+  full-duplicate preserves, cold-create still sets.
+
+- *frontend*: =frontend/app/models/job-post.js= — added =canonicalLink=
+  attr + =urlAliases= getter that produces a dedup'd list of
+  =[{url, label, hostname}]= across =link=, =canonicalLink=, =applyUrl=
+  (when status==resolved), and each =scrape.url= + =scrape.sourceLink=.
+  New =<JobPosts::AliasesPanel @jobPost />= (template-only) renders the
+  list as a "Reachable via" Panel::Card after the description, hidden
+  when ≤1 alias. =frontend/app/routes/job-posts/show.js= now side-loads
+  =scrapes= via =include= so the panel paints first-pass without flash.
+  Tests: =tests/unit/models/job-post-test.js= covers four
+  =urlAliases= cases, =tests/integration/components/job-posts/aliases-panel-test.js=
+  covers the empty + populated render paths.
+
+Local verification: 37/37 api tests green via
+=docker compose exec -T api python manage.py test job_hunting.tests.test_job_post_extractor=;
+=make ci= passes both =build-api= (ruff + bandit + Django test) and
+=build-frontend= (eslint + ember-template-lint + prettier +
+xvfb-run npm run test:ember).
+
+After deploy: manual fix-up =update_job_post(id=1483, source="email")=
+via MCP. Bulk backfill of historical mis-attributed JobPosts deferred
+(separate ticket — needs careful query design).
+
+Tally #23: stays at STRT until parent Deploy is green AND user has
+visually confirmed source label + aliases panel on a real prod record.
+
 ** SHIPPED job-description.show isn't style compliant :frontend:
 CLOSED: [2026-04-30 Thu]
 Reference: =~/Pictures/screenshot-2026-04-30_18-08-24.png= (LinkedIn).
