@@ -234,6 +234,9 @@ implements a =loading= action that returns =true= (suppresses the substate)
 when =transition.from.name === routeName= — i.e. in-route refreshes only;
 cold loads still get the skeleton. Frontend PR #88.
 * Inbox
+** TODO caddy-web cannont get screenshots
+** TODO https://careercaddy.online/job-posts/1551
+why two canonical?
 ** WAIT Verify linkedin.com ready_selector fix on next job-view scrape :scrape:
 :PROPERTIES:
 :CREATED:  2026-05-01
@@ -348,7 +351,8 @@ This todo is *only* the data backfill:
 Out of scope: code changes — the prevention fix is already in the
 profile.
 
-** STRT JobPost.source clobber fix + jp.show URL aliases panel :api:frontend:
+** SHIPPED JobPost.source clobber fix + jp.show URL aliases panel :api:frontend:
+CLOSED: [2026-05-01 Fri 13:51]
 Job-post 1483 (Senior SWE, Optum/UnitedHealth) showed =source: scrape=
 in prod despite originating from a Jobright digest email
 (2026-04-30 16:22 UTC). cc_auto created the JobPost with
@@ -458,7 +462,12 @@ is suppressed; cold loads still get the skeleton.
 [[*Search input flicker on /scrapes \[frontend\]][Original PR #88 — only covered /scrapes]]
 ** TODO I want to see if camoufox can get passed click blockers
 detectobsticle
-** TODO a few bugs in this output :important:
+** STRT a few bugs in this output :important:ai:
+api PR #81 merged 2026-05-01 21:36 UTC: explicit provider:model prefix
+in JobPostExtractor + IngestResume dispatchers; bare names + unknown
+providers raise. Resume default OpenAI fallback gpt-5 → gpt-4o
+(gpt-5 is gated on some tiers and was the cause of "my resume never
+parsed"). Promote to SHIPPED after parent Deploy succeeds.
 frontend-1  | 172.19.0.1 - - [01/May/2026:00:21:08 +0000] "GET /resumes/36 HTTP/1.1" 200 5007 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:150.0) Gecko/20100101 Firefox/150.0" "67.185.49.200"
 api-1       |     return await self._run_node_with_hooks(node, self._advance_graph)
 api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
