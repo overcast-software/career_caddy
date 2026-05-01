@@ -234,6 +234,120 @@ implements a =loading= action that returns =true= (suppresses the substate)
 when =transition.from.name === routeName= — i.e. in-route refreshes only;
 cold loads still get the skeleton. Frontend PR #88.
 * Inbox
+** WAIT Verify linkedin.com ready_selector fix on next job-view scrape :scrape:
+:PROPERTIES:
+:CREATED:  2026-05-01
+:END:
+Profile id 2 (linkedin.com) updated 2026-05-01 16:53 UTC with
+=ready_selector: ".show-more-less-html, .jobs-description__container, section.show-more-less-html, .description__text"=
+to fix the ExpandTruncations no-op on scrape #250 (job-post 1315,
+Lululemon Senior Cybersecurity Engineer). See Scrape Log entry
+[2026-05-01] in notes.org for diagnosis.
+
+Verification on the next linkedin.com /jobs/view/ scrape:
+- =get_scrape_graph_trace= should show =WaitReadySelector= routing
+  to =ExpandTruncations= directly (skipping SettleWait) with
+  =duration_ms > 0= (the actual selector wait, up to 5000 ms).
+- =ExpandTruncations= duration should be >100 ms with a click
+  landing — logfire span =expanded truncation: ...= present.
+- Capture body should contain the *full* job description, not the
+  CSS-clipped preview.
+- If still failing: re-scrape job-post 1315 manually, pull the
+  screenshot, and check whether the description container uses a
+  different class on the public (logged-out) variant. Candidates
+  to add: =[data-test-description]=, =.core-rail .description=.
+
+** TODO Tier1 closed-banner fabrication guard :ai:scrape:
+:PROPERTIES:
+:CREATED:  2026-05-01
+:END:
+Tier1Mini extractor on scrape #251 (linkedin.com, jp 1550) prepended
+=**[CLOSED — applications no longer accepted]**= to the job description
+even though *none* of the six closed-state trigger phrases appear in
+the captured page body (verified: =grep -ic= for the canonical phrases
+returns 0 against scrape #251's =job_content=). Downstream, the
+regex in =api/job_hunting/lib/text_signals.py:34= matched the
+fabricated marker and flipped =posting_status="closed"= on a live
+posting, so the UI now shows a Closed chip and scoring / cover-letter
+flows would silently skip it. See Scrape Log entry
+=[2026-05-01] linkedin.com — Tier1 fabricates [CLOSED ...] banner=.
+
+*Suspect prompt path*
+- =agents/scrape_graph/nodes_extract.py= — Tier1Mini node assembles
+  the system prompt from the ScrapeProfile's =extraction_hints= and
+  =page_structure= fields. The linkedin.com profile's
+  =extraction_hints= contains a paragraph (look for "CLOSED-STATE
+  SIGNALS — IMPORTANT") instructing the model to lead the description
+  with =**[CLOSED — applications no longer accepted]**= when any of
+  six phrases appear. The hint *does not* require the model to quote
+  the matching source phrase, so a soft mis-classification produces an
+  unsubstantiated marker.
+- Confirm whether the runner inlines =extraction_hints= and
+  =page_structure= into the same system prompt; if so, the closed-
+  state block is rubbing shoulders with the obstacle / account-chooser
+  block under =page_structure=, raising the chance of cross-contamination.
+
+*Minimal fix shape (substantiation guard)*
+- Extend the Tier1/Tier2 response schema with an optional
+  =closed_evidence: str | None=. The closed-banner prefix may only be
+  rendered when =closed_evidence= is non-null *and* a validator
+  confirms it appears verbatim (case-insensitive) in the captured
+  =job_content=. Failed validation = drop the prefix; never flip
+  =posting_status= on unsubstantiated claims.
+- Apply the same pattern to any future "synthesize a structured claim
+  from soft signals" hint — generic safety property, not a
+  linkedin-only patch.
+
+*Reproducer / unit test sketch*
+- =agents/tests/test_extract_closed_signals.py= (new):
+  - Feed the extractor a fixture =job_content= that contains *no*
+    closed-state phrases but does contain LinkedIn-style ambient
+    chrome ("Reposted", "Over 100 people clicked apply").
+  - Use the active linkedin.com profile (or a fixture clone of its
+    extraction_hints) so the closed-state hint is in the prompt.
+  - Assert: the extractor's emitted =description= does *not* start
+    with =**[CLOSED= and =closed_evidence is None=.
+  - Negative companion test: feed content containing
+    "No longer accepting applications" verbatim and assert
+    =closed_evidence= equals that substring and the marker is
+    rendered.
+
+*Out of scope for this todo*
+- Manual cleanup of jp 1315 / jp 1550 (carried separately).
+- Any change to =text_signals.py:34=. The regex is correct; the bug
+  is upstream — don't make the closed-state detector permissive to
+  paper over LLM hallucinations.
+
+** TODO Backfill linkedin /comm/ duplicate jp 1315 ↔ jp 1550 :api:data:
+:PROPERTIES:
+:CREATED:  2026-05-01
+:END:
+Scrape #251 (linkedin.com, 2026-05-01) created jp 1550 from a
+=https://www.linkedin.com/comm/jobs/view/4383047961/= source while jp
+1315 (same role, Lululemon Senior Cybersecurity Engineer) sat as a
+stub on the =/comm/= URL. Root cause + fix tracked in Scrape Log
+entry =[2026-05-01] linkedin.com — /comm/ dedup miss=; profile id 2
+now carries a =url_rewrites= rule that strips =/comm/= before
+Navigate, so *new* scrapes won't repeat the split.
+
+This todo is *only* the data backfill:
+- Confirm jp 1315 and jp 1550 describe the same posting (link IDs
+  match: =4383047961=).
+- Decide retention: keep jp 1315 (older id, has stub interaction
+  history) and copy the description / metadata from jp 1550 onto it,
+  then delete jp 1550 — *or* the inverse, whichever has more
+  attachments. Default: keep the older id, hard-delete the newer.
+- Re-point any related rows (Scrapes, Applications, Scores) from the
+  losing id to the winning id before delete. Use the canonical
+  =/jobs/view/4383047961/= URL on the survivor.
+- Repeat the audit for any other linkedin.com JobPost pairs whose
+  links differ only by =/comm/= — quick: =SELECT id, link FROM
+  job_posts WHERE link LIKE '%linkedin.com/comm/jobs/view/%';= and
+  for each row, look for a sibling on the bare-path form.
+
+Out of scope: code changes — the prevention fix is already in the
+profile.
+
 ** STRT JobPost.source clobber fix + jp.show URL aliases panel :api:frontend:
 Job-post 1483 (Senior SWE, Optum/UnitedHealth) showed =source: scrape=
 in prod despite originating from a Jobright digest email
