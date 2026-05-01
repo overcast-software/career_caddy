@@ -250,6 +250,37 @@ company avatar (data-side question, not a template fix).
 =frontend/app/templates/job-posts/show.hbs=.
 ** boot IP 130.12.180.144
 attempted /.env
+** STRT search-flicker fix: invert =loading()= booleans + add subnav skeletons :frontend:
+The two prior "fixes" ([[*Search input flicker on /scrapes \[frontend\]][PR #88]] and
+[[*search still disappears][the six-route mirror]]) had the =loading()=
+return values backwards. Per the Ember Loading Substates contract,
+=loading()= returning =false= prevents the loading template from
+rendering; returning =true= bubbles the event so the default behavior
+(=*-loading.hbs=) fires. The shipped code did the opposite of its own
+comment, so on every search keystroke =index-loading.hbs= still
+rendered → =<:subnav>= was empty → SearchBar torn down + remounted →
+visible flicker + focus loss. Tally #23 territory: prior entries were
+prematurely marked SHIPPED.
+
+This change inverts the booleans on all 7 list routes
+(=job-posts/index.js=, =scrapes/index.js=, =questions/index.js=,
+=companies/index.js=, =answers/index.js=, =summaries/index.js=,
+=job-applications/index.js=): self-transition → =false= (suppress
+substate), cross-route → =true= (show skeleton), initial load → =true=.
+
+Out-of-scope items completed in the same branch:
+- Removed unused =@keyframes subnav-fade-in= from =app/styles/app.css=
+  (a relic of an earlier liquid-fire attempt — defined but never
+  applied to any selector).
+- Added =<SubnavSkeleton />= component plus =<:subnav>= slot in all 7
+  =*-loading.hbs= templates so cold loads no longer have an empty
+  subnav strip flash in.
+- 21 new unit tests (3 per route × 7 routes) covering =loading()=
+  action behavior — regression coverage so this can't silently invert
+  again. Plus 2 integration tests for =<SubnavSkeleton />=.
+
+=make ci= green locally before push. Promote to SHIPPED only after
+parent Deploy turns green and the flicker is verified gone in prod.
 ** SHIPPED search still disappears :frontend:
 CLOSED: [2026-04-30 Thu]
 PR #88 only fixed =scrapes/index=. The other six list routes with a
