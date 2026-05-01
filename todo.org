@@ -180,10 +180,18 @@ Tasks:
 - [ ] Regression test: after a "take me to X" turn, assert a
   navigate marker is present in the sub-agent's response.
 
-** TODO revamp scrapes/edit page :APPROVED:
+** SHIPPED revamp scrapes/edit page :APPROVED:frontend:
+CLOSED: [2026-04-30 Thu]
 [[file:notes.org::*Revamp scrapes/edit page][Considerations → notes.org]]
-Use more recent conventions.
-*** nuclear delete is and the other buttons in that dialogue box are in the wrong spot.  should be above paste.
+- =scrapes/show=: pulled Edit / Retry / Re-parse / Graph out of =<:subnav>=
+  and into a =form-actions= row beneath the panel-card. Subnav now empty.
+- =scrapes/edit=: dropped the lonely =View= link from =<:subnav>=; form
+  footer groups Save + Cancel on the left and the destructive Delete on
+  the right (=ml-auto=). Delete now requires a =confirm()= ("nuclear"
+  guard that was missing).
+- =components/scrapes/form.{hbs,js}=: Cancel link added; submitDelete
+  short-circuits on confirm-deny. Delete sits right of the gap so it
+  can't be hit accidentally next to Save.
 
 ** LOOP [#C] As a superuser I want to be able to manage user accounts :APPROVED:
 [[file:notes.org::*Superuser account management][Considerations → notes.org]]
@@ -282,60 +290,104 @@ Touched: =agents/obstacle_agent.py=, =lib/scrape_graph/nodes_obstacle.py=,
 AI PR #33.
 ** PROJ Feature sorting tables
 * Inbox
-** TODO adding a log to job-application doesn't show it after save.
-** TODO AI chat still uses career data when grabbing my name
-** TODO AI still decided to update_anser tool instead of create_answer.  It did pull the correct context and gave a generic answer blowing away the one I wanted to interate on.
-** SHIPPED companies questions: blank index + dead-end answers URL [frontend]
-CLOSED: [2026-04-30 Thu]
-Three knotted bugs around =/companies/:id/questions=:
-- =/companies/:id/questions= rendered blank — there was no template for
-  =companies.show.questions.index= because the questions list lived on the
-  legacy =companies.show.answers= route (filename mismatch from earlier
-  refactor).
-- The answer-count badge in the questions list linked to
-  =companies.show.questions.show.answers= (no answer id), which had no
-  index template → blank.
-- The "← Questions" back link on the question-show page pointed at
-  =companies.show.questions= and inherited the same blank-index problem.
+** TODO a few bugs in this output
+frontend-1  | 172.19.0.1 - - [01/May/2026:00:21:08 +0000] "GET /resumes/36 HTTP/1.1" 200 5007 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:150.0) Gecko/20100101 Firefox/150.0" "67.185.49.200"
+api-1       |     return await self._run_node_with_hooks(node, self._advance_graph)
+api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/run.py", line 282, in _run_node_with_hooks
+api-1       |     return await self._wrap_and_advance(run_context, node, step_fn)
+api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/run.py", line 262, in _wrap_and_advance
+api-1       |     result = await cap.on_node_run_error(run_context, node=node, error=e)
+api-1       |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/capabilities/combined.py", line 215, in on_node_run_error
+api-1       |     raise error
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/run.py", line 260, in _wrap_and_advance
+api-1       |     result = await cap.wrap_node_run(run_context, node=node, handler=step_fn)
+api-1       |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/capabilities/combined.py", line 201, in wrap_node_run
+api-1       |     return await chain(node)
+api-1       |            ^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/run.py", line 238, in _advance_graph
+api-1       |     task = await self._graph_run.next(task)
+api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 497, in next
+api-1       |     return await anext(self)
+api-1       |            ^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 471, in __anext__
+api-1       |     self._next = await self._iterator.asend(self._next)
+api-1       |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 580, in iter_graph
+api-1       |     raise task_result.error
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 754, in _run_tracked_task
+api-1       |     result = await self._run_task(t_)
+api-1       |              ^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 795, in _run_task
+api-1       |     output = await node.call(step_context)
+api-1       |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/step.py", line 253, in _call_node
+api-1       |     return await node.run(GraphRunContext(state=ctx.state, deps=ctx.deps))
+api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/_agent_graph.py", line 496, in run
+api-1       |     return await self._make_request(ctx)
+api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/_agent_graph.py", line 711, in _make_request
+api-1       |     model_response = await ctx.deps.root_capability.on_model_request_error(
+api-1       |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/capabilities/combined.py", line 276, in on_model_request_error
+api-1       |     raise error
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/_agent_graph.py", line 701, in _make_request
+api-1       |     model_response = await ctx.deps.root_capability.wrap_model_request(
+api-1       |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/capabilities/combined.py", line 262, in wrap_model_request
+api-1       |     return await chain(request_context)
+api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/_agent_graph.py", line 687, in model_handler
+api-1       |     response = await req_ctx.model.request(
+api-1       |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/models/openai.py", line 1452, in request
+api-1       |     response = await self._responses_create(
+api-1       |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/models/openai.py", line 1781, in _responses_create
+api-1       |     raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.body) from e
+api-1       | pydantic_ai.exceptions.ModelHTTPError: status_code: 400, model_name: anthropic:claude-haiku-4-5, body: {'message': "The requested model 'anthropic:claude-haiku-4-5' does not exist.", 'type': 'invalid_request_error', 'param': 'model', 'code': 'model_not_found'}
+api-1       | ERROR 2026-04-30 16:57:50,878 log 28 133751456723712 Bad Gateway: /api/v1/scrapes/237/llm-extract/
+api-1       | 172.19.0.1 - - [30/Apr/2026:16:57:50 -0700] "POST /api/v1/scrapes/237/llm-extract/ HTTP/1.1" 502 268 "-" "python-httpx/0.28.1"
+*** who is calling llm-extract?
+*** what is the error for?
+*** My resume never parsed :(
 
-Fix: moved =routes/companies/show/answers.js= → =questions/index.js=,
-=templates/companies/show/answers.hbs= → =questions/index.hbs=, dropped
-the legacy =answers= sub-route from the parent router. Updated 5 callers
-(=companies/tabs.hbs=, =companies/show.hbs=, =questions/form.js=,
-=companies/show/questions/new.hbs=) to point at =companies.show.questions=.
-Repointed the answer-count badge at =companies.show.questions.show=
-(that page already inlines the answers list). Added a thin
-=companies.show.questions.show.answers.index= redirect route so any
-direct nav to the bare =/answers/= URL bounces to the question detail.
-** SHIPPED companies.show.job-applications: nested =new= w/ company prefilled [frontend]
-CLOSED: [2026-04-30 Thu]
-=companies.show.job-applications= used to be a leaf route that just listed
-applications and had no "+New" affordance. Two changes:
-- Added a "+New Application" button on the index, deep-linking the new
-  nested =companies.show.job-applications.new= route — same pattern as
-  =job-posts.show.questions.new=.
-- The new route createRecord with =company= pre-set (=appliedAt=today=,
-  =status='Applied'=) and exposes =sortedJobPosts= as
-  =@jobPostOptions=. =JobApplications::Edit= grew an opt-in
-  =@jobPostOptions= arg: when provided, the previously-disabled job-post
-  text input becomes a searchable PowerSelect filtered to that
-  company's posts. Existing callers (=jp.show.job-applications.new=,
-  =ja.edit=) pass nothing → unchanged behavior.
 
-Required splitting =companies.show.job-applications= into a parent
-route with =index= + =new=; the existing list moved to
-=index.{js,hbs}= with default-outlet passthrough on the parent.
-** TODO AI chat will put answers in the chat but not write new answers with MCP
-** TODO when adding "vetted bad/good' the current filters on jp.index filter out the item dynamically
-** SHIPPED Move global spinner from subnav to header [frontend]
+** TODO when pasting a url for a new job-post
+https://careercaddy.online/job-posts/1481
+the url submitted and I was taken to the job post.
+I should be taken to job-post.show.scrapes.show
+however I had to go to job-post.show.scrapes.index and I did not see my scrape there
+I refreshed the page and saw it then in "hold"
+when it completed, I had to reload the page to see the updated job-post.description
+** SHIPPED saving a job-application from job-posts goes to jp.show.ja.index :frontend:
 CLOSED: [2026-04-30 Thu]
-=route-layout.hbs= used to render the spinner-status indicator in the
-=:right= slot of =Menus::SubnavBar=, which visually blocked any subnav
-control on its row whenever a route was loading. Moved the spinner into
-=top-bar.hbs= (next to the username/login button); subnav stays fully
-interactive during loads. Same =.spinner-status= markup, same service —
-just a different mount point. Dropped the now-unused =@service spinner=
-from =route-layout.js=; injected it on =top-bar.js=.
+=controllers/job-posts/show/job-applications/new.js= now transitions to
+=job-posts.show.job-applications.index= (using =model.jobPost.id=)
+instead of the top-level =job-applications.show=. Keeps the user
+"inside" the parent job-post after creating a JA.
+** SHIPPED adding a log to job-application shows it after save :frontend:bug:
+CLOSED: [2026-04-30 Thu]
+Two-part fix in =components/job-applications/status-log.{hbs,js}=:
+- Reactivity: =_sortedRecords= now reads
+  =ja.hasMany('applicationStatuses').value()= (sync materialized view)
+  instead of =.toArray()= on the async proxy. Newly =createRecord='d
+  status entries pushed via the inverse =application= relationship
+  appear in the timeline immediately after =save()=.
+- UX: added an optional note =<textarea>= to the log-status form. The
+  note attaches to the explicitly selected status (chain gap-fillers
+  stay note-less). Means a "Vetted Bad — why" can live on the status
+  entry instead of the user dumping it into =ja.notes= as a workaround.
+** AI chat work [/]
+*** TODO AI chat still uses career data when grabbing my name
+*** TODO AI still decided to update_anser tool instead of create_answer.  It did pull the correct context and gave a generic answer blowing away the one I wanted to interate on.
+*** TODO AI chat will put answers in the chat but not write new answers with MCP
+** TODO [#B] when adding "vetted bad/good' the current filters on jp.index filter out the item dynamically
 ** TODO result from scrape https://careercaddy.online/scrapes/218:
 If are copying this link from a mail reader please ensure that you have copied all the lines in the link.
 ** TODO JobPost dedupe — merge company_id into NULL-fingerprint stubs [api]
@@ -535,9 +587,25 @@ Call log:
 ** KILL https://careercaddy.online/scrapes/191 :bug:
 CLOSED: [2026-04-30 Thu 12:37]
 linkedin being dumb -investigate
-** TODO source (i.e. email for job-post.show)
-surface this as a little bad
+** SHIPPED source (i.e. email) for job-post.show :frontend:
+CLOSED: [2026-04-30 Thu]
+Surfaced =JobPost.source= as a small gray pill ("Source: <value>")
+inline with the Posted/Added meta line on jp.show. Reads the existing
+attr — no api change needed. Email-pipeline posts are now distinguishable
+at a glance from manual / paste / scrape / import.
+** SHIPPED jp.show header action cleanup (Run scrape removed, Copy moved) :frontend:
+CLOSED: [2026-04-30 Thu]
+=templates/job-posts/show.hbs=: dropped the standalone "Run scrape" and
+"Copy" buttons from the header action row. "Scrape & Score" survives
+(stubs only — same condition as before, just unwrapped from the parent
+=#if= now that "Run scrape" is gone). Copy moved to a small inline
+button next to Expand/Collapse beneath the description, separated by a
+=·= and =gap-4=. =controllers/job-posts/show.js=: shortened
+=copyButtonText= default to "Copy" and removed the now-orphaned
+=runScrape= action (~60 LOC) plus tightened two stale comments in
+=scrapeAndScore=.
 ** TODO replace ↗ with {{link.hostname}} ↗
+https://job-boards.greenhouse.io/defenseunicorns?error=true
 ** TODO [#A] Harden =make ci= so it cannot return green-but-broken [dagger]
 [2026-04-29] Tally #9/#13/#14/#19 are all the same shape: Dagger
 =call build-api= / =call build-frontend= summarize a successful build
@@ -574,11 +642,30 @@ Acceptance:
 - README / agent guidance updates to drop the "grep for # pass N
   yourself" workaround — the tally rules can stop chasing it.
 - New tally entry retiring tally #9/#13/#14/#19 as superseded.
-** TODO viewing a scrape from jp.show.scrapes.index should go to jp.show.scrapes.show
-** TODO I want to see the final_url in the UI
-We previously worked on getting the application_url
-but I want to see it on the screen.
-I would want to fix a scrape that didn't attempt to find that link
+** SHIPPED viewing a scrape from jp.show.scrapes.index goes to jp.show.scrapes.show :frontend:
+CLOSED: [2026-04-30 Thu]
+Added a nested =show= route under =jp.show.scrapes=:
+- =router.js=: =scrapes= became a parent with =show= at =/:scrape_id=.
+- =git mv='d existing route/controller/template into =scrapes/index.*=
+  (class names renamed to *IndexController/*IndexRoute).
+- New parent =templates/job-posts/show/scrapes.hbs= = =\{\{outlet\}\}=.
+- New =routes|controllers|templates/job-posts/show/scrapes/show.{js,js,hbs}=
+  with route doing =findRecord= + sideloads, controller carrying
+  =retryScrape= / =parseScrape=, template rendering =Scrapes::Item= +
+  the same form-actions row + a "← Back to scrapes" breadcrumb.
+- =Scrapes::List= takes an optional =@viewRoute=; jp index passes
+  ="job-posts.show.scrapes.show"=. Other callers default to top-level.
+** SHIPPED Final URL surfaced in the scrape UI :frontend:
+CLOSED: [2026-04-30 Thu]
+Added a "Final URL" row to =components/scrapes/item.hbs= that renders
+when there's a redirect child whose url differs from the parent's
+(reads =scrape.scrapes[0].url= written by =ResolveFinalUrl=). For
+non-redirected scrapes the existing "URL" row is already the final URL.
+No backend / migration work — uses the existing source-scrape chain.
+Caveat: the row depends on the redirect child being sideloaded; the new
+nested jp.show.scrapes.show route includes =scrapes= so it's covered.
+The top-level =scrapes.show= route may still need the include added if
+the row should appear there too.
 ** SHIPPED [#A] if I change job-post company, all the questions, answers, etc. should change too.
 - State "SHIPPED"    from "TODO"       [2026-04-28]
 Shipped 2026-04-28 in api PR #60 (parent =26e424e=, Deploy
