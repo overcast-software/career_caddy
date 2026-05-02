@@ -77,10 +77,34 @@ format-frontend: ## Prettier auto-fix frontend (PATHS=... for files; defaults to
 
 # ── CI (Dagger) ────────────────────────────────────────────────────────────
 # Requires Dagger CLI: curl -fsSL https://dl.dagger.io/dagger/install.sh | sh
+#
+# Two-phase fail-fast layout: lint across both repos in parallel first
+# (cheap; surfaces style/format/static breaks in ~30s), then tests in
+# parallel (slow). A lint break in either repo aborts before tests run.
+# Dagger's content-addressed cache reuses the apt/uv/npm setup steps
+# between the lint and test functions, so the split is not duplicated work.
 
-ci: ## Run API + frontend CI checks locally via Dagger (lint, tests, no secrets needed)
-	dagger -m ./dagger call build-api
-	dagger -m ./dagger call build-frontend
+.PHONY: ci ci-lint ci-test
+.PHONY: ci-lint-api ci-lint-frontend ci-test-api ci-test-frontend
+
+ci-lint-api:
+	dagger -m ./dagger call lint-api
+
+ci-lint-frontend:
+	dagger -m ./dagger call lint-frontend
+
+ci-test-api:
+	dagger -m ./dagger call test-api
+
+ci-test-frontend:
+	dagger -m ./dagger call test-frontend
+
+ci-lint: ci-lint-api ci-lint-frontend
+ci-test: ci-test-api ci-test-frontend
+
+ci: ## Run API + frontend CI checks locally via Dagger (lint then tests, parallel within each phase)
+	$(MAKE) -j2 ci-lint
+	$(MAKE) -j2 ci-test
 
 ci-ai: ## Build the slim AI Docker image via Dagger (no camoufox — production image)
 	dagger -m ./dagger call build-ai
