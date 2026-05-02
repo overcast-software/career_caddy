@@ -325,6 +325,34 @@ The API check is authoritative; the popup mirror is defense in depth (a
 =curl= can bypass the popup but not =url_policy.py=).
 
 
+** STRT Ingest abuse defense — Phase 0 lift onto =POST /job-posts/= :api:security:
+:PROPERTIES:
+:CREATED:  [2026-05-02]
+:END:
+Plan at =~/.claude/plans/this-flowchart-got-lost-magical-candle.md=.
+
+cc_auto inbox triage, the chat agent's =create_job_post_with_company_check=
+tool, and the manual create form all POST directly to
+=/api/v1/job-posts/=, bypassing the URL-policy gate the Phase 0 work
+added to =/scrapes/=. The flowchart in =notes.org= the user just
+retrieved makes this asymmetry explicit.
+
+What landed (api submodule, =feature/ingest-url-policy=):
+- =api/views/jobs.py:JobPostViewSet.create= calls
+  =validate_submission_url(link)= immediately after =pre_save_payload=.
+  422 with =blocked_scheme/blocked_self/blocked_private/blocked_malformed=
+  on rejection; envelope matches the scrapes path.
+- =tests/test_job_post_url_hygiene.py:TestJobPostUrlPolicy= — 6 cases
+  (javascript scheme, careercaddy.online self-host, RFC1918, =.local=,
+  clean URL regression, no-link skip).
+- Frontend manual-create controller already surfaces
+  =error.errors[0].detail= via =flashMessages.danger= — no FE change.
+- 656 api tests green; ruff clean.
+
+Tracker resolution (=is_tracker_host=/=resolve_tracker=) was
+*intentionally not lifted in this slice*. See Phase 2 entry below for
+the LinkedIn =/comm/= → login-wall finding that scoped this work down.
+
 ** SHIPPED Extension: dark-mode + palette-aware popup, Enter-to-submit :frontend:extension:
 CLOSED: [2026-05-02]
 v0.3.3 → v0.3.5. Visual rewrite of =popup.html= around CSS custom
@@ -368,6 +396,24 @@ Phase 1 follow-up to the Phase 0 ingest defenses. Plan at
 Phase 2 follow-up. Single deliverable for vector I5
 (client-asserted (link, text) pair). Plan at
 =~/.claude/plans/dazzling-stirring-church.md=.
+
+*Constraint added [2026-05-02]:* an attempted lift of
+=resolve_tracker()= onto =POST /job-posts/= regressed three discovery
+tests because LinkedIn =/comm/= URLs HEAD-redirect to
+=/uas/login?session_redirect=…= without auth — the resolver returned
+the login URL as canonical, *worse* than the wrapped input. See
+=notes.org → [2026-05-02] Phase 2 deferred:= for full trace.
+
+Implication for the Phase 2 design: tracker resolution on auth-gated
+hosts (LinkedIn =/comm/= today, presumably others) needs a deterministic
+per-host *path rewrite* (strip =/comm/=, drop =trackingId=/=refId=),
+NOT an HTTP-HEAD redirect chase. The same per-host strategy switch
+should retrofit =scrapes.py:340-375=, which has the same bug — the
+scrape graph's =ScrapeProfile.url_rewrites= masks it downstream but
+=Scrape.url= is still being persisted as the login URL on
+unauthenticated submissions today. Audit
+=tracker_resolver._TRACKER_HOST_SUFFIXES= and split into
+redirect-resolve vs path-rewrite classes before any next attempt.
 
 - New module =lib/link_provenance.py=:
   - =check_host_in_text(link, text)= — always-on label-only signal.
