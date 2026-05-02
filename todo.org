@@ -241,6 +241,7 @@ CLOSED: [2026-05-02]
 ingestion timestamp. Lets the user confirm email-sourced posts arrived at the
 expected time without opening the record. Frontend PR #103.
 
+** TODO block 195.178.110.9
 ** DONE Retry scrape redirects to new child scrape :frontend:
 CLOSED: [2026-05-02]
 =job-posts/show/scrapes/show.js= controller: after =redo= POST, poll
