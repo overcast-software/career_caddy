@@ -234,6 +234,13 @@ implements a =loading= action that returns =true= (suppresses the substate)
 when =transition.from.name === routeName= — i.e. in-route refreshes only;
 cold loads still get the skeleton. Frontend PR #88.
 * Inbox
+** DONE Retry scrape redirects to new child scrape :frontend:
+CLOSED: [2026-05-02]
+=job-posts/show/scrapes/show.js= controller: after =redo= POST, poll
+the source scrape's =scrapes= hasMany (reloaded with =include: scrapes=)
+until a child appears, then =router.transitionTo('job-posts.show.scrapes.show',
+jpId, childId)=. Falls back to reloading the original scrape if no
+child appears within 30 s (e.g. non-redirecting URLs). Added =@service router=.
 ** TODO caddy-web cannont get screenshots
 ** TODO https://careercaddy.online/job-posts/1551
 why two canonical?
@@ -260,7 +267,185 @@ Verification on the next linkedin.com /jobs/view/ scrape:
   different class on the public (logged-out) variant. Candidates
   to add: =[data-test-description]=, =.core-rail .description=.
 
-** TODO Tier1 closed-banner fabrication guard :ai:scrape:
+Update [2026-05-01 ~17:00 UTC]: scrape #257 → child #258 (jp 1574,
+LinkedIn /comm/ → /jobs/view/4406443184/, AES Group Infrastructure
+Engineer) revealed a *second* failure mode: when cookies authenticate
+into flagship-web (logged-in SPA), none of the four
+public-guest selectors match — the captured =job_content= for #258
+is just nav + footer chrome ("0 notifications / Skip to main content
+/ ... LinkedIn Corporation © 2026"); zero hits in the captured HTML
+for any of =jobs-description=, =show-more-less-html=,
+=description__text=, =jobs-box__html=, =about-the-job=, etc. The job
+description body never hydrated before Capture.
+- Symptoms in the graph trace (scrape 258): WaitReadySelector
+  duration 5011ms (full timeout, no match), Capture duration 30115ms
+  (likely networkidle timeout), Tier0CSS 0ms (nothing to extract,
+  fell straight through to Tier1Mini), Tier1Mini scraped only meta
+  ("Top applicant, Seattle, WA.") which became jp 1574's description.
+  ResolveApplyUrl: =no_selector_matched=.
+- Profile #2 ready_selector extended (2026-05-01 ~17:00 UTC) with
+  flagship-web (authenticated) selectors:
+  =.jobs-description-content__text=,
+  =.jobs-description__content=, =.jobs-box__html-content=,
+  =.jobs-search__job-details--container=,
+  =.job-details-jobs-unified-top-card__primary-description-container=,
+  =article.jobs-description__container=,
+  =div[class*='jobs-description']=. Apply markers also extended
+  (=.jobs-s-apply button=, =button.jobs-apply-button=).
+- Verify on next /jobs/view/ scrape that authenticates: WaitReadySelector
+  duration <5000ms with a flagship selector winning, Tier0CSS
+  duration_ms > 0 (actual extraction, not 0ms passthrough), captured
+  body length >> 600 chars.
+- Re-scrape jp 1574 once a flagship-cookie session is active to
+  confirm the description fills with real body, not the meta blurb.
+
+Update [2026-05-02]: scrape #259 ran *after* the flagship-web
+selector additions and *still* produced a chrome+teaser-only
+description for jp 1574. Diagnosis (see notes.org Scrape Log
+=[2026-05-02] linkedin.com — "Promoted by hirer" off-platform
+variant=): jp 1574 is *not* the standard hydration-lag case — it
+is LinkedIn's off-platform-managed posting variant
+("Promoted by hirer · Responses managed off LinkedIn"). The
+description does not exist in the LinkedIn DOM at all; the apply
+CTA is locked inside =data-testid="interop-iframe"=. No further
+profile-2 selector tightening will recover this jp's description.
+The ready_selector additions remain correct for the *standard*
+flagship-web variant — verification of that fix is still pending
+on the *next* standard-variant linkedin /jobs/view/ scrape (i.e.
+one without the "Promoted by hirer" markers).
+
+Update [2026-05-02 ~later]: re-investigation of the captured HTML
+for scrape #259 (89 KB, full SDUI render) *partially corrects*
+the earlier "iframe-locked" claim above. The apply CTA *is*
+present in the LinkedIn DOM, not iframe-locked: it's an =<a>= with
+=aria-label="Apply on company website"= and =target="_blank"=
+pointing at =https://www.linkedin.com/safety/go/?url=<encoded>=
+which redirects out to the hirer (ceipal candidate portal in this
+case). The reason ResolveApplyUrl returned =no_selector_matched=
+is purely that profile #2's =apply_link_selectors= still listed
+only =a.jobs-apply-link[href]= and
+=a[data-tracking-control-name*='apply']=, neither of which match
+the new randomized-class SDUI markup. =apply_candidates= already
+captured the right anchor at score 0.7 — the resolver doesn't
+promote candidates, only honors selectors.
+
+Profile #2 =apply_link_selectors= updated 2026-05-02 to add (in
+priority order):
+- =a[aria-label='Apply on company website'][href]=
+- =a[aria-label^='Apply on'][href]=
+- =a[aria-label*='Apply on company'][href]=
+- =a[href*='linkedin.com/safety/go/'][aria-label*='Apply']=
+- =a[href*='/safety/go/'][target='_blank'][aria-label*='Apply']=
+Legacy =a.jobs-apply-link[href]= and the tracking-control-name
+fallback retained at the end of the list.
+
+The description-body story for the off-platform variant is
+unchanged: even in the 89 KB SDUI HTML, no job-body copy appears
+(zero hits for cloud/aws/responsibilit/qualification/etc.), so
+the hirer-side description is genuinely not in the DOM. The
+todo entry below ("LinkedIn off-platform-managed variant
+detection") still applies for the description side — but the
+apply-URL portion of that todo can be narrowed: apply *is*
+recoverable via aria-label, just not the description.
+
+Verification on next scrape of a /jobs/view/ posting with
+=Apply on company website= aria-label: ResolveApplyUrl should
+route to End with =apply_url_status: resolved= and a
+=link_selector= note matching one of the new aria-label
+selectors (likely the first).
+
+** TODO LinkedIn off-platform-managed variant detection :ai:scrape:linkedin:
+:PROPERTIES:
+:CREATED:  2026-05-02
+:END:
+Some LinkedIn jobs (jp 1574, scrapes #258 and #259) render an
+"off-platform-managed" variant where the description is *not* in
+the DOM — the listing page only shows title/company/location +
+apply CTA, and the actual JD lives on the hirer's site. The apply
+CTA renders cross-origin inside =data-testid="interop-iframe"=,
+so even apply_url resolution fails (=no_selector_matched=).
+
+Detection signal (from scrape #259 captured =job_content= and
+=html=): page text contains *both* =Promoted by hirer= AND
+=Responses managed off LinkedIn=, AND the captured HTML contains
+=data-testid="interop-iframe"= at the page root. None of these
+signals appear on the standard /jobs/view/ variant.
+
+Recommended scope:
+- Detect at extraction time (Tier1Mini, or a new pre-Tier0
+  classifier node) and short-circuit: persist a description prefix
+  =[EXTERNAL — description hosted by hirer; open the apply link
+  to read the full posting]= so the user immediately sees the
+  stub is not a real description and doesn't burn scoring /
+  cover-letter / tailor cycles on it. Title/company/location/
+  posted-date should still be extracted from the page-level
+  metadata (those *are* present and correct).
+- (Apply-URL portion superseded 2026-05-02: the apply CTA is
+  *not* iframe-locked; it's a plain =<a>= with
+  =aria-label="Apply on company website"= going through
+  =linkedin.com/safety/go/?url=...= to the hirer site. Profile #2
+  selectors updated to capture it. So this todo's scope narrows
+  to the *description body*: the hirer-side description is
+  genuinely not in the LinkedIn DOM and won't be without an
+  iframe-bridge / hirer-side follow-up scrape.)
+- If the email-source link for the jp is itself a hirer-side URL
+  (rather than a LinkedIn tracker), prefer it as the canonical
+  link instead of the LinkedIn one, since the LinkedIn page is
+  strictly worse than the hirer page for this variant.
+
+Verification reproducer: jp 1574, scrapes #258 / #259. Re-running
+the scrape against the same URL will reproduce the same chrome+
+teaser-only output until this is shipped.
+
+Cross-link: notes.org Scrape Log =[2026-05-02] linkedin.com —
+"Promoted by hirer" off-platform variant= (full diagnosis,
+distinguishing markers, recovery options). cc_auto/notes.org
+mirror under =LinkedIn off-platform-managed posting variant —
+known-unscrapable [2026-05-02]=.
+
+** TODO LinkedIn flagship-web SPA needs hydration-aware wait, not just CSS :scrape:ai:
+:PROPERTIES:
+:CREATED:  2026-05-01
+:END:
+Scrape #258 (jp 1574) shows that even with cookies loaded, the
+authenticated LinkedIn /jobs/view/ SPA can take >5s to hydrate the
+description container. WaitReadySelector hit its 5000ms timeout, then
+Capture spent 30s presumably waiting on networkidle (LinkedIn never
+quiets down — analytics + chat + presence beacons). The CSS-selector
+expansion in the linkedin profile mitigates this for *most* renders
+but the underlying behavior is fragile: the wait-strategy is fixed
+client-side. Options:
+- Bump WaitReadySelector timeout to 10–15s for hosts with
+  =requires_auth=true= or a per-profile =wait_timeout_ms= override
+  on the css_selectors blob.
+- Replace networkidle with =domcontentloaded= + selector wait for
+  hosts that ship perpetual long-poll connections (LinkedIn,
+  Workday, Greenhouse-iframed boards).
+- Surface =wait_timeout_ms= and =settle_strategy= as first-class
+  ScrapeProfile fields (currently the wait timing is hard-coded in
+  =agents/scrape_graph/nodes/wait_ready.py= / =capture.py=).
+
+** TODO Scrape parent left in =running= when ResolveFinalUrl forks a child :scrape:api:
+:PROPERTIES:
+:CREATED:  2026-05-01
+:END:
+Scrape #257 (linkedin login URL) ran StartScrape → LoadProfile →
+Navigate → DetectObstacle → ResolveFinalUrl, where the
+url_rewrites rule generated child scrape #258 (canonical
+/jobs/view/...). Child completed successfully (outcome=success,
+job_post_id=1574) and the poller logged "Scrape 257 graph done:
+outcome=success ... trace=19", but =GET /api/v1/scrapes/257/=
+still reports =status: running= many minutes later. Either the
+graph never PATCHes a terminal status on the parent when its work
+delegates to a child, or the parent's terminal-state writer is
+upstream of the fork. UI shows scrape 257 as forever in-flight.
+- Reproduce: any =/comm/jobs/view/= URL into LinkedIn — the
+  url_rewrites rule fires, child scrape is created, parent never
+  flips to =completed=.
+- Repo: =agents/scrape_graph/nodes/resolve_final_url.py= or its
+  caller in =runner.py=.
+
+** DONE Tier1 closed-banner fabrication guard :ai:scrape:
 :PROPERTIES:
 :CREATED:  2026-05-01
 :END:
@@ -417,7 +602,8 @@ company avatar (data-side question, not a template fix).
 =frontend/app/templates/job-posts/show.hbs=.
 ** boot IP 130.12.180.144
 attempted /.env
-** STRT search-flicker fix: invert =loading()= booleans + add subnav skeletons :frontend:
+** DONE search-flicker fix: invert =loading()= booleans + add subnav skeletons :frontend:
+CLOSED: [2026-05-01 Fri 17:34]
 The two prior "fixes" ([[*Search input flicker on /scrapes \[frontend\]][PR #88]] and
 [[*search still disappears][the six-route mirror]]) had the =loading()=
 return values backwards. Per the Ember Loading Substates contract,
@@ -717,7 +903,7 @@ the BaseSerializer fields[<type>] patch.
 *** Resume is different in that we presume includes most of the time.
 this problem seesaws on either remove slim and use includes explicitly and fields when you want slim.  removing implicit includes has it's own trade offs
 
-** nuclear placement :frontend:
+** DONE nuclear placement :frontend:
 /home/oldbones/Pictures/screenshot-2026-04-30_17-43-49.png
 ** REFERENCE Jinja markup for the word template
 Source transcription of =api/templates/resume_export.docx=. Kept for audit
@@ -787,7 +973,7 @@ Projects
 * Bugs 🐛
 ** https://careercaddy.online/scrapes/189
 its a stubbed that short circuted
-** notes fro job-description.show isn't style compliant
+** DONE notes fro job-description.show isn't style compliant
 /home/oldbones/Pictures/screenshot-2026-04-30_18-08-24.png
 ** why did it decide it was closed?
 https://www.linkedin.com/jobs/view/4408226465/
