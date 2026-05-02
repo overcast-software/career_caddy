@@ -35,33 +35,20 @@ AI_IMAGE = "career_caddy_ai"
 @object_type
 class CareerCaddy:
 
-    @function
-    async def build_api(
-        self,
-        src: Annotated[dagger.Directory, DefaultPath("../api")],
-    ) -> dagger.Container:
-        """Build the Django API image and run linting + tests.
+    # ── Shared base containers ─────────────────────────────────────────────
+    # `_api_base` and `_frontend_base` produce a container with toolchain +
+    # deps installed and the source mounted, but no test/lint executions yet.
+    # The lint-only and test-only functions below compose on top of them so
+    # Dagger's content-addressed cache reuses the apt/uv/npm steps across
+    # phases. That's what makes the lint-then-test split fast on second pass.
 
-        Runs: ruff check, bandit security scan, Django test suite.
-        Requires a PostgreSQL service (started automatically as a sidecar).
-        """
+    def _api_base(self, src: dagger.Directory) -> dagger.Container:
         src = (
             src
             .without_directory(".venv")
             .without_directory("staticfiles")
             .without_directory(".git")
         )
-
-        pg = (
-            dag.container()
-            .from_("postgres:18")
-            .with_env_variable("POSTGRES_DB", "job_hunting_ci")
-            .with_env_variable("POSTGRES_USER", "postgres")
-            .with_env_variable("POSTGRES_PASSWORD", "postgres")
-            .with_exposed_port(5432)
-            .as_service()
-        )
-
         return (
             dag.container()
             .from_("python:3.11-slim")
@@ -79,46 +66,19 @@ class CareerCaddy:
             .with_exec(["uv", "sync", "--frozen", "--no-install-project"])
             .with_directory("/app", src)
             .with_exec(["uv", "sync", "--frozen"])
-            .with_service_binding("db", pg)
-            .with_env_variable(
-                "DATABASE_URL", "postgresql://postgres:postgres@db:5432/job_hunting_ci"
-            )
-            .with_env_variable("SECRET_KEY", "ci-test-secret-not-for-production")
-            .with_env_variable("DEBUG", "True")
-            .with_exec(["uv", "run", "ruff", "check", "."])
-            .with_exec(["uv", "run", "bandit", "-r", ".", "-x", "*/migrations/*,./.venv/*", "-ll"])
-            # --keepdb skips the teardown step. Without it, Django tries
-            # DROP DATABASE at the end and intermittently fails with
-            # "database is being accessed by other users" when the Dagger
-            # postgres sidecar health-checker still holds a connection.
-            # CI runs in a fresh container every time, so skipping teardown
-            # has no state-leak consequence.
-            .with_exec([
-                "uv", "run", "python", "manage.py", "test",
-                "-v", "2", "--keepdb", "--noinput",
-            ])
         )
 
-    @function
-    async def build_frontend(
-        self,
-        src: Annotated[dagger.Directory, DefaultPath("../frontend")],
-    ) -> dagger.Container:
-        """Build the Ember.js frontend image and run lint + tests."""
+    def _frontend_base(self, src: dagger.Directory) -> dagger.Container:
         src = (
             src
             .without_directory("node_modules")
             .without_directory("dist")
             .without_directory(".git")
         )
-
         # Firefox in `node:20-slim` fails with
         # "RenderCompositorSWGL failed mapping default framebuffer"
-        # under `-headless` because there's no /dev/dri. Wrapping the
-        # test run with xvfb-run gives Firefox a virtual framebuffer.
-        # libpci3 / libgl1 / libdbus-glib-1-2 are the GL+PCI bits firefox-esr
-        # probes at startup (and warns about when missing — see
-        # glxtest errors in the failing CI log).
+        # under `-headless` because there's no /dev/dri. xvfb-run gives
+        # firefox a virtual framebuffer; xauth is needed for the cookie.
         return (
             dag.container()
             .from_("node:20-slim")
@@ -126,11 +86,7 @@ class CareerCaddy:
                 [
                     "sh", "-c",
                     "apt-get update && apt-get install -y --no-install-recommends "
-                    "firefox-esr "
-                    # xvfb provides the virtual framebuffer, xauth is required
-                    # by xvfb-run to generate the magic cookie — without it
-                    # xvfb-run fails with "xauth command not found".
-                    "xvfb xauth "
+                    "firefox-esr xvfb xauth "
                     "libpci3 libgl1 libegl1 libdbus-glib-1-2 "
                     "libgtk-3-0 libasound2 "
                     "&& rm -rf /var/lib/apt/lists/*",
@@ -143,8 +99,171 @@ class CareerCaddy:
             .with_env_variable("MOZ_HEADLESS", "1")
             .with_exec(["npm", "ci"])
             .with_directory("/app", src)
+        )
+
+    # ── Lint-only (cheap, fail-fast) ───────────────────────────────────────
+
+    @function
+    async def lint_api(
+        self,
+        src: Annotated[dagger.Directory, DefaultPath("../api")],
+    ) -> dagger.Container:
+        """Ruff + bandit on the api source. No db, no test suite."""
+        return (
+            self._api_base(src)
+            .with_exec(["uv", "run", "ruff", "check", "."])
+            .with_exec(["uv", "run", "bandit", "-r", ".", "-x", "*/migrations/*,./.venv/*", "-ll"])
+        )
+
+    @function
+    async def lint_frontend(
+        self,
+        src: Annotated[dagger.Directory, DefaultPath("../frontend")],
+    ) -> dagger.Container:
+        """eslint + prettier + ember-template-lint + stylelint. No tests."""
+        return self._frontend_base(src).with_exec(["npm", "run", "lint"])
+
+    # ── Tests-only (slow) ──────────────────────────────────────────────────
+
+    @function
+    async def test_api(
+        self,
+        src: Annotated[dagger.Directory, DefaultPath("../api")],
+    ) -> dagger.Container:
+        """Django test suite against a postgres sidecar. Skips lint."""
+        pg = (
+            dag.container()
+            .from_("postgres:18")
+            .with_env_variable("POSTGRES_DB", "job_hunting_ci")
+            .with_env_variable("POSTGRES_USER", "postgres")
+            .with_env_variable("POSTGRES_PASSWORD", "postgres")
+            .with_exposed_port(5432)
+            .as_service()
+        )
+        return (
+            self._api_base(src)
+            .with_service_binding("db", pg)
+            .with_env_variable(
+                "DATABASE_URL", "postgresql://postgres:postgres@db:5432/job_hunting_ci"
+            )
+            .with_env_variable("SECRET_KEY", "ci-test-secret-not-for-production")
+            .with_env_variable("DEBUG", "True")
+            # --keepdb skips DROP DATABASE at the end (the postgres sidecar
+            # health-checker can still hold a connection, intermittently
+            # failing teardown). Fresh container each run, no state leak.
+            #
+            # Tee output to /test.log so the assertion step below can verify
+            # the canonical success markers. pipefail propagates manage.py's
+            # exit through `tee` (which always exits 0).
+            .with_exec([
+                "bash", "-c",
+                "set -o pipefail; "
+                "uv run python manage.py test -v 2 --keepdb --noinput 2>&1 "
+                "| tee /test.log",
+            ])
+            # Belt-and-suspenders: even if the runner ever exits 0 with
+            # zero tests collected or swallowed failures, require the
+            # canonical success markers in the log. Tally #9/#13/#14/#19 —
+            # this assertion closes the green-but-broken gap.
+            .with_exec([
+                "sh", "-c",
+                "grep -qE '^Ran [1-9][0-9]* test' /test.log "
+                "&& grep -qE '^OK( |$)' /test.log",
+            ])
+        )
+
+    @function
+    async def test_frontend(
+        self,
+        src: Annotated[dagger.Directory, DefaultPath("../frontend")],
+    ) -> dagger.Container:
+        """Ember QUnit suite under xvfb. Skips lint."""
+        return (
+            self._frontend_base(src)
+            # Tee TAP output to /tap.log so the assertion step below can
+            # verify the summary lines. pipefail propagates `ember test`'s
+            # exit past `tee`.
+            .with_exec([
+                "bash", "-c",
+                "set -o pipefail; "
+                "xvfb-run -a npm run test:ember 2>&1 | tee /tap.log",
+            ])
+            # Belt-and-suspenders: even if the runner ever exits 0 with
+            # zero passes or non-zero fails, require the canonical TAP
+            # summary in the log. Tally #9/#13/#14/#19.
+            .with_exec([
+                "sh", "-c",
+                "grep -qE '^# fail +0$' /tap.log "
+                "&& grep -qE '^# pass +[1-9]' /tap.log",
+            ])
+        )
+
+    # ── Combined (kept for parent-Deploy + workflows that call them) ──────
+
+    @function
+    async def build_api(
+        self,
+        src: Annotated[dagger.Directory, DefaultPath("../api")],
+    ) -> dagger.Container:
+        """Lint + test the api in one shot. Used by .github/workflows.
+
+        Local `make ci` uses the split lint-api / test-api functions for
+        fail-fast. This combined function stays for the parent Deploy
+        workflow which invokes it directly.
+        """
+        # Compose: run lint steps then test steps on the same base.
+        # Reuses the cached api_base; serially adds lint then test+assert.
+        pg = (
+            dag.container()
+            .from_("postgres:18")
+            .with_env_variable("POSTGRES_DB", "job_hunting_ci")
+            .with_env_variable("POSTGRES_USER", "postgres")
+            .with_env_variable("POSTGRES_PASSWORD", "postgres")
+            .with_exposed_port(5432)
+            .as_service()
+        )
+        return (
+            self._api_base(src)
+            .with_exec(["uv", "run", "ruff", "check", "."])
+            .with_exec(["uv", "run", "bandit", "-r", ".", "-x", "*/migrations/*,./.venv/*", "-ll"])
+            .with_service_binding("db", pg)
+            .with_env_variable(
+                "DATABASE_URL", "postgresql://postgres:postgres@db:5432/job_hunting_ci"
+            )
+            .with_env_variable("SECRET_KEY", "ci-test-secret-not-for-production")
+            .with_env_variable("DEBUG", "True")
+            .with_exec([
+                "bash", "-c",
+                "set -o pipefail; "
+                "uv run python manage.py test -v 2 --keepdb --noinput 2>&1 "
+                "| tee /test.log",
+            ])
+            .with_exec([
+                "sh", "-c",
+                "grep -qE '^Ran [1-9][0-9]* test' /test.log "
+                "&& grep -qE '^OK( |$)' /test.log",
+            ])
+        )
+
+    @function
+    async def build_frontend(
+        self,
+        src: Annotated[dagger.Directory, DefaultPath("../frontend")],
+    ) -> dagger.Container:
+        """Lint + test the frontend in one shot. Used by .github/workflows."""
+        return (
+            self._frontend_base(src)
             .with_exec(["npm", "run", "lint"])
-            .with_exec(["xvfb-run", "-a", "npm", "run", "test:ember"])
+            .with_exec([
+                "bash", "-c",
+                "set -o pipefail; "
+                "xvfb-run -a npm run test:ember 2>&1 | tee /tap.log",
+            ])
+            .with_exec([
+                "sh", "-c",
+                "grep -qE '^# fail +0$' /tap.log "
+                "&& grep -qE '^# pass +[1-9]' /tap.log",
+            ])
         )
 
     @function
