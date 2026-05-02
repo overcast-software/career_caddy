@@ -234,6 +234,209 @@ implements a =loading= action that returns =true= (suppresses the substate)
 when =transition.from.name === routeName= — i.e. in-route refreshes only;
 cold loads still get the skeleton. Frontend PR #88.
 * Inbox
+** TODO scrape icon better than paperclip ?
+** TODO spc o c should reload the file before adding capture
+** TODO I can only see one user in ai-spend
+** TODO tiny button to go to /companies/<id>
+** TODO ban 84.32.70.55
+** TODO frontend pollable: scrapes 95/96 polled past terminal; pending Score may re-arm :frontend:bug:
+:PROPERTIES:
+:CREATED:  [2026-05-02]
+:END:
+Observed in dev logs after extension submissions of scrape 95 and 96 — the
+=GET /api/v1/scrapes/96/= request continued firing through the frontend
+proxy long after the scrape went terminal. Hypothesis: the frontend's
+=services/pollable.js= keeps a record's poll loop alive whenever any related
+resource transitions to =pending=. Auto-scoring creates a new =Score= row
+with =status=pending= as soon as the JobPost lands, and that pending Score
+may be retriggering the parent Scrape's poller (via the JobPost or via a
+shared pollable registry).
+
+Investigation steps:
+- Read =frontend/app/services/pollable.js= and trace the poll-keepalive
+  conditions. What stops the loop?
+- Trace =services/pollable.js= callers that register on Scrape vs Score —
+  is there any cross-registration where a pending Score in a job-post's
+  =scores= hasMany re-arms the scrape's poller?
+- Confirm with: visit =/scrapes/96= in the browser, watch network tab —
+  does the poll stop after the scrape goes terminal AND the auto-score
+  Score completes?
+- Score-count blow-up: if the loop keeps polling AND each iteration is
+  re-creating a new Score (instead of reusing one), the Score table will
+  fill up. Check =POST /api/v1/scores/= dedup logic — there's an existing
+  Score lookup on (job_post_id, resume_id, user_id) but if any of those
+  differ between iterations, dedup misses.
+
+Likely fix shapes (pick one after diagnosis):
+- Pollable terminates strictly on =terminal_status=, ignoring related
+  resource state.
+- Pending-Score auto-creates are deduped on (job_post_id, user_id) when
+  =resume_id is None= so re-arming doesn't multiply rows.
+- Pollable distinguishes "self pending" from "child pending" — stop on
+  the former, ignore the latter.
+
+Reproducer: submit a scrape from the extension with auto-score on, watch
+=docker compose logs -f api frontend= for sustained polling beyond the
+scrape's terminal status.
+
+** DONE Extension: hardcode origin = https://careercaddy.online :frontend:extension:
+CLOSED: [2026-05-02]
+v0.3.1 — removed the configurable origin input from =popup.html=, dropped
+=ccOrigin= from STORAGE_KEYS, hardcoded =ORIGIN= constant in =popup.js= and
+=background.js=. The frontend already strip-replaced the public download
+buttons (no .xpi/.zip artifacts in =public/extensions/=); developers test
+via =Load unpacked= against the source folder. Store-submission
+checklists captured in =notes.org → Browser Extension → Publishing
+pre-flight=.
+
+** SHIPPED Ingest abuse defense — Phase 0 (own-domain, scheme, private host) :api:extension:security:
+CLOSED: [2026-05-02]
+Concrete trigger: own-dogfood test — submitted =careercaddy.online= itself
+through the extension and the pipeline cheerfully minted a JobPost from the
+site's own marketing copy. Plan at =~/.claude/plans/dazzling-stirring-church.md=.
+
+What landed (api submodule, =feature/from-text-source-hint= follow-up):
+
+- =job_hunting/lib/url_policy.py= — single source of truth for
+  =validate_submission_url(raw)=. Hard-rejects scheme ∉ {http,https},
+  =SELF_HOSTS= (=careercaddy.online= + www variant, plus optional
+  =INGEST_BLOCKED_HOSTS= env), and private hosts (=localhost=, RFC1918,
+  link-local, =*.local= / =*.internal= / =*.lan= / =*.localhost=, IP
+  literals via =ipaddress= module). Raises =UrlPolicyError(code, msg)=
+  with stable codes: =blocked_self= / =blocked_scheme= / =blocked_private=
+  / =blocked_malformed=.
+- =api/views/scrapes.py= — both =from_text= and =create= call the validator;
+  422 with the policy code on rejection. =from_text= also enforces
+  =FROM_TEXT_MIN_LEN=200= / =FROM_TEXT_MAX_LEN=500_000= (codes
+  =text_too_short= 400 / =text_too_long= 422).
+- =tests/test_url_policy.py= (21 cases) + =test_scrape_from_text.py=
+  (new =TestScrapeFromTextPolicy=, 6 cases). Existing classes patched with
+  =@patch("...FROM_TEXT_MIN_LEN", 1)= so they keep testing what they were
+  written for. 44 tests green.
+
+What landed (frontend extension, =feature/extension-direct-post=):
+
+- =popup.js= — mirrors =SELF_HOSTS= / scheme / private-host check via
+  =classifyUrl(tab.url)= before the page read; fast-fails in the popup
+  with a friendly message before any POST.
+- v0.3.2 in =manifest.json= + =README.md= version-history entry.
+
+The API check is authoritative; the popup mirror is defense in depth (a
+=curl= can bypass the popup but not =url_policy.py=).
+
+
+** STRT Ingest abuse defense — Phase 0 lift onto =POST /job-posts/= :api:security:
+:PROPERTIES:
+:CREATED:  [2026-05-02]
+:END:
+Plan at =~/.claude/plans/this-flowchart-got-lost-magical-candle.md=.
+
+cc_auto inbox triage, the chat agent's =create_job_post_with_company_check=
+tool, and the manual create form all POST directly to
+=/api/v1/job-posts/=, bypassing the URL-policy gate the Phase 0 work
+added to =/scrapes/=. The flowchart in =notes.org= the user just
+retrieved makes this asymmetry explicit.
+
+What landed (api submodule, =feature/ingest-url-policy=):
+- =api/views/jobs.py:JobPostViewSet.create= calls
+  =validate_submission_url(link)= immediately after =pre_save_payload=.
+  422 with =blocked_scheme/blocked_self/blocked_private/blocked_malformed=
+  on rejection; envelope matches the scrapes path.
+- =tests/test_job_post_url_hygiene.py:TestJobPostUrlPolicy= — 6 cases
+  (javascript scheme, careercaddy.online self-host, RFC1918, =.local=,
+  clean URL regression, no-link skip).
+- Frontend manual-create controller already surfaces
+  =error.errors[0].detail= via =flashMessages.danger= — no FE change.
+- 656 api tests green; ruff clean.
+
+Tracker resolution (=is_tracker_host=/=resolve_tracker=) was
+*intentionally not lifted in this slice*. See Phase 2 entry below for
+the LinkedIn =/comm/= → login-wall finding that scoped this work down.
+
+** SHIPPED Extension: dark-mode + palette-aware popup, Enter-to-submit :frontend:extension:
+CLOSED: [2026-05-02]
+v0.3.3 → v0.3.5. Visual rewrite of =popup.html= around CSS custom
+properties driven by =data-theme=dark= and =data-palette=jade|rose|amber|violet|blue=
+on =<html>=. Mirrors the app's six palette names; dark variants only
+override =--accent-50= and =--accent-100= so the brighter accent stays
+consistent.
+
+Theme storage in =chrome.storage.local= as =ccTheme= ('system'/'light'/'dark')
++ =ccPalette=. Best-effort import: =scripting.executeScript= runs against
+the active CC tab and slurps =theme-mode= / =theme-palette= from its
+=localStorage=, then writes through to extension storage. Runs on every
+popup open (=loadSaved()=), not just on Connect — so users who upgraded
+after their first connect pick up the app's theme without
+disconnect/reconnect, and theme changes in the app surface on next popup.
+
+Footer sun/moon button manually overrides the saved mode. =matchMedia=
+listener re-renders when system pref flips while popup is open.
+
+v0.3.5 also: Enter in username or password triggers Connect.
+
+Local-build XPI for the user lives in =~/Sandbox/cc-ext-local/= and
+=~/Sandbox/career-caddy-sender-local-0.3.5.xpi= — distinct gecko id
+(=career-caddy-sender-local@careercaddy.online=) so it coexists with the
+prod extension in one Firefox profile.
+
+** TODO Ingest abuse defense — Phase 1 (hygiene) :api:frontend:security:
+Phase 1 follow-up to the Phase 0 ingest defenses. Plan at
+=~/.claude/plans/dazzling-stirring-church.md=. Three independent sub-tasks:
+
+1. Tracking-param strip + canonical-link normalization in
+   =lib/url_policy.normalize_link()= (utm_*, fbclid, gclid, mc_*, _hs*,
+   ref, ref_src). Backfill =JobPost.canonical_link= for existing rows.
+2. PII disclaimer in popup connect screen + =/docs/extension-privacy/=
+   page describing what the extension reads and stores.
+3. Frontend XSS audit — grep =frontend/app/templates/= for =html-safe=,
+   =triple-stash=, markdown render, =innerHTML= on JobPost-derived
+   content paths.
+
+** TODO Ingest abuse defense — Phase 2 (provenance + pipeline) :api:agents:security:
+Phase 2 follow-up. Single deliverable for vector I5
+(client-asserted (link, text) pair). Plan at
+=~/.claude/plans/dazzling-stirring-church.md=.
+
+*Constraint added [2026-05-02]:* an attempted lift of
+=resolve_tracker()= onto =POST /job-posts/= regressed three discovery
+tests because LinkedIn =/comm/= URLs HEAD-redirect to
+=/uas/login?session_redirect=…= without auth — the resolver returned
+the login URL as canonical, *worse* than the wrapped input. See
+=notes.org → [2026-05-02] Phase 2 deferred:= for full trace.
+
+Implication for the Phase 2 design: tracker resolution on auth-gated
+hosts (LinkedIn =/comm/= today, presumably others) needs a deterministic
+per-host *path rewrite* (strip =/comm/=, drop =trackingId=/=refId=),
+NOT an HTTP-HEAD redirect chase. The same per-host strategy switch
+should retrofit =scrapes.py:340-375=, which has the same bug — the
+scrape graph's =ScrapeProfile.url_rewrites= masks it downstream but
+=Scrape.url= is still being persisted as the login URL on
+unauthenticated submissions today. Audit
+=tracker_resolver._TRACKER_HOST_SUFFIXES= and split into
+redirect-resolve vs path-rewrite classes before any next attempt.
+
+- New module =lib/link_provenance.py=:
+  - =check_host_in_text(link, text)= — always-on label-only signal.
+  - =verify_link(scrape)= — toggle-gated re-fetch + comparison.
+- New =Scrape.link_verified= field (null / pending / ok / mismatch /
+  skipped) + =Scrape.link_unverified_reason= (short code).
+- New setting =INGEST_VERIFY_LINKS= (default =False= — we trust users to
+  start). When True, post-create hook on Scrape calls =verify_link=,
+  which re-fetches via the hold-poller path, runs the extractor on the
+  fetched HTML, and compares against the from-text result.
+- Frontend badge on JobPost detail surfaces the verification state when
+  it ran. Hidden when status is =skipped= so the trust posture is
+  invisible to legitimate users.
+- DNS-resolution check added to =validate_submission_url= — closes the
+  IP-literal bypass and the SSRF surface (vector I7) in one move.
+  Hold-poller pre-fetch also calls the validator.
+- Job-likelihood gate in =parsers/job_post_extractor= → low-confidence
+  extractions land as =needs_review= rather than auto-promoting.
+- Prompt-injection hardening on the extractor system prompt + structured
+  output enforcement.
+
+Toggle ladder (per-user, per-source overrides) deferred to Phase 3.
+
 ** DONE job-posts list: hover date shows created datetime :frontend:
 CLOSED: [2026-05-02]
 =frontend/app/components/job-posts/list.hbs= — wrapped posted-date cell in
