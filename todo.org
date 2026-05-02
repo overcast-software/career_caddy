@@ -325,7 +325,8 @@ The API check is authoritative; the popup mirror is defense in depth (a
 =curl= can bypass the popup but not =url_policy.py=).
 
 
-** STRT Ingest abuse defense — Phase 0 lift onto =POST /job-posts/= :api:security:
+** SHIPPED Ingest abuse defense — Phase 0 lift onto =POST /job-posts/= :api:security:
+CLOSED: [2026-05-02]
 :PROPERTIES:
 :CREATED:  [2026-05-02]
 :END:
@@ -980,7 +981,8 @@ without external tooling).
 ** TODO didn't we want mailto: as a link ?
 ** TODO replace ↗ with {{link.hostname}} ↗
 https://job-boards.greenhouse.io/defenseunicorns?error=true
-** TODO [#A] Harden =make ci= so it cannot return green-but-broken [dagger]
+** SHIPPED [#A] Harden =make ci= so it cannot return green-but-broken [dagger]
+CLOSED: [2026-05-02]
 [2026-04-29] Tally #9/#13/#14/#19 are all the same shape: Dagger
 =call build-api= / =call build-frontend= summarize a successful build
 as a single =Container!= line and hide the per-step output. =make ci=
@@ -1115,6 +1117,12 @@ the BaseSerializer fields[<type>] patch.
 this problem seesaws on either remove slim and use includes explicitly and fields when you want slim.  removing implicit includes has it's own trade offs
 
 ** DONE nuclear placement :frontend:
+CLOSED: [2026-05-02]
+Moved delete-confirm panel above re-extract section in =job-posts/form.hbs=.
+Refactored the "About the job" card in =job-posts/show.hbs= to use =Panel::Card @title= + =<:top>= slot for header actions.
+Fixed a subsequent Glimmer template compiler error: non-block content alongside a named block must be wrapped in =<:default>=.
+Also updated =job-posts/aliases-panel.hbs= to label the link field "Link" when canonical differs.
+Frontend PR #101: =fix/nuclear-confirm-placement=.
 /home/oldbones/Pictures/screenshot-2026-04-30_17-43-49.png
 ** REFERENCE Jinja markup for the word template
 Source transcription of =api/templates/resume_export.docx=. Kept for audit
