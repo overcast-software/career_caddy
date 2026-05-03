@@ -234,6 +234,34 @@ implements a =loading= action that returns =true= (suppresses the substate)
 when =transition.from.name === routeName= — i.e. in-route refreshes only;
 cold loads still get the skeleton. Frontend PR #88.
 * Inbox
+** PROJ Description merge + arbiter [PR A: Layer 1, PR B: Layer 2] :api:ai:
+:PROPERTIES:
+:CREATED:  [2026-05-02]
+:END:
+[[file:notes.org::*Description merge + arbiter (PR A: Layer 1 / PR B: Layer 2)][Plan → notes.org Tier 6]]
+- *PR A — Layer 1*: cold-path =get_or_create= asymmetry. When match returns
+  =created=False= and existing JP is thin, run the same overwrite as the
+  link-hit-thin branch. Fixes jp 1603 class (extension scrape from
+  welcometothejungle deduped to email-sourced LinkedIn JP, but
+  =process_evaluation= dropped the rich description on the floor).
+  STRT [2026-05-02]: api PR #84 merged. Adds new sentinels
+  =updated_stub_via_fingerprint= / =duplicate_via_fingerprint=. 4 new tests.
+  Promote to SHIPPED after parent Deploy goes green.
+- *PR B — Layer 2*: arbiter LLM picks =keep_existing | use_new | merge=
+  when both descriptions are non-thin and differ materially. Audit row
+  per decision in new =JobPostDescriptionDecision= table. Behind
+  =INGEST_ARBITER_ENABLED= flag.
+- *Backfill*: =python manage.py rerun_arbiter --since 2026-04-01= as a
+  one-shot after PR A+B land.
+
+** TODO agents keep calling career-data instead of profile data
+** DONE Extension v0.3.6: ORIGIN → api.careercaddy.online :frontend:extension:
+CLOSED: [2026-05-02]
+=popup.js= =ORIGIN= constant changed from =careercaddy.online= to
+=api.careercaddy.online=. Symptom: 405 Method Not Allowed on Connect
+because =careercaddy.online= is the Ember frontend domain; Caddy there
+does not proxy POST =/api/v1/*= to Django. Using the API subdomain
+directly fixes it. Frontend PR merged to main; parent already pinned.
 ** TODO scrape icon better than paperclip ?
 ** TODO spc o c should reload the file before adding capture
 ** TODO I can only see one user in ai-spend
