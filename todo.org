@@ -716,10 +716,29 @@ directly fixes it. Frontend PR merged to main; parent already pinned.
 ** TODO I can only see one user in ai-spend
 ** TODO tiny button to go to /companies/<id>
 ** TODO ban 84.32.70.55
-** TODO frontend pollable: scrapes 95/96 polled past terminal; pending Score may re-arm :frontend:bug:
+** DONE Score visibility: daemon-created scores invisible to user :frontend:api:bug:
+CLOSED: [2026-05-02]
 :PROPERTIES:
 :CREATED:  [2026-05-02]
 :END:
+Three-part fix for auto-scored scores never appearing on job-post.show.scores.index:
+- =api/job_hunting/api/views/scores.py= — =ScoreViewSet.create()=: staff
+  service-account caller with no explicit =user= relationship now infers
+  =user_id= from =jp.created_by_id= so daemon scores land under the correct
+  owner, not the daemon account. Regular-user path unchanged (=is_staff= guard).
+- =api/job_hunting/api/serializers.py= — =JobPostSerializer.get_related("scores")=:
+  =linked_relationships= now filters =obj.scores= by =request.user.id= (user id
+  derived from the API token). Previously emitted all users' score IDs; Ember
+  Data 404'd on the non-owned ones and silently dropped them.
+- =api/job_hunting/api/views/scores.py= — =ScoreViewSet.list()=: added
+  =filter[job_post_id]= support so the frontend can query directly by post.
+- =frontend/app/routes/job-posts/show/scores.js= — replaced stale
+  =jobPost.scores= hasMany (cached empty when user visited before score existed)
+  with =store.query('score', {'filter[job_post_id]': job_post_id})= — always
+  live, same pattern as questions route.
+- =api/job_hunting/tests/test_score_create_and_list.py= — 10 new regression
+  tests covering staff inference, list filter, multi-tenancy isolation, and
+  linked_relationships user-scoping.
 Observed in dev logs after extension submissions of scrape 95 and 96 — the
 =GET /api/v1/scrapes/96/= request continued firing through the frontend
 proxy long after the scrape went terminal. Hypothesis: the frontend's
@@ -1669,11 +1688,3 @@ Projects
 * Bugs 🐛
 ** https://careercaddy.online/scrapes/189
 its a stubbed that short circuted
-** DONE notes fro job-description.show isn't style compliant
-/home/oldbones/Pictures/screenshot-2026-04-30_18-08-24.png
-** why did it decide it was closed?
-https://www.linkedin.com/jobs/view/4408226465/
-https://careercaddy.online/job-posts/1533/scrapes/240
-/home/oldbones/Pictures/screenshot-2026-04-30_18-08-24.png
-why did it fail?
-why did the description suck?
