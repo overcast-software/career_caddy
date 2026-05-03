@@ -775,6 +775,34 @@ Reproducer: submit a scrape from the extension with auto-score on, watch
 =docker compose logs -f api frontend= for sustained polling beyond the
 scrape's terminal status.
 
+** DONE Auto-score on from-text ingest + "Job post created" alert :api:frontend:bug:
+CLOSED: [2026-05-03]
+:PROPERTIES:
+:CREATED:  [2026-05-03]
+:END:
+Followup to score-visibility fix. JP 1659 (from-text/extension submission) was
+never auto-scored because scoring relied on =score_poller= daemon which was never
+running. Replaced with synchronous fire-and-forget: from-text now scores
+immediately after =parse_scrape(sync=True)= completes.
+
+- =api/job_hunting/api/views/scores.py= — new =_auto_score_job_post(job_post_id,
+  user_id)= module-level helper: same fire-and-forget thread as the manual Score
+  button; silent no-op if no AI client, missing description, or no career data.
+- =api/job_hunting/api/views/scrapes.py= — =from_text= action: after
+  =parse_scrape(sync=True)=, reloads scrape, and if a JobPost was linked, calls
+  =_auto_score_job_post=. Wrapped in =try/except= so scoring failure never breaks
+  the 202 response.
+- =api/job_hunting/tests/test_scrape_from_text.py= — 3 new tests: score fires
+  after successful parse, not fired when parse links no job post, error doesn't
+  surface to caller.
+- =frontend/app/controllers/job-posts/new/paste.js= — "Job post created." flash
+  made =sticky: true= so it persists through the route transition (previously
+  timed out before the user could see it).
+- =frontend/app/controllers/job-posts/show/scores.js= — =_runAutoScore= now uses
+  =this.model= (live =store.query= result) instead of =jobPost.hasMany('scores').value()=
+  (stale cache). Prevents double-scoring when server created a pending score during
+  ingest; skips =scoreResume()= when any career-data score already exists.
+
 ** DONE Extension: hardcode origin = https://careercaddy.online :frontend:extension:
 CLOSED: [2026-05-02]
 v0.3.1 — removed the configurable origin input from =popup.html=, dropped
