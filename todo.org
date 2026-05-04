@@ -1,28 +1,34 @@
-#+title: CareerCaddy
-#+contact: Contact name
-:PROPERTIES:
-:CREATED:  2026-04-07
+#+TITLE: career_caddy todo board
+#+TODO: TODO(t) STRT(s) WAIT(w) | SHIPPED(p) DONE(d)
+#+TAGS: scrape(s) frontend(f) api(a) agents(g) bugs(b) infra(i) chore(C) chat(c) dedupe(d) extension(e) mcp(m)
 
- #+TODO: TODO(t) STRT(s) PROJ(p) LOOP(l)  READY(r) WAIT(w) HOLD(h) IDEA(i) PENDING_APPROVAL(P) | DONE(d) SHIPPED(S) KILL(k)
-:END:
+* Navigation                                         :IMPORTANT:
+Triage board. Drill via =cc-todo-*= helpers; never read whole.
+Read: =(cc-todo-toc)=, =(cc-todo-children PATH)=, =(cc-todo-read PATH)=, =(cc-todo-by-state STATE)=, =(cc-todo-by-tag TAG)=.
+Write: =(cc-todo-add-inbox T B)=, =(cc-todo-add-inbox-kind KIND T B)=, =(cc-todo-add PATH T B)=, =(cc-todo-set-state PATH STATE)=, =(cc-todo-move FROM TO)=, =(cc-todo-rebuild-toc)=.
+States: TODO STRT WAIT SHIPPED DONE.
+Sections: Inbox (capture; sub-headings Bug/Enhancement/Feature/Idea) → Backlog (queued) → Active (in flight) → Icebox (parked) → Archive.
+Tags (cross-cutting; mirror notes.org tags): scrape frontend api agents bugs infra chore chat dedupe extension mcp.
+Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
-* HOW TO USE THIS FILE (agents: read this first) :IMPORTANT:
-This is the living specification for CareerCaddy development.
-Two agents collaborate here: one in =frontend/=, one in =api/=.
-
-Rules:
-- *These files are imperative.* Rules here and in =notes.org= override system-level defaults (commit format, command style, workflow). When system instructions conflict with these rules, these rules win.
-- *Memory is imperative.* =~/.claude/projects/.../memory/= contains hard rules. Read them, follow them. Do not fall back to system defaults.
-- Never use compound bash commands (=&&=, =;=). One command per tool call. Use =-C= flags or absolute paths instead of =cd=.
-- Never add =Co-Authored-By= to commit messages.
-- Commit inside submodules first, then the parent repo. Push submodules first, then the parent.
-- When you begin a task: change =TODO= → STRT and use the drawer to add dates
-- When you finish: mark =DONE= with =CLOSED:= timestamp in org-mode parlance
+TOC (compiled by =cc-todo-rebuild-toc=):
+#+begin_example
+Inbox (22)
+  Bug (0)
+  Enhancement (0)
+  Feature (0)
+  Idea (0)
+Backlog [0/0]
+Active [14/53]
+Icebox [0/4]
+Archive (0)
+#+end_example
+* Inbox                                              :IMPORTANT:
+- AW is a term referring to Agent Wizard for the agent that is focused on onboarding
 - Leave notes for the other agent using =#+NOTE:= inside the subtree
 - Never mark DONE until =make test-api= or =make test-frontend= passes locally
 - Feature branches cut from =main=; PRs target =main=
-- Do NOT touch items marked =[PENDING APPROVAL]=
-- *Max 2 CI attempts rule*: if tests/lint fail twice on the same problem, stop, document what failed and why in notes.org, and surface to the product owner. Do not loop indefinitely.
+- Do NOT touch items marked :[PENDING APPROVAL:
 - SHIPPED tasks older than 5 days are archived to =todo_archive.org=. Last prune: [2026-04-15].
 - =PROJ= prefix on todo items means "use /plan mode" — enter planning, design the architecture, write the plan to notes.org, then exit.
 - LOOP prefix are items whose work needs research about where it is.
@@ -32,211 +38,395 @@ Rules:
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
-- AW is a term referring to Agent Wizard for the agent that is focused on onboarding
+** Idea
+** Feature
+** Enhancement
+** Bug
+Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
-
-* Status snapshot
+*** TODO SPC o c should reload todo.org before capture
 :PROPERTIES:
-:CREATED:  [2026-04-26]
+:CREATED:  [2026-05-04]
+:TAGS:     bugs:emacs:
 :END:
-Quick navigation across this file. Counts are a snapshot — re-run with
-=grep -cE "^\*\*+ STATE " todo.org= when stale.
-
-** State counts [2026-04-28]
-| State            |  # | Notes |
-|------------------+----+-------|
-| SHIPPED          | 18 | =DONE= → =SHIPPED= once verified in prod. =SPC m t S= |
-| STRT             |  0 | nothing actively in progress |
-| TODO             | 26 | by-priority breakdown below |
-| LOOP             |  3 | research-needed before starting |
-| PROJ             |  2 | =/plan= mode before code |
-| WAIT             |  1 | external blocker |
-| PENDING_APPROVAL |  1 | do NOT touch (see HOW TO USE rule) |
-| READY            |  1 | approved, awaiting pickup |
-| IDEA             |  1 | rough capture |
-| KILL             |  1 | dropped |
-
-** Priority queue
-
-** Section index
-- [[*Features — APPROVED (ready to work)][Features — APPROVED]] — 7 ready, all reviewed
-- [[*PROJ Feature sorting tables][PROJ Feature sorting tables]] — single sort/filter project
-- [[*Features — PENDING APPROVAL][Features — PENDING APPROVAL]] — 5 awaiting decision
-- [[*Features — Open TODOs][Features — Open TODOs]] — small backlog (audit redundant cols, flash transitions)
-- [[*Inbox][Inbox]] — recent capture, mix of bugs + feature ideas + SHIPPED retros
-- [[*Bugs 🐛][Bugs 🐛]] — bug-specific landing zone
-
-** Conventions
-- =DONE= = merged on submodule =main= (verified locally).
-- =SHIPPED= = parent =Deploy= clears + smoke-tested in prod. Promote
-  via =SPC m t S= after verifying.
-- "ship X" in chat → promote =DONE= entry. "what needs to be
-  shipped?" → list current =DONE= entries awaiting promotion.
-- See =notes.org::*SHIPPED vs DONE — todo lifecycle= for full
-  rules.
-
-* Features — APPROVED (ready to work)
-** TODO Deep-link navigate targets into resume edit form (anchors)  :APPROVED:
-[2026-04-18 ai+frontend] Follow-on from the "no editing linked
-resources via chat" decision. When chat sends a user to
-=/resumes/{id}/edit= to fix something, it currently drops them at
-the top of a long form. Better: deep-link to the specific field.
-
-Three options (cheapest → richest):
-1. *Hash-fragment scroll* — render =id="experience-{id}"= (and similar
-   anchors for education / certification / project) on each card in
-   =resumes/edit.hbs=. Agent emits
-   ={navigate: "/resumes/39/edit#experience-128"}=; browser scrolls.
-   Minimal change; no Ember focus logic.
-2. *Query-param focus* — =?focus=experience-128.title= on the edit
-   route. Route handler expands the matching panel + calls =.focus()=
-   on the target input after render. Needs a small helper mapping
-   =resource.field= → DOM input id.
-3. *Field-level anchors* — =#experience-128-title=, =#education-77-
-   degree=, etc. Hybrid of (1) and (2). Agent already knows the
-   resource id and field name from =show_resume= markdown.
-
-Prompt surface: teach the agent "when user wants to change an
-experience field, emit
-={navigate: '/resumes/{r}/edit?focus=experience-{e}.{field}'}=";
-edit route handles the rest. No new tools.
-
-Disambiguation risk: if the user says "change my title at RHI" and
-has two Robert Half experiences, the agent still has to pick. Same
-problem as today — this TODO is about delivery, not selection.
-
-Value:
-- User edits themselves → fewer silent-overwrite bugs like the
-  OFFICE BADASS incident.
-- Deep-link IS the teaching moment; next time they know where the
-  form lives.
-- Zero new chat tools to maintain.
-
-** LOOP Agent understanding of Career Data (aggregated, not a form) :APPROVED:
-:LOGBOOK:
-- Note taken on [2026-04-23 Thu 19:44] \\
-  we may have cleared this bar in another commit
+org-capture via =SPC o c= writes against the in-memory buffer; if
+todo.org was edited externally (e.g. by =cc-todo-*= helpers from a
+claude session) the capture lands in a stale view and either
+clobbers recent edits or appears in the wrong place. Capture
+handler should =revert-buffer= (auto-confirmed when no local
+changes) on the target file before inserting.
+** TODO https:  careercaddy.online job-posts 985 job-applications
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
 :END:
+what jp.show.job-application.show
+** TODO jp.show.questions.new doesn't allow me to pick the job application.
+** TODO spc o c should reload the file before adding capture
+** TODO I can only see one user in ai-spend
+** TODO ban 84.32.70.55
+:PROPERTIES:
+:TRIAGE_NOTE: candidate=infra conf=0.75
+:END:
+** TODO block 195.178.110.9
+:PROPERTIES:
+:TRIAGE_NOTE: candidate=infra conf=0.75
+:END:
+** TODO caddy-web cannont get screenshots
+:PROPERTIES:
+:TRIAGE_NOTE: candidate=infra conf=0.75
+:END:
+** TODO https:  careercaddy.online job-posts 1551
+why two canonical?
+** boot IP 130.12.180.144
+:PROPERTIES:
+:TRIAGE_NOTE: candidate=infra conf=0.75
+:END:
+attempted /.env
+** TODO I want to see if camoufox can get passed click blockers
+detectobsticle
+** PROJ [#B] when adding "vetted bad good' the current filters on jp.index filter out the item dynamically
+** TODO didn't we want mailto: as a link ?
+** TODO deleting a job-post makes job-posts.index freak out and claim job-post doesn't have a company :bug:
+:PROPERTIES:
+:TRIAGE_NOTE: candidate=bugs conf=0.70
+:END:
+I had two job-posts with teh same name and the same company
+I deleted one, when it redirected, I saw one with 'missing company' for company
+I refreshed and it went away.
 
-[2026-04-18 ai] Hit during AW (agent wizard) e2e: user asked AW what to do next and
-the agent said "upload or create a Resume... go to your Career Data
-page to start building your profile." Career Data is NOT a
-fill-in-the-form resource — it's a READ-ONLY aggregated view
-assembled from the user's FAVORITED resumes, cover letters, and
-Q&A answers. The user doesn't "go to Career Data and add things";
-they go to /resumes (or /cover-letters or /answers), create/edit
-there, and star the good ones.
+** REFERENCE Jinja markup for the word template
+Source transcription of =api/templates/resume_export.docx=. Kept for audit
+reference — see DONE entry above + notes.org audit.
+*** head
+{{ header.name }}
+{{header.title }}
+{{HEADER.EMAIL}} * {{HEADER.PHONE}}
+*** Body
+{% if summary %}
+Summary
+{{ summary }}
+{% endif %}
+{% if skills %}
+Skills
+{% if skills.language_skills %}
+Languages: {{ skills.language_skills }}
+{%- endif -%}
+{% if skills.database_skills %}
+Databases: {{ skills.database_skills }}
+{%- endif -%}
+{% if skills.framework_skills %}
+Frameworks: {{ skills.framework_skills }}
+{%- endif -%}
+{% if skills.tool_skills %}
+Platforms: {{ skills.tool_skills }}
+{%- endif -%}
+{% if skills.security_skills %}
+Security: {{ skills.security_skills }}
+{%- endif -%}
+{%- endif -%}
+{% if experiences %}
+Experience
+{% for experience in experiences %}
+	{% if experience.date_range %}{{ experience.date_range }}{% endif %}
+{% if experience.company %} — {{ experience.company }}{% endif %}{% if experience.location %} — {{ experience.location }}{% endif %}
+{% if experience.summary %}
+{{ experience.summary }}  {# This should use "RP Summary" style #}
+{%- endif -%}
+{% for d in experience.descriptions %}
+    • {{ d }}
+{%- endfor -%}
+{% endfor %}
+{% endif %}
+{% if certifications %}
+Certifications
+{% for cert in certifications %}
+{{ cert.title }}{% if cert.issuer %} — {{ cert.issuer }}{% endif %}{% if cert.issue_date %} — {{ cert.issue_date }}{% endif %}
+{% if cert.content %}{{ cert.content }}{% endif %}
+{% endfor %}
+{% endif %}
 
-Fix landed in the main chat SYSTEM_PROMPT's App Guide entry for
-Career Data this session. Still TODO:
-- Audit other places in the codebase / docs that imply "fill in
-  Career Data" and correct. Grep for =career-data= in docs/.
-- Verify AW sub-agent prompt is consistent (it doesn't currently
-  discuss Career Data but if we expand its scope, apply the same
-  rule).
-- Consider: when the sub-agent's =snapshotForChat= says all
-  onboarding is done, the main chat has no stored "what's next?"
-  rubric and hallucinates advice. Better to define a small
-  post-onboarding progression (e.g. "you have N resumes; favorite
-  the current one so Career Data picks it up; then add a job post")
-  and embed it as an App Guide section the agent can quote.
+{% if educations %}
+Education
+{% for edu in educations %}
+{{ edu.institution }}{% if edu.degree %} — {{ edu.degree }}{% endif %}{% if edu.major %} — {{ edu.major }}{% endif %}{% if edu.minor %} — Minor: {{ edu.minor }}{% endif %}{% if edu.issue_date %} — {{ edu.issue_date }}{% endif %}
+{% endfor %}
+{% endif %}
+{% if projects %}
+Projects
+{% for proj in projects %}
+{% for bullet in proj.description %}
+    • {{ bullet }}  {# This should use "RP Bulleted List" style #}
+{%- endfor -%}
+{% endfor %}
+{% endif %}
+* Active                                             :IMPORTANT:
+Work that should happen. Categories carry =[done/total]= cookies.
 
-** WAIT AW: navigate on intent, don't just instruct :APPROVED:
-[2026-04-18 ai+frontend] Hit during Agent Wizard e2e: AW says "Head
-over to Job Postings to add a job post" without emitting a navigate
-marker or a clickable link. The user still has to find the page. Two
-concrete gaps:
+** DONE cc_auto followup agent: PositiveInt guard on api_client IDs
+CLOSED: [2026-05-04 Mon 15:10]
+:PROPERTIES:
+:CREATED:  [2026-05-04]
+:TAGS:     bugs:cc_auto:agents:
+:LAST_TOUCHED: [2026-05-04]
+:END:
+Starbucks rejection email (jp 1702) was processed but jp 1702 unchanged.
+Followup agent fell through strategy 1 with no URL in body, called
+=get_applications_for_job_post(0)= → =GET /job-posts/0/job-applications/=
+→ 404, then list-and-picked unrelated app 60.
 
-1. When the user signals intent ("I want to add a job post", "take
-   me to my resume", "show me cover letters"), the sub-agent should
-   emit =<!-- navigate:/path -->= AND include a visible markdown
-   link — not describe where to go. The onboarding_agent.py prompt
-   already has this rule but the model skipped it here.
+Fix half 1 (this branch): switch required-id tool params on
+=cc_auto/src/client/api_client.py= to =PositiveInt= so pydantic-ai
+rejects 0 at the tool boundary. Six tools touched.
 
-2. Elicitation action buttons currently round-trip a chat message
-   back to the agent. "Add a job post" as an action label becomes a
-   new user turn that AW interprets, instead of navigating directly.
-   The elicitation payload should support an optional =navigate=
-   field so a button can transition the route without consuming an
-   LLM turn — cheaper and instant.
+Fix half 2 (next): =get_job_applications= takes no =company= filter,
+so the prompt-instructed strategy-3 fallback (=filter by company
+inferred from sender domain=) is impossible — agent ends up
+list-and-picking. Add company filtering and require the agent to
+use it before any blind selection.
+** TODO wrong job-post :scrape:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:END:
+https://www.ziprecruiter.com/jobs/v2/eyJsaXN0aW5nX2tleSI6InIzTzNkcWV2TUMyU3NEci1GNkQ4MGciLCJtYXRjaF9pZCI6IjAxOWRlZjM5LWY2YmEtNzY5Yy1iMWQwLTA0YWYyMmNjYzc4MSIsImJpZF90cmFja2luZ19kYXRhIjoiQUFHM3lPbGhZOWlVbEZlVTI3X3BkTk5HNFNRRkFaeHVPOVhESmo2VTdldE1Tb1ZyVXV1UXc0UV9mMWRreHBJcnNNQW9maWFMIiwic291cmNlX3BsYWNlbWVudF9pZCI6NDMwMjR9?tsid=111000153
+/home/oldbones/Pictures/screenshot-2026-05-04_12-41-24.png
+I put that in the extention and it said it already existed https://careercaddy.online/job-posts/1668
+but this one is more closely aligned
+https://careercaddy.online/job-posts/1667
+what happened?
 
-Tasks:
-- [ ] Tighten =onboarding_agent.py= prompt: "When the user signals
-  intent to go somewhere OR you're describing a page they should
-  use, you MUST emit =<!-- navigate:/path -->= in the response AND
-  include the matching =[label](/path)=. Don't say 'Head over to X'
-  with no link."
-- [ ] Extend elicitation JSON schema in the main chat prompt to
-  accept ={"label": "...", "navigate": "/path"}= in addition to the
-  existing ={"label": "...", "message": "..."}= form. The frontend
-  =services/chat.js= handler should call =router.transitionTo= on
-  navigate-typed actions instead of =sendMessage=.
-- [ ] Regression test: after a "take me to X" turn, assert a
-  navigate marker is present in the sub-agent's response.
+Diagnosis [2026-05-04 scrape-profile-enhancer]: real dedupe gap, not
+a profile/selector issue.
 
-** SHIPPED revamp scrapes/edit page :APPROVED:frontend:
-CLOSED: [2026-04-30 Thu]
-[[file:notes.org::*Revamp scrapes/edit page][Considerations → notes.org]]
-- =scrapes/show=: pulled Edit / Retry / Re-parse / Graph out of =<:subnav>=
-  and into a =form-actions= row beneath the panel-card. Subnav now empty.
-- =scrapes/edit=: dropped the lonely =View= link from =<:subnav>=; form
-  footer groups Save + Cancel on the left and the destructive Delete on
-  the right (=ml-auto=). Delete now requires a =confirm()= ("nuclear"
-  guard that was missing).
-- =components/scrapes/form.{hbs,js}=: Cancel link added; submitDelete
-  short-circuits on confirm-deny. Delete sits right of the gap so it
-  can't be hit accidentally next to Save.
+Pasted URL: =https://www.ziprecruiter.com/jobs/v2/<base64>?tsid=...=
+where the base64 payload decodes to
+={listing_key:"r3O3dqevMC2SsDr-F6D80g", match_id:"019def39-...",
+source_placement_id:43024}=.
 
-** LOOP [#C] As a superuser I want to be able to manage user accounts :APPROVED:
-[[file:notes.org::*Superuser account management][Considerations → notes.org]]
-*** TODO decide on user roles and be able to manage them as admin
+Both candidate posts (1667 Software Developer I - RIGHT, 1668
+Software Engineer II - Conversational Search) were created via
+=source: email= and have =/km/<token>?auth_token=...&expires=...=
+URLs as both =link= AND =canonical_link=. Their /km/ tokens are
+entirely different from each other and bear no relation to the
+pasted /jobs/v2/ listing_key.
 
-* Features — PENDING APPROVAL
+So:
+- =canonicalize_link= (=api/job_hunting/models/job_post_dedupe.py=)
+  does NOT recognise =tsid= as a tracking param (not in
+  =_TRACKING_PARAMS=) — pasted URL canonicalizes to itself.
+- Neither =filter(canonical_link=...)= nor =filter(link=...)= can
+  match the pasted URL against either /km/ row.
+- =find_job_post_by_link= is exact-match only; same miss.
+- =fingerprint= = sha1(company_id|title|location). The two posts'
+  titles differ, so fingerprint dedupe wouldn't match either.
 
-** PENDING_APPROVAL tool tips — where could they be useful? :PENDING_APPROVAL:
-I have not approved the list
-[[file:notes.org::*Tooltips][Considerations → notes.org]]
+How did 1668 still come back to the user? Likely paths, none of
+which the on-ingest dedupe gate covers today:
+1. Extension matched on a different field (title-substring? company?)
+   that we cannot reproduce from the JSON:API payloads alone.
+2. Both posts were created with a placeholder =canonical_link= that
+   collapses across listing_keys (worth a DB peek).
+3. The pasted URL was scraped, redirected through ZipRecruiter's
+   listing-key resolver, and a downstream dedupe path (post-scrape)
+   made the call.
 
-** READY Tackling deprecations :PENDING_APPROVAL:APPROVED:
-[[file:notes.org::*Tackling Ember deprecations][Considerations → notes.org]]
+Action: not a profile change. Code-side todo — teach
+=canonicalize_link= about ZipRecruiter URL shapes:
+=/jobs/v2/<base64>= → decode + use =listing_key= as the canonical
+identifier; =/km/<token>?auth_token=...= must be HEAD-resolved
+(the auth_token expires) and routed through =tracker_resolver=,
+even though =www.ziprecruiter.com= is not in
+=_TRACKER_HOST_SUFFIXES= today (only =click.ziprecruiter.com= is).
+Both /jobs/v2 and /km/ should land on =/jobs/<listing_key>= as the
+dedupe key; without that, every email re-issue mints a new JobPost.
 
-** TODO Ian Finnis letter :PENDING_APPROVAL:APPROVED:
-[[file:notes.org::*Ian Finnis letter][Considerations → notes.org]]
+Reference scrapes: 309 (/km/, hung) + 314 (clean direct /jobs/) —
+the hang fix lives in the sibling todo on this same heading.
 
-** PROJ [#C] Electron desktop app feasibility :PENDING_APPROVAL:
-[[file:notes.org::*Electron Desktop App — Feasibility Study][Architecture + trade-offs → notes.org]]
+Scrape Log entry: =Operations/Scrape Log= → =[2026-05-04 21:30]
+ziprecruiter.com — link-normalization: /jobs/v2/<base64> + /km/<token>
+not recognised as same listing_key=
 
-** TODO [#C] Reactive Resume plugin resumerx :PENDING_APPROVAL:
-[[file:notes.org::*Reactive Resume as a PDF-render plugin][Plugin architecture + scope → notes.org]]
+** TODO sundaay :scrape:linkedin:
+:PROPERTIES:
+:CREATED:  2026-05-04
+:END:
+/home/oldbones/Pictures/screenshot-2026-05-04_11-27-40.png
 
-*** TODO ResumeRX MVP spike [api]
-[2026-04-20] Pre-plugin round-trip proof on =feature/rxresume-mvp=.
-Steps: (1) =api/rxresume-dev.yml= compose brings up rxresume +
-postgres + minio + chromium on localhost:3333; (2) manual API-key
-issue from the rxresume UI; (3) =rxresume_mapper.py= converts
-=Resume.to_export_context()= to rxresume JSON; (4) =rxresume_client.py=
-import→print→delete round-trip; (5) =?format=pdf= on existing
-=/resumes/:id/export/=. Frontend deferred. Not merging to main —
-feeds the eventual plugin PR.
-[[file:notes.org::*Reactive Resume — MVP spike][Full plan → notes.org]]
+Diagnosis [2026-05-04 scrape-profile-enhancer]: scrape 311 (parent
+of /uas/login redirect → /jobs/view/4409851681, Sundayy / Full
+Stack Engineer). Same SDUI partial-render failure as scrape 298 —
+no profile mutation will fix it. The user's screenshot proves the
+=h2 "About the job"= and Infisical About-The-Company prose render
+in a real browser, but the poller's WaitReadySelector ran 4 passes
+/ 30s with all 19 selectors timing out. Captured =job_content=
+also stacks every flagship-web off-nominal signal: =Promoted by
+hirer=, =Responses managed off LinkedIn=, =No longer accepting
+applications=, =Use AI to assess how you fit= / =Looking for
+talent?=.
 
-** PROJ Feature sorting tables
-* Features — Open TODOs
+Resolution path is the existing STRT escape-hatch ([[*Linkedin: SDUI partial-render escape hatch — accept placeholder description][SDUI escape
+hatch]]) — when it ships, scrape 311 should retry into a JobPost
+with the placeholder description. Use the persisted job_content
+on scrape 311 as a *second* test fixture (alongside scrape 298) so
+the closed-state guard, the off-platform-managed guard, and the
+SDUI placeholder guard all light up on a single input.
 
-** IDEA Flash message slide-wipe transition [frontend]
-Queue sequential display instead of stacking. First flash finishes its time, slides left, next slides in.
-** SHIPPED Search input flicker on /scrapes [frontend]
-CLOSED: [2026-04-30 Thu 17:47]
-=refreshModel: true= on the =search= QP triggered the loading substate every
-keystroke; =scrapes/index-loading.hbs= has no =<:subnav>= slot, so the search
-input was torn down + remounted (focus loss + visible flicker). Route now
-implements a =loading= action that returns =true= (suppresses the substate)
-when =transition.from.name === routeName= — i.e. in-route refreshes only;
-cold loads still get the skeleton. Frontend PR #88.
-* Inbox
-** STRT Linkedin: SDUI partial-render escape hatch — accept placeholder description :scrape:agents:bug:
+Scrape Log entry: =Operations/Scrape Log= → =[2026-05-04 19:50]
+linkedin.com — graph/timing: SDUI partial-render (Sundayy ...)=
+
+Verification [2026-05-04 21:30 scrape-profile-enhancer]: SDUI
+escape-hatch SHIPPED today (agents =7d3acca=) yet scrape 311 *still*
+ends at =ExtractFail= and no JobPost was created. Re-pulled the
+scrape and walked the trace:
+
+- =WaitReadySelector=: 4 passes / 30s / 19 selectors, all timeout —
+  expected for partial-render and harmless given the new escape-hatch.
+- =Tier1Mini=: 2152ms (real LLM call).
+- =EvaluateExtraction= → =Tier2Haiku=: 183ms (suspiciously short —
+  likely =llm-extract endpoint not deployed yet= 404 soft-fail; see
+  =_call_llm_extract= in =nodes_extract.py=).
+- =EvaluateExtraction= → =ExtractFail=: 0ms; tier3 disabled.
+
+So the placeholder path is *eligible* (=_is_partial_render_placeholder=
+landed in EvaluateExtraction) but never *triggered* — neither tier
+emitted a description starting with =[DESCRIPTION NOT CAPTURED=.
+Most likely: Tier1 with =gpt-4o-mini= is not following the
+=extraction_hints= "DO NOT HALLUCINATE / set to exactly:..."
+instruction reliably enough on this input shape (the captured
+=job_content= for 311 is even sparser than 298 — it has =No longer
+accepting applications=, =Use AI to assess how you fit=, =Looking
+for talent?= but never shows =About the job= as a string anchor).
+
+Updated diagnosis category: not =selector-stale=, not
+=hydration-race= — this is =llm-hallucination= adjacent:
+=llm-instruction-miss=. The escape-hatch ship gives the *runtime
+graph* permission to accept the placeholder; it does not coerce the
+LLM into emitting it.
+
+Concrete next steps (none of which is a profile mutation):
+1. *Validator-side coercion.* Add a deterministic pre-check inside
+   =EvaluateExtraction= (or =Tier0CSS=): if =job_content= matches the
+   SDUI partial-render fingerprint (=Use AI to assess how you fit= +
+   =Looking for talent?= + no =About the job=), force
+   =parsed["description"] = _PARTIAL_RENDER_DESCRIPTION_PREFIX + "..."=
+   *before* running EvaluateExtraction. Then the placeholder lights
+   up regardless of which tier the LLM is on. That is a small
+   self-contained PR — pure-Python check, no schema changes.
+2. *Test fixture.* Persist scrape 311's =job_content= as a second
+   fixture beside scrape 298 in the validate/evaluate tests. The
+   ship referenced 298 only; 311 catches the case where even the
+   =About the job= heading is missing from the captured text.
+3. *Tier upgrade as fallback.* Set =SCRAPE_GRAPH_ENABLE_TIER3=1=
+   and observe whether sonnet emits the placeholder reliably; if
+   yes, document but do not rely on it (tier3 cost matters).
+
+Action: NOT moving to SHIPPED. Re-state to STRT and add a child
+todo for the validator-side coercion (#1 above) as the smallest
+change that closes scrape 311 cleanly. Two-line summary in the
+Scrape Log appended below this todo.
+
+Refined Scrape Log entry: =Operations/Scrape Log= → =[2026-05-04
+21:30] linkedin.com — llm-hallucination: SDUI escape-hatch shipped
+but Tier1/Tier2 still don't emit the placeholder; needs validator-
+side coercion (scrape 311)=
+
+** TODO ResolveFinalUrl: bound by wall-clock timeout + soft-fail on tracker hang :scrape:agents:bug:
+:PROPERTIES:
+:CREATED:  2026-05-04
+:END:
+ZipRecruiter =/km/...= tracker URLs (auth_token + expires) can
+hang ResolveFinalUrl indefinitely — scrape 309 (job-post 1667,
+Software Developer I - RIGHT) was stuck in =running= for hours,
+trace ends at =DetectObstacle routed_to=ResolveFinalUrl= (29ms)
+and the next node never emits. No terminal status was ever
+written.
+
+Static =url_rewrites= can't help here (the listing_key isn't
+derivable from the tracker without a server-side redirect
+resolution). The fix is engine-side: bound ResolveFinalUrl by a
+wall-clock budget and route to ExtractFail (or a new
+=ResolveFailed= terminal) when the budget expires, so the parent
+scrape always reaches a terminal state.
+
+Files: =agents/scrape_graph/nodes/resolve_final_url.py= — wrap the
+HEAD/GET / page-redirect probe in =asyncio.wait_for= with a
+configurable budget (suggest ~10s default, override per-profile).
+
+Reference scrapes: 309 (=running= forever, =/km/= tracker), 314
+(=completed= cleanly on the direct =/jobs/=... form for the same
+job). Same shape applies to other tracker hosts (linkedin
+=/safety/go/=, indeed redirects, etc.).
+
+Bundled with [[https://careercaddy.online/scrapes/54][scrape 54
+\"rescue from timeout\" todo]] above — both want the same shape
+(node-level timeout that doesn't kill the whole graph). Could be
+unified as a generic =NodeTimeout= guard rather than per-node
+bounding.
+
+Scrape Log entry: =Operations/Scrape Log= → =[2026-05-04 20:00]
+ziprecruiter.com — graph/timing: ResolveFinalUrl hangs on expired
+tracker URL (/km/...)=
+
+Update [2026-05-04 21:30 scrape-profile-enhancer]: targeted fix on
+=feature/resolve-final-url-timeout= (agents repo, commit =daa4bc8=,
+NOT pushed — awaiting review).
+
+Approach taken (narrower than the original todo body):
+- Split =ResolveFinalUrl.run()=' sync body into a private helper
+  =_resolve_final_url_body(state)= so it can be wrapped in
+  =asyncio.wait_for(asyncio.to_thread(...))=.
+- New env knob =SCRAPE_GRAPH_RESOLVE_FINAL_URL_BUDGET_S= (default
+  =15.0=), bumped from the 10s the todo suggested because the
+  child-scrape POST + parent terminal-close needs ~3s headroom over
+  the existing 10s httpx timeout for the slow path.
+- On =asyncio.TimeoutError=: best-effort PATCH the parent to
+  =failed= with a "ResolveFinalUrl timeout after Ns" note, fall back
+  =state.canonical_url= to =state.submitted_url= so CheckLinkDedup
+  still has a non-empty key, and route to CheckLinkDedup as usual
+  (no new =ResolveFailed= terminal — the existing failure-path is
+  enough; introducing a new terminal would require api + frontend
+  status-string changes for a single-trigger scenario).
+- Trace payload now carries =timed_out= + =budget_s= for diagnosis.
+- Two new tests in =tests/test_resolve_final_url_timeout.py=
+  (timeout path closes parent + fast-path no-op); full agents test
+  suite stays green at 289/289.
+
+What this does NOT solve and is intentionally deferred:
+- The generic =NodeTimeout= unification with =scrapes 54= rescue
+  path (graph-wide budget that captures whatever DOM/text it has
+  and routes to StartExtract instead of ExtractFail). That is a
+  bigger refactor with frontend visibility (new graph node) — see
+  the diagnosis appended to the scrapes 54 todo above.
+- Teaching =canonicalize_link= to recognise =/jobs/v2/<base64>= and
+  =/km/<token>= as the same listing — this fix bounds the *hang*
+  but does not fix the *dedupe miss*. See =wrong job-post= todo.
+
+Verification: integration test pending — needs a re-scrape of 309's
+URL form on a poller running the feature branch. Until then leave
+SHIPPED off; mark =STRT= once merged + deployed.
+
+** TODO [#A] hitting multple scrape and score for a single domain could corrupt data :scrape:
+** TODO https:  careercaddy.online job-posts 1667 scrapes 309 :scrape:
+https://www.ziprecruiter.com/jobs/v2/eyJsaXN0aW5nX2tleSI6InIzTzNkcWV2TUMyU3NEci1GNkQ4MGciLCJtYXRjaF9pZCI6IjAxOWRlZjM5LWY2YmEtNzY5Yy1iMWQwLTA0YWYyMmNjYzc4MSIsImJpZF90cmFja2luZ19kYXRhIjoiQUFHM3lPbGhZOWlVbEZlVTI3X3BkTk5HNFNRRkFaeHVPOVhESmo2VTdldE1Tb1ZyVXV1UXc0UV9mMWRreHBJcnNNQW9maWFMIiwic291cmNlX3BsYWNlbWVudF9pZCI6NDMwMjR9?tsid=111000153
+The graph trace actually shows DetectObstacle completed quickly (29ms) and routed to ResolveFinalUrl — so the scrape moved past DetectObstacle. The issue is it's now stuck in ResolveFinalUrl and the overall status is still running.
+
+This looks like the scrape is hanging after navigating the ZipRecruiter tracking/redirect URL. A few things to note:
+
+    The URL is a ZipRecruiter tracking link (/km/...) with an auth_token and expires timestamp — the token expired on May 5, 2026, so this URL may no longer be valid, which could cause the redirect/resolution to hang or fail silently.
+    The scrape has been stuck in running since ~18:12 UTC — that's well past a normal timeout window.
+
+What I'd recommend:
+
+    Check if the original job posting URL (not the tracking link) is available — a direct ZipRecruiter job URL (e.g. ziprecruiter.com/jobs/...) would be much more reliable.
+    If you have the direct URL, we can update the scrape or create a new one with that link instead.
+
+Do you have the direct job post link, or would you like me to check the job post (ID 1667) for any other URL we can use?
+
+** SHIPPED Linkedin: SDUI partial-render escape hatch — accept placeholder description :scrape:agents:bug:
+CLOSED: [2026-05-04 Mon 14:03]
    :PROPERTIES:
    :CREATED:  2026-05-04
+   :LAST_TOUCHED: [2026-05-04]
    :END:
    Scrape 298 (=jobs/view/4407097463=) ran 4× today: 1 success, 3
    =ExtractFail=. The 3 failures hit LinkedIn's documented SDUI
@@ -320,335 +510,7 @@ cold loads still get the skeleton. Frontend PR #88.
    misses on external-apply jobs. Split out from the SDUI partial-render
    TODO above (scrape 298).
 
-** STRT SettleWait fires on every path; bumped 2s→5s :scrape:agents:bug:
-   :PROPERTIES:
-   :CREATED:  2026-05-04
-   :END:
-   Followup to today's WaitReadySelector iterate ship. Scrape 298
-   re-run at 08:49 UTC matched =h2:has-text("About the job")= in
-   *18ms* and routed straight through ScrollToLoad → ExpandTruncations
-   → Capture, but Tier1Mini still got partial content because matching
-   the heading only proves the section header is in DOM, not that the
-   description body has finished streaming. User pushed for the
-   simplest possible fix: just sleep before reading the DOM. Done —
-   =WaitReadySelector= now always routes to =SettleWait= (hit path
-   too, not just miss); =SettleWait= sleeps 5s instead of 2s. Cost is
-   +5s per scrape, which is nothing compared to the 30s we used to
-   burn on Capture's font-wait stall. Return type narrowed
-   =Union[ScrollToLoad, SettleWait]= → =SettleWait=. =NODE_META=
-   updated, =graph_static.json= regenerated (28 nodes / 37 edges —
-   one edge dropped).
-** STRT WaitReadySelector iterates ready_selector list :scrape:agents:bug:
-   :PROPERTIES:
-   :CREATED:  2026-05-04
-   :END:
-   Scrapes 295 + 296 (LinkedIn jobs/view/4407097463, Magnitude
-   Consulting Forward Deployed engineer) repeatedly hit
-   =WaitReadySelector= timeout=true / matched_selector=null even after
-   the enhancer landed a fat ready_selector on profile id=2 leading
-   with =h2:has-text("About the job")=. Two hypotheses: (A) Playwright's
-   CSS parser silently neutralizes a comma list when one fragment is a
-   text-engine selector like =:has-text()=; (B) a single 5s budget on
-   the whole list is too tight against LinkedIn flagship-web's paint.
-   Iteration is robust to both: split the list, try each via
-   =locator(s).first.wait_for(state="visible", timeout=1500)=, return
-   on first hit, record the winner. Profile schema (the JSON blob)
-   moves from str → list[str]; agent normalizes either form so legacy
-   profiles keep working. =LoadProfile= now emits
-   =ready_selector_count= + =ready_selector_hash= so a future
-   investigation can correlate "selector misses" with "which profile
-   version was loaded". =WaitReadySelector= payload gains per-attempt
-   =duration_ms= / =matched= / =error= class (timeout vs parse), so
-   the next failed run tells us whether it's flake or a bad selector.
-   Tests: =tests/test_wait_ready_selector.py= (6 cases — first-match
-   short-circuit, all-miss, legacy-string normalization, parens-aware
-   split, no-page no-op, parse-vs-timeout error class).
-** SHIPPED LinkedIn SDUI partial-hydration — guardrails + selector discovery :scrape:agents:bug:
-   CLOSED: [2026-05-03]
-   All three code-side changes shipped on
-   =feature/scrape-graph-scrolltoload= (agents submodule). (1)
-   =ValidateExtraction= now rejects parsed descriptions that are
-   short, lack real-job vocabulary, and are dominated by chrome
-   words / salary fragments — reasons list gains =ui_chrome_only=.
-   (2) =WaitReadySelector= emits =matched_selector= + =timed_out=
-   in its trace payload so future investigations can read the trace
-   alone instead of grepping selectors. (3) New =ScrollToLoad= node
-   sits between the wait/settle pair and =ExpandTruncations=; it
-   scrolls in 800px / ~250ms ticks until the profile's ready
-   selector matches or scrollHeight stalls (capped ~5s), then
-   500ms post-settle. Trace payload carries =ticks= /
-   =matched_selector= / =final_scroll_y=. =NODE_META= and
-   =graph_static.json= regenerated. New tests:
-   =tests/test_scroll_to_load.py= drives a fake page simulating
-   IntersectionObserver hydration; =test_validate_extraction.py=
-   adds the chrome-only repro from jp 1650. Stretch sub-task #4
-   (auto-attended for =/comm/jobs/view/=) deferred. Once deployed,
-   re-scrape jp 1644/1645/1647/1649/1650 to confirm real
-   descriptions land.
-:PROPERTIES:
-:CREATED:  [2026-05-03]
-:END:
-*Trigger:* User flagged jp 1644, 1645, 1647, 1649, 1650 — every
-LinkedIn =/comm/jobs/view/= scrape since the SDUI rollout (≥ scrape 232,
-2026-04-30) has been persisting a fabricated or chrome-only description
-because the description body never hydrates within the 7 s wait+settle
-window. Full diagnosis in =notes.org= "Scrape Log" entry
-[2026-05-03 23:55]. ScrapeProfile mutation (profile id 2) has been
-applied to (a) lead =ready_selector= with SDUI-tolerant aria/data-testid
-selectors and (b) instruct Tier1/2/3 LLMs not to fabricate when the
-partial-render fingerprint is present. That blunts the symptom but does
-not fix the root cause. This todo tracks the three code-side changes
-needed to fully close the regression.
-
-*Sub-tasks:*
-1. =ValidateExtraction= must reject UI-chrome-only descriptions.
-   - File: scrape-graph EvaluateExtraction / ValidateExtraction node
-     (search =agents/scrape_graph/= for =ValidateExtraction=).
-   - Heuristic: reject when =description= is ≤ ~200 chars AND contains
-     none of [responsibilities, qualifications, requirements, experience,
-     years, you will, we are looking, about the role, about the job, our
-     team] (case-insensitive) AND ≥ 60 % of its tokens are pill words
-     (Remote, Hybrid, On-site, Full-time, Part-time, Contract, Apply,
-     Save, dollar-amount patterns, "Use AI to assess how you fit").
-   - Smallest test: =agents/tests/test_validate_extraction.py= — assert
-     that a description equal to "$215K/yr - $250K/yr\nRemote\nFull-time
-     \nApply\nSave\nUse AI to assess how you fit" routes to =ExtractFail=
-     instead of =PersistJobPost=.
-2. =WaitReadySelector= graph payload must distinguish hit vs timeout.
-   - File: scrape-graph =WaitReadySelector= node (same package).
-   - Today =duration_ms=5000= is emitted both when the selector matched
-     after 5 s and when it timed out — the linkedin investigation had
-     to infer the timeout from the legacy-selector grep returning zero.
-     Add =matched_selector= (string or null) and =timed_out= (bool) to
-     the graph payload so future Scrape Log investigations can read the
-     trace alone.
-   - Smallest test: assert payload shape on a scrape against a static
-     HTML fixture with and without the ready selector present.
-3. Add a =ScrollToLoad= step to the scrape graph (LAZY-HYDRATION FIX).
-   - *Selector experiment resolved [2026-05-04].* User provided
-     screenshot of =/jobs/view/4407097463= showing the "About the job"
-     card fully rendered with prose. The description IS in the DOM
-     when the card scrolls into view; the existing
-     =ready_selector= candidate =[aria-label*='About the job' i]= is
-     correct. The reason every recent scrape misses the body is that
-     LinkedIn flagship-web uses IntersectionObserver-driven lazy
-     hydration and the scrape pipeline never scrolls. See
-     =notes.org= Scrape Log entry =[2026-05-04 00:35]= follow-up under
-     the [2026-05-03 23:55] linkedin.com block for the full evidence
-     chain.
-   - File: =agents/scrape_graph/= — new node between =SettleWait= and
-     =ExpandTruncations=. Page =window.scrollBy(0, 800)= in ~250 ms
-     increments until either (a) one of the =ready_selector= candidates
-     now matches, or (b) =document.body.scrollHeight= stops advancing
-     for two consecutive ticks. Cap total scroll loop at ~5 s. Then
-     run a brief settle (≈500 ms) so the just-fetched description
-     XHR can paint before =ExpandTruncations= looks for "See more".
-   - Smallest test: a Playwright fixture page that renders a
-     =[aria-label='About the job']= subtree only after an
-     IntersectionObserver fires. Without the new node, =Capture= must
-     not contain "About the job"; with it, =Capture= must.
-   - Bonus: emit the scroll-loop telemetry (=ticks=, =matched_selector=,
-     =final_scroll_y=) into the graph payload so future Scrape Log
-     investigations can read the trace alone — pairs with sub-task 2.
-   - Stretch: leave the per-profile ready-wait constant alone; the
-     scroll loop subsumes the "wait longer" hypothesis because once
-     the card intersects, hydration happens in <1 s.
-4. (Stretch) Decide whether =linkedin.com/comm/jobs/view/*= without a
-   warm authenticated session should route to the attended/authenticated
-   browser path automatically. The =/comm/= variant is the email-deep-link
-   form and almost always implies the user expects auth-grade content.
-
-*Why this can't be a profile-only fix:* the profile blob can ship
-selectors and prompt scaffolding, but it cannot (a) reject extractions
-post-hoc, (b) change graph-payload schema, or (c) decide between
-unattended and attended browser engines. All three live in
-=agents/scrape_graph/= and =agents/pollers/=.
-
-*Stretch sub-task #4 — deferred:* whether =/comm/jobs/view/*= without
-a warm authenticated session should auto-route to the attended browser
-path is left as a future TODO; not blocking the lazy-hydration fix.
-
-*Until this lands:* the five affected JobPosts (1644, 1645, 1647, 1649,
-1650) hold fabricated descriptions. Either flip them to the
-"[DESCRIPTION NOT CAPTURED — ...]" sentinel by hand, or re-scrape via
-=make poller ARGS="--attended"= so the description body has a chance
-to hydrate.
-
-** DONE Subnav search clear button :frontend:
-CLOSED: [2026-05-03]
-:PROPERTIES:
-:CREATED:  [2026-05-03]
-:END:
-Added an × clear button to =frontend/app/components/menus/subnav-search.hbs/.js=
-that appears only when the input has text. Clicking it clears =inputValue= and
-immediately fires =@onSearch('')= (no debounce). All 7 subnav search bars get
-the button automatically — no call-site changes needed. Wrapper div +
-=.subnav-search-clear= CSS added to =app/styles/app.css=.
-
-** DONE Extension from-text: synchronous extraction + paste-fallback for source==extension :api:bug:
-CLOSED: [2026-05-02]
-:PROPERTIES:
-:CREATED:  [2026-05-02]
-:END:
-*Trigger:* scrape 273 (manually flipped to =failed= 2026-05-02). Extension-ingested
-scrape from =https://careers.dat.com/jobs/?gh_jid=5741667004&gh_src=fd81f4a54us=
-sat in =status=extracting= for >4 minutes with no progress and no recovery.
-Logfire showed zero =parse_scrape= / =process_evaluation= / Tier1Mini spans
-system-wide for the prior 24h — the =parse_scrape= daemon thread either died
-silently after flipping status to =extracting= (line 756 of
-=job_post_extractor.py=) or never executed. The user (plugin clicker) was
-sitting at their machine waiting for a result that never came.
-
-*Why this fix shape:* the extension is reliable in 99% of cases — the
-captured =job_content= is usable. We don't need an async daemon-thread
-gambit for plugin scrapes: the request is already a synchronous user
-action, and the LLM extraction call is fast (~2-10s, no browser fetch).
-Block the request. Eliminate the stuck-extracting class entirely for
-this code path.
-
-*** Files
-
-- =api/job_hunting/api/views/scrapes.py= — =from_text= action (line 582-692).
-  =parse_scrape= is currently called at line 686 with default =sync=False=
-  (which spawns a daemon thread).
-- =api/job_hunting/lib/parsers/job_post_extractor.py= — =process_evaluation=
-  (line 211+); paste fallback at lines 242-249.
-
-*** Change A: =from_text= calls =parse_scrape(..., sync=True)=
-
-In =api/job_hunting/api/views/scrapes.py=, line 686:
-
-#+begin_src python
-# BEFORE
-parse_scrape(scrape.id, user_id=request.user.id)
-
-# AFTER
-parse_scrape(scrape.id, user_id=request.user.id, sync=True)
-#+end_src
-
-The endpoint now blocks until =parse_scrape= reaches a terminal status
-(=completed= or =failed=). Status flow becomes:
-=pending= → =extracting= → =updating_profile= → =completed= | =failed=,
-all inside the single HTTP request.
-
-Caveat: typical =from_text= LLM call is 2-10s. Long enough that the
-endpoint should return =200/202= with the terminal status reflected in
-the response body so the popup can show "added ✓" or "failed" immediately
-instead of polling. The current 202 response is fine; the popup already
-hands off to a background poller (=background.js= =pollScrapeOnce=). With
-sync=True the scrape is already terminal when the response comes back,
-so the first poll gets the result immediately. No popup change required.
-
-*** Change B: extend paste fallback in =process_evaluation=
-
-In =api/job_hunting/lib/parsers/job_post_extractor.py=, lines 242-249:
-
-#+begin_src python
-# BEFORE
-effective_description = validated_data.description
-if (
-    not effective_description
-    and getattr(scrape, "source", None) == "paste"
-):
-    fallback = (scrape.job_content or "").strip()
-    if fallback:
-        effective_description = fallback
-
-# AFTER
-effective_description = validated_data.description
-if (
-    not effective_description
-    and getattr(scrape, "source", None) in ("paste", "extension")
-):
-    fallback = (scrape.job_content or "").strip()
-    if fallback:
-        effective_description = fallback
-#+end_src
-
-Reasoning: when the LLM omits a description on an =extension= scrape,
-the captured =job_content= IS the user's intended description (modulo
-nav/footer chrome). Letting it pass through is graceful degradation
-when the LLM is broken/unavailable. Layer 1 stub-upgrade gate
-(=STUB_MIN_WORDS=60=, just shipped in api PR #84) protects against
-chrome-only fallbacks polluting good existing JPs — a thin fallback
-won't overwrite a populated description.
-
-Risk: an extension capture that's mostly chrome (e.g. greenhouse-
-iframed pages where iframe text doesn't reach =document.body.innerText=)
-will populate the description with nav/footer noise on a fresh-create.
-Acceptable trade because: (a) better than silent loss, (b) Layer 1
-prevents replacement of good descriptions, (c) the iframe class is
-addressed by the separate extension =allFrames= todo below.
-
-*** Tests
-
-Add to =api/job_hunting/tests/test_scrape_from_text.py=:
-
-#+begin_src python
-class TestFromTextSyncExtraction(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username="t", password="p")
-        self.client.force_authenticate(user=self.user)
-
-    @patch("job_hunting.lib.parsers.job_post_extractor._build_agent_for_model")
-    def test_extension_source_blocks_until_terminal(self, mock_agent):
-        # Mock LLM to return a valid ParsedJobData
-        mock_agent.return_value.run_sync.return_value = ...
-
-        resp = self.client.post(
-            "/api/v1/scrapes/from-text/",
-            {"text": "..." * 100, "link": "https://example.com/job/1",
-             "source": "extension"},
-            format="json",
-        )
-        self.assertEqual(resp.status_code, 202)
-        scrape_id = resp.data["data"]["id"]
-        scrape = Scrape.objects.get(pk=scrape_id)
-        # MUST be terminal — sync=True guarantees no leftover extracting state
-        self.assertIn(scrape.status, ("completed", "failed"))
-#+end_src
-
-Add to =api/job_hunting/tests/test_job_post_extractor.py= near the
-existing =test_paste_scrape_falls_back_to_job_content_when_llm_omits_description=:
-
-#+begin_src python
-@patch("job_hunting.lib.parsers.job_post_extractor.JobPostExtractor.analyze_with_ai")
-def test_extension_scrape_falls_back_to_job_content_when_llm_omits_description(
-    self, mock_analyze
-):
-    # LLM returns valid data but with description=None
-    mock_analyze.return_value = ParsedJobData(
-        title="Engineer", company_name="Acme", description=None
-    )
-    raw_text = "Real description text " * 50  # ≥ STUB_MIN_WORDS
-    scrape = Scrape.objects.create(
-        url="https://example.com/job/1",
-        job_content=raw_text,
-        status="pending",
-        created_by=self.user,
-        source="extension",
-    )
-    parse_scrape(scrape.id, user_id=self.user.id, sync=True)
-
-    job = JobPost.objects.get(link="https://example.com/job/1")
-    self.assertIn("Real description text", job.description)
-#+end_src
-
-*** Acceptance criteria
-1. =from-text= endpoint never returns while a scrape is in =extracting=.
-2. Extension scrape with LLM omitting description ends up with =job_content=
-   stored as JobPost.description (not lost).
-3. =make ci= green.
-4. Smoke test on prod: submit any plugin scrape; confirm it reaches a
-   terminal status before the popup's first poll.
-
-*** Out of scope
-- Changing the popup-side handoff to background.js (no change needed).
-- Sweeper for =extracting > N min= rows from OTHER code paths (re-extract,
-  hold-poller). Tracked separately under "Extracting-state safety net" todo.
-- Iframe-walking in the extension capture (separate todo).
-
-** TODO Extracting-state safety net: try/finally + sweeper :api:bug:
+** TODO [#A] Extracting-state safety net: try finally + sweeper :api:bug:scrape:
 :PROPERTIES:
 :CREATED:  [2026-05-02]
 :END:
@@ -675,7 +537,7 @@ called from other paths that DO use daemon threads:
 
 These need a safety net.
 
-*** Change A: try/finally around =_run= so terminal status is guaranteed
+*** Change A: try/finally around =_run= so terminal status is guaranteed :scrape:
 
 In =api/job_hunting/lib/parsers/job_post_extractor.py=, =parse_scrape._run=
 (line 733):
@@ -716,7 +578,7 @@ def _run():
 Set =reached_terminal = True= at lines 790 (=completed=) and 793 (=failed=)
 inside the existing branches.
 
-*** Change B: management command for stuck-extracting sweep
+*** Change B: management command for stuck-extracting sweep :scrape:
 
 New file =api/job_hunting/management/commands/sweep_stuck_extracting.py=:
 
@@ -756,7 +618,7 @@ class Command(BaseCommand):
 Wire as cron via the existing scheduling pattern (or invoke from
 =make sweep-stuck= for now; later cron is a separate ticket).
 
-*** Tests
+*** Tests :scrape:
 
 =api/job_hunting/tests/test_parse_scrape_safety.py= (new):
 
@@ -804,7 +666,7 @@ class TestSweepStuckExtractingCommand(TestCase):
         self.assertEqual(recent.status, "extracting")
 #+end_src
 
-*** Acceptance criteria
+*** Acceptance criteria :scrape:
 1. Any =parse_scrape= invocation that reaches the daemon thread leaves
    the scrape in a terminal status (=completed= or =failed=), even on
    uncaught exception or container restart mid-flight.
@@ -812,13 +674,13 @@ class TestSweepStuckExtractingCommand(TestCase):
    stuck rows; =--dry-run= reports without flipping.
 3. =make ci= green.
 
-*** Out of scope
+*** Out of scope :scrape:
 - Cron schedule for =sweep_stuck_extracting= (file separately if you want
   it on a timer; can also run manually from =make shell-api= for now).
 - Changing the underlying daemon-thread architecture to a real worker
   queue (Celery / Django-Q). That's a larger refactor.
 
-** TODO Extension allFrames capture for iframe-embedded ATS (greenhouse, dat.com class) :extension:frontend:
+** TODO Extension allFrames capture for iframe-embedded ATS (greenhouse, dat.com class) :extension:frontend:scrape:
 :PROPERTIES:
 :CREATED:  [2026-05-02]
 :END:
@@ -834,13 +696,13 @@ are invisible.
 This pattern is widespread: any ATS that gets embedded into a company's
 own careers page (greenhouse, lever, workday, jobvite) hits the same gap.
 
-*** File
+*** File :scrape:
 
 =frontend/public/extensions/career-caddy-sender/popup.js= — =grabPayload=
 (line 336-342). Bump version in =manifest.json= to 0.3.7 and add a
 README.md version-history entry.
 
-*** Change
+*** Change :scrape:
 
 #+begin_src js
 // BEFORE
@@ -893,7 +755,7 @@ Notes for the implementer:
   multiple text regions; the prompt doesn't currently mention it but
   Tier1Mini will benefit from any structural delimiter.
 
-*** Test plan (manual — extension testing is hard to automate)
+*** Test plan (manual — extension testing is hard to automate) :scrape:
 
 1. Load extension from =frontend/public/extensions/career-caddy-sender/=
    in Firefox via =about:debugging= → Load Temporary Add-on.
@@ -909,7 +771,7 @@ Notes for the implementer:
 6. Confirm Tier1Mini extraction yielded a populated =description= on the
    resulting JobPost.
 
-*** Acceptance criteria
+*** Acceptance criteria :scrape:
 1. Extension version bumped to 0.3.7 in =manifest.json= + README version-history.
 2. Submitting from a greenhouse-iframed page captures the iframe contents.
 3. Existing single-frame pages (linkedin, indeed direct, paste-only sites)
@@ -918,7 +780,7 @@ Notes for the implementer:
 5. Cross-origin iframe failure (sandboxed iframes) is graceful — popup
    doesn't crash, just sends what it can.
 
-*** Out of scope
+*** Out of scope :scrape:
 - Detecting and rewriting tracker URLs (=?gh_jid== → =boards.greenhouse.io/{org}/jobs/{id}=)
   before navigation. Could be a follow-up if the iframe approach
   proves flaky, but iframe walking is the cleaner answer.
@@ -930,44 +792,7 @@ Notes for the implementer:
   rebuild via:
   =cd frontend/public/extensions/career-caddy-sender && zip -r ~/Sandbox/career-caddy-sender-0.3.7.xpi . --exclude "*.DS_Store"=
 
-** DONE Description merge + arbiter [PR A: Layer 1, PR B: Layer 2] :api:ai:
-CLOSED: [2026-05-02]
-:PROPERTIES:
-:CREATED:  [2026-05-02]
-:END:
-[[file:notes.org::*Description merge + arbiter (PR A: Layer 1 / PR B: Layer 2)][Plan → notes.org Tier 6]]
-- *PR A — Layer 1*: cold-path =get_or_create= asymmetry. When match returns
-  =created=False= and existing JP is thin, run the same overwrite as the
-  link-hit-thin branch. Fixes jp 1603 class (extension scrape from
-  welcometothejungle deduped to email-sourced LinkedIn JP, but
-  =process_evaluation= dropped the rich description on the floor).
-  STRT [2026-05-02]: api PR #84 merged. Adds new sentinels
-  =updated_stub_via_fingerprint= / =duplicate_via_fingerprint=. 4 new tests.
-  Promote to SHIPPED after parent Deploy goes green.
-- *PR B — Layer 2*: arbiter LLM picks =keep_existing | use_new | merge=
-  when both descriptions are non-thin and differ materially. Audit row per
-  decision in new =JobPostDescriptionDecision= model (migration 0066). Behind
-  =INGEST_ARBITER_ENABLED= env flag (default on). Cheapness gate: Jaccard
-  5-gram overlap > 0.70 and word-count ratio < 1.5 skips LLM. 17 new tests
-  in =test_description_arbiter.py=. =description_arbiter= added to
-  =_agent_role_specs()=. api PR #N merged [2026-05-02].
-- *Backfill*: =python manage.py rerun_arbiter --since 2026-04-01= as a
-  one-shot after PR A+B land.
-
-** TODO agents keep calling career-data instead of profile data
-** DONE Extension v0.3.6: ORIGIN → api.careercaddy.online :frontend:extension:
-CLOSED: [2026-05-02]
-=popup.js= =ORIGIN= constant changed from =careercaddy.online= to
-=api.careercaddy.online=. Symptom: 405 Method Not Allowed on Connect
-because =careercaddy.online= is the Ember frontend domain; Caddy there
-does not proxy POST =/api/v1/*= to Django. Using the API subdomain
-directly fixes it. Frontend PR merged to main; parent already pinned.
-** TODO scrape icon better than paperclip ?
-** TODO spc o c should reload the file before adding capture
-** TODO I can only see one user in ai-spend
-** TODO tiny button to go to /companies/<id>
-** TODO ban 84.32.70.55
-** DONE Score visibility: daemon-created scores invisible to user :frontend:api:bug:
+** DONE Score visibility: daemon-created scores invisible to user :frontend:api:bug:scrape:
 CLOSED: [2026-05-02]
 :PROPERTIES:
 :CREATED:  [2026-05-02]
@@ -1026,7 +851,7 @@ Reproducer: submit a scrape from the extension with auto-score on, watch
 =docker compose logs -f api frontend= for sustained polling beyond the
 scrape's terminal status.
 
-** DONE Auto-score on from-text ingest + "Job post created" alert :api:frontend:bug:
+** DONE Auto-score on from-text ingest + "Job post created" alert :api:frontend:bug:scrape:
 CLOSED: [2026-05-03]
 :PROPERTIES:
 :CREATED:  [2026-05-03]
@@ -1054,121 +879,7 @@ immediately after =parse_scrape(sync=True)= completes.
   (stale cache). Prevents double-scoring when server created a pending score during
   ingest; skips =scoreResume()= when any career-data score already exists.
 
-** DONE Extension: hardcode origin = https://careercaddy.online :frontend:extension:
-CLOSED: [2026-05-02]
-v0.3.1 — removed the configurable origin input from =popup.html=, dropped
-=ccOrigin= from STORAGE_KEYS, hardcoded =ORIGIN= constant in =popup.js= and
-=background.js=. The frontend already strip-replaced the public download
-buttons (no .xpi/.zip artifacts in =public/extensions/=); developers test
-via =Load unpacked= against the source folder. Store-submission
-checklists captured in =notes.org → Browser Extension → Publishing
-pre-flight=.
-
-** SHIPPED Ingest abuse defense — Phase 0 (own-domain, scheme, private host) :api:extension:security:
-CLOSED: [2026-05-02]
-Concrete trigger: own-dogfood test — submitted =careercaddy.online= itself
-through the extension and the pipeline cheerfully minted a JobPost from the
-site's own marketing copy. Plan at =~/.claude/plans/dazzling-stirring-church.md=.
-
-What landed (api submodule, =feature/from-text-source-hint= follow-up):
-
-- =job_hunting/lib/url_policy.py= — single source of truth for
-  =validate_submission_url(raw)=. Hard-rejects scheme ∉ {http,https},
-  =SELF_HOSTS= (=careercaddy.online= + www variant, plus optional
-  =INGEST_BLOCKED_HOSTS= env), and private hosts (=localhost=, RFC1918,
-  link-local, =*.local= / =*.internal= / =*.lan= / =*.localhost=, IP
-  literals via =ipaddress= module). Raises =UrlPolicyError(code, msg)=
-  with stable codes: =blocked_self= / =blocked_scheme= / =blocked_private=
-  / =blocked_malformed=.
-- =api/views/scrapes.py= — both =from_text= and =create= call the validator;
-  422 with the policy code on rejection. =from_text= also enforces
-  =FROM_TEXT_MIN_LEN=200= / =FROM_TEXT_MAX_LEN=500_000= (codes
-  =text_too_short= 400 / =text_too_long= 422).
-- =tests/test_url_policy.py= (21 cases) + =test_scrape_from_text.py=
-  (new =TestScrapeFromTextPolicy=, 6 cases). Existing classes patched with
-  =@patch("...FROM_TEXT_MIN_LEN", 1)= so they keep testing what they were
-  written for. 44 tests green.
-
-What landed (frontend extension, =feature/extension-direct-post=):
-
-- =popup.js= — mirrors =SELF_HOSTS= / scheme / private-host check via
-  =classifyUrl(tab.url)= before the page read; fast-fails in the popup
-  with a friendly message before any POST.
-- v0.3.2 in =manifest.json= + =README.md= version-history entry.
-
-The API check is authoritative; the popup mirror is defense in depth (a
-=curl= can bypass the popup but not =url_policy.py=).
-
-
-** SHIPPED Ingest abuse defense — Phase 0 lift onto =POST /job-posts/= :api:security:
-CLOSED: [2026-05-02]
-:PROPERTIES:
-:CREATED:  [2026-05-02]
-:END:
-Plan at =~/.claude/plans/this-flowchart-got-lost-magical-candle.md=.
-
-cc_auto inbox triage, the chat agent's =create_job_post_with_company_check=
-tool, and the manual create form all POST directly to
-=/api/v1/job-posts/=, bypassing the URL-policy gate the Phase 0 work
-added to =/scrapes/=. The flowchart in =notes.org= the user just
-retrieved makes this asymmetry explicit.
-
-What landed (api submodule, =feature/ingest-url-policy=):
-- =api/views/jobs.py:JobPostViewSet.create= calls
-  =validate_submission_url(link)= immediately after =pre_save_payload=.
-  422 with =blocked_scheme/blocked_self/blocked_private/blocked_malformed=
-  on rejection; envelope matches the scrapes path.
-- =tests/test_job_post_url_hygiene.py:TestJobPostUrlPolicy= — 6 cases
-  (javascript scheme, careercaddy.online self-host, RFC1918, =.local=,
-  clean URL regression, no-link skip).
-- Frontend manual-create controller already surfaces
-  =error.errors[0].detail= via =flashMessages.danger= — no FE change.
-- 656 api tests green; ruff clean.
-
-Tracker resolution (=is_tracker_host=/=resolve_tracker=) was
-*intentionally not lifted in this slice*. See Phase 2 entry below for
-the LinkedIn =/comm/= → login-wall finding that scoped this work down.
-
-** SHIPPED Extension: dark-mode + palette-aware popup, Enter-to-submit :frontend:extension:
-CLOSED: [2026-05-02]
-v0.3.3 → v0.3.5. Visual rewrite of =popup.html= around CSS custom
-properties driven by =data-theme=dark= and =data-palette=jade|rose|amber|violet|blue=
-on =<html>=. Mirrors the app's six palette names; dark variants only
-override =--accent-50= and =--accent-100= so the brighter accent stays
-consistent.
-
-Theme storage in =chrome.storage.local= as =ccTheme= ('system'/'light'/'dark')
-+ =ccPalette=. Best-effort import: =scripting.executeScript= runs against
-the active CC tab and slurps =theme-mode= / =theme-palette= from its
-=localStorage=, then writes through to extension storage. Runs on every
-popup open (=loadSaved()=), not just on Connect — so users who upgraded
-after their first connect pick up the app's theme without
-disconnect/reconnect, and theme changes in the app surface on next popup.
-
-Footer sun/moon button manually overrides the saved mode. =matchMedia=
-listener re-renders when system pref flips while popup is open.
-
-v0.3.5 also: Enter in username or password triggers Connect.
-
-Local-build XPI for the user lives in =~/Sandbox/cc-ext-local/= and
-=~/Sandbox/career-caddy-sender-local-0.3.5.xpi= — distinct gecko id
-(=career-caddy-sender-local@careercaddy.online=) so it coexists with the
-prod extension in one Firefox profile.
-
-** TODO Ingest abuse defense — Phase 1 (hygiene) :api:frontend:security:
-Phase 1 follow-up to the Phase 0 ingest defenses. Plan at
-=~/.claude/plans/dazzling-stirring-church.md=. Three independent sub-tasks:
-
-1. Tracking-param strip + canonical-link normalization in
-   =lib/url_policy.normalize_link()= (utm_*, fbclid, gclid, mc_*, _hs*,
-   ref, ref_src). Backfill =JobPost.canonical_link= for existing rows.
-2. PII disclaimer in popup connect screen + =/docs/extension-privacy/=
-   page describing what the extension reads and stores.
-3. Frontend XSS audit — grep =frontend/app/templates/= for =html-safe=,
-   =triple-stash=, markdown render, =innerHTML= on JobPost-derived
-   content paths.
-
-** TODO Ingest abuse defense — Phase 2 (provenance + pipeline) :api:agents:security:
+** TODO Ingest abuse defense — Phase 2 (provenance + pipeline) :api:agents:security:scrape:
 Phase 2 follow-up. Single deliverable for vector I5
 (client-asserted (link, text) pair). Plan at
 =~/.claude/plans/dazzling-stirring-church.md=.
@@ -1213,134 +924,13 @@ redirect-resolve vs path-rewrite classes before any next attempt.
 
 Toggle ladder (per-user, per-source overrides) deferred to Phase 3.
 
-** DONE job-posts list: hover date shows created datetime :frontend:
-CLOSED: [2026-05-02]
-=frontend/app/components/job-posts/list.hbs= — wrapped posted-date cell in
-=<span title="created: ...">= using =createdAt= so hovering reveals the exact
-ingestion timestamp. Lets the user confirm email-sourced posts arrived at the
-expected time without opening the record. Frontend PR #103.
-
-** TODO block 195.178.110.9
-** DONE Retry scrape redirects to new child scrape :frontend:
+** DONE Retry scrape redirects to new child scrape :frontend:scrape:
 CLOSED: [2026-05-02]
 =job-posts/show/scrapes/show.js= controller: after =redo= POST, poll
 the source scrape's =scrapes= hasMany (reloaded with =include: scrapes=)
 until a child appears, then =router.transitionTo('job-posts.show.scrapes.show',
 jpId, childId)=. Falls back to reloading the original scrape if no
 child appears within 30 s (e.g. non-redirecting URLs). Added =@service router=.
-** TODO caddy-web cannont get screenshots
-** TODO https://careercaddy.online/job-posts/1551
-why two canonical?
-** WAIT Verify linkedin.com ready_selector fix on next job-view scrape :scrape:
-:PROPERTIES:
-:CREATED:  2026-05-01
-:END:
-Profile id 2 (linkedin.com) updated 2026-05-01 16:53 UTC with
-=ready_selector: ".show-more-less-html, .jobs-description__container, section.show-more-less-html, .description__text"=
-to fix the ExpandTruncations no-op on scrape #250 (job-post 1315,
-Lululemon Senior Cybersecurity Engineer). See Scrape Log entry
-[2026-05-01] in notes.org for diagnosis.
-
-Verification on the next linkedin.com /jobs/view/ scrape:
-- =get_scrape_graph_trace= should show =WaitReadySelector= routing
-  to =ExpandTruncations= directly (skipping SettleWait) with
-  =duration_ms > 0= (the actual selector wait, up to 5000 ms).
-- =ExpandTruncations= duration should be >100 ms with a click
-  landing — logfire span =expanded truncation: ...= present.
-- Capture body should contain the *full* job description, not the
-  CSS-clipped preview.
-- If still failing: re-scrape job-post 1315 manually, pull the
-  screenshot, and check whether the description container uses a
-  different class on the public (logged-out) variant. Candidates
-  to add: =[data-test-description]=, =.core-rail .description=.
-
-Update [2026-05-01 ~17:00 UTC]: scrape #257 → child #258 (jp 1574,
-LinkedIn /comm/ → /jobs/view/4406443184/, AES Group Infrastructure
-Engineer) revealed a *second* failure mode: when cookies authenticate
-into flagship-web (logged-in SPA), none of the four
-public-guest selectors match — the captured =job_content= for #258
-is just nav + footer chrome ("0 notifications / Skip to main content
-/ ... LinkedIn Corporation © 2026"); zero hits in the captured HTML
-for any of =jobs-description=, =show-more-less-html=,
-=description__text=, =jobs-box__html=, =about-the-job=, etc. The job
-description body never hydrated before Capture.
-- Symptoms in the graph trace (scrape 258): WaitReadySelector
-  duration 5011ms (full timeout, no match), Capture duration 30115ms
-  (likely networkidle timeout), Tier0CSS 0ms (nothing to extract,
-  fell straight through to Tier1Mini), Tier1Mini scraped only meta
-  ("Top applicant, Seattle, WA.") which became jp 1574's description.
-  ResolveApplyUrl: =no_selector_matched=.
-- Profile #2 ready_selector extended (2026-05-01 ~17:00 UTC) with
-  flagship-web (authenticated) selectors:
-  =.jobs-description-content__text=,
-  =.jobs-description__content=, =.jobs-box__html-content=,
-  =.jobs-search__job-details--container=,
-  =.job-details-jobs-unified-top-card__primary-description-container=,
-  =article.jobs-description__container=,
-  =div[class*='jobs-description']=. Apply markers also extended
-  (=.jobs-s-apply button=, =button.jobs-apply-button=).
-- Verify on next /jobs/view/ scrape that authenticates: WaitReadySelector
-  duration <5000ms with a flagship selector winning, Tier0CSS
-  duration_ms > 0 (actual extraction, not 0ms passthrough), captured
-  body length >> 600 chars.
-- Re-scrape jp 1574 once a flagship-cookie session is active to
-  confirm the description fills with real body, not the meta blurb.
-
-Update [2026-05-02]: scrape #259 ran *after* the flagship-web
-selector additions and *still* produced a chrome+teaser-only
-description for jp 1574. Diagnosis (see notes.org Scrape Log
-=[2026-05-02] linkedin.com — "Promoted by hirer" off-platform
-variant=): jp 1574 is *not* the standard hydration-lag case — it
-is LinkedIn's off-platform-managed posting variant
-("Promoted by hirer · Responses managed off LinkedIn"). The
-description does not exist in the LinkedIn DOM at all; the apply
-CTA is locked inside =data-testid="interop-iframe"=. No further
-profile-2 selector tightening will recover this jp's description.
-The ready_selector additions remain correct for the *standard*
-flagship-web variant — verification of that fix is still pending
-on the *next* standard-variant linkedin /jobs/view/ scrape (i.e.
-one without the "Promoted by hirer" markers).
-
-Update [2026-05-02 ~later]: re-investigation of the captured HTML
-for scrape #259 (89 KB, full SDUI render) *partially corrects*
-the earlier "iframe-locked" claim above. The apply CTA *is*
-present in the LinkedIn DOM, not iframe-locked: it's an =<a>= with
-=aria-label="Apply on company website"= and =target="_blank"=
-pointing at =https://www.linkedin.com/safety/go/?url=<encoded>=
-which redirects out to the hirer (ceipal candidate portal in this
-case). The reason ResolveApplyUrl returned =no_selector_matched=
-is purely that profile #2's =apply_link_selectors= still listed
-only =a.jobs-apply-link[href]= and
-=a[data-tracking-control-name*='apply']=, neither of which match
-the new randomized-class SDUI markup. =apply_candidates= already
-captured the right anchor at score 0.7 — the resolver doesn't
-promote candidates, only honors selectors.
-
-Profile #2 =apply_link_selectors= updated 2026-05-02 to add (in
-priority order):
-- =a[aria-label='Apply on company website'][href]=
-- =a[aria-label^='Apply on'][href]=
-- =a[aria-label*='Apply on company'][href]=
-- =a[href*='linkedin.com/safety/go/'][aria-label*='Apply']=
-- =a[href*='/safety/go/'][target='_blank'][aria-label*='Apply']=
-Legacy =a.jobs-apply-link[href]= and the tracking-control-name
-fallback retained at the end of the list.
-
-The description-body story for the off-platform variant is
-unchanged: even in the 89 KB SDUI HTML, no job-body copy appears
-(zero hits for cloud/aws/responsibilit/qualification/etc.), so
-the hirer-side description is genuinely not in the DOM. The
-todo entry below ("LinkedIn off-platform-managed variant
-detection") still applies for the description side — but the
-apply-URL portion of that todo can be narrowed: apply *is*
-recoverable via aria-label, just not the description.
-
-Verification on next scrape of a /jobs/view/ posting with
-=Apply on company website= aria-label: ResolveApplyUrl should
-route to End with =apply_url_status: resolved= and a
-=link_selector= note matching one of the new aria-label
-selectors (likely the first).
-
 ** TODO LinkedIn off-platform-managed variant detection :ai:scrape:linkedin:
 :PROPERTIES:
 :CREATED:  2026-05-02
@@ -1493,7 +1083,7 @@ flows would silently skip it. See Scrape Log entry
   is upstream — don't make the closed-state detector permissive to
   paper over LLM hallucinations.
 
-** TODO Backfill linkedin /comm/ duplicate jp 1315 ↔ jp 1550 :api:data:
+** TODO Backfill linkedin  comm  duplicate jp 1315 ↔ jp 1550 :api:data:scrape:
 :PROPERTIES:
 :CREATED:  2026-05-01
 :END:
@@ -1523,73 +1113,7 @@ This todo is *only* the data backfill:
 Out of scope: code changes — the prevention fix is already in the
 profile.
 
-** SHIPPED JobPost.source clobber fix + jp.show URL aliases panel :api:frontend:
-CLOSED: [2026-05-01 Fri 13:51]
-Job-post 1483 (Senior SWE, Optum/UnitedHealth) showed =source: scrape=
-in prod despite originating from a Jobright digest email
-(2026-04-30 16:22 UTC). cc_auto created the JobPost with
-=source="email"= the same evening; the next day a hold-poller scrape
-on the dice.com canonical URL clobbered the column to ="scrape"= via
-the stub-upgrade branch in =job_post_extractor.parse()=. Same posting
-is reachable via three URLs (jobright tracker, careers.unitedhealth
-apply page, dice canonical) and =job-posts.show= had no way to surface
-that — only the canonical link's ↗ and the resolved apply chip via
-=<ApplyDestination>=.
-
-Two coupled fixes:
-
-- *api*: =api/job_hunting/lib/parsers/job_post_extractor.py= — pull
-  =source= out of =job_defaults= into =create_only_source=, add
-  =_NO_OVERWRITE_FIELDS= ({=created_by=, =source=}) and skip those in
-  the force-merge + stub-upgrade loops, drop =source= from the
-  duplicate-merge dict. Cold-create branch still pins source from the
-  scrape so genuinely scrape-originated JobPosts keep their provenance.
-  Four new unit tests in =api/job_hunting/tests/test_job_post_extractor.py=
-  =TestSourcePreservation=: stub-upgrade preserves, force-reparse preserves,
-  full-duplicate preserves, cold-create still sets.
-
-- *frontend*: =frontend/app/models/job-post.js= — added =canonicalLink=
-  attr + =urlAliases= getter that produces a dedup'd list of
-  =[{url, label, hostname}]= across =link=, =canonicalLink=, =applyUrl=
-  (when status==resolved), and each =scrape.url= + =scrape.sourceLink=.
-  New =<JobPosts::AliasesPanel @jobPost />= (template-only) renders the
-  list as a "Reachable via" Panel::Card after the description, hidden
-  when ≤1 alias. =frontend/app/routes/job-posts/show.js= now side-loads
-  =scrapes= via =include= so the panel paints first-pass without flash.
-  Tests: =tests/unit/models/job-post-test.js= covers four
-  =urlAliases= cases, =tests/integration/components/job-posts/aliases-panel-test.js=
-  covers the empty + populated render paths.
-
-Local verification: 37/37 api tests green via
-=docker compose exec -T api python manage.py test job_hunting.tests.test_job_post_extractor=;
-=make ci= passes both =build-api= (ruff + bandit + Django test) and
-=build-frontend= (eslint + ember-template-lint + prettier +
-xvfb-run npm run test:ember).
-
-After deploy: manual fix-up =update_job_post(id=1483, source="email")=
-via MCP. Bulk backfill of historical mis-attributed JobPosts deferred
-(separate ticket — needs careful query design).
-
-Tally #23: stays at STRT until parent Deploy is green AND user has
-visually confirmed source label + aliases panel on a real prod record.
-
-** SHIPPED job-description.show isn't style compliant :frontend:
-CLOSED: [2026-04-30 Thu]
-Reference: =~/Pictures/screenshot-2026-04-30_18-08-24.png= (LinkedIn).
-Lifted the description out of the header card into its own =Panel::Card=
-with an "About the job" h2; the Copy + Expand controls now live in the
-card header. Description paragraph renders with =whitespace-pre-line=
-(source line breaks preserved instead of one wall-of-text =<p>=),
-=max-w-prose= for measure, =line-clamp-[8]= for collapse (dropped the
-=max-h-24/max-h-screen= transition carrier — it left a hollow ribbon
-when text was shorter than 4 lines). Card hidden when no description.
-Out of scope (broader audit): header still uses =panel-card= + =btn= CSS
-classes instead of =<Panel::Card>= / Tailwind button utilities; no
-company avatar (data-side question, not a template fix).
-=frontend/app/templates/job-posts/show.hbs=.
-** boot IP 130.12.180.144
-attempted /.env
-** DONE search-flicker fix: invert =loading()= booleans + add subnav skeletons :frontend:
+** DONE search-flicker fix: invert =loading()= booleans + add subnav skeletons :frontend:scrape:
 CLOSED: [2026-05-01 Fri 17:34]
 The two prior "fixes" ([[*Search input flicker on /scrapes \[frontend\]][PR #88]] and
 [[*search still disappears][the six-route mirror]]) had the =loading()=
@@ -1621,7 +1145,7 @@ Out-of-scope items completed in the same branch:
 
 =make ci= green locally before push. Promote to SHIPPED only after
 parent Deploy turns green and the flicker is verified gone in prod.
-** SHIPPED search still disappears :frontend:
+** SHIPPED search still disappears :frontend:scrape:
 CLOSED: [2026-04-30 Thu]
 PR #88 only fixed =scrapes/index=. The other six list routes with a
 =search= QP + =refreshModel: true= (=job-posts=, =companies=, =answers=,
@@ -1633,9 +1157,7 @@ action override into all six routes — return =true= when the transition
 is in-route (=transition.from.name === this.routeName=) so the substate
 is suppressed; cold loads still get the skeleton.
 [[*Search input flicker on /scrapes \[frontend\]][Original PR #88 — only covered /scrapes]]
-** TODO I want to see if camoufox can get passed click blockers
-detectobsticle
-** STRT a few bugs in this output :important:ai:
+** STRT a few bugs in this output :important:ai:scrape:
 api PR #81 merged 2026-05-01 21:36 UTC: explicit provider:model prefix
 in JobPostExtractor + IngestResume dispatchers; bare names + unknown
 providers raise. Resume default OpenAI fallback gpt-5 → gpt-4o
@@ -1703,42 +1225,21 @@ api-1       |     raise ModelHTTPError(status_code=status_code, model_name=self.
 api-1       | pydantic_ai.exceptions.ModelHTTPError: status_code: 400, model_name: anthropic:claude-haiku-4-5, body: {'message': "The requested model 'anthropic:claude-haiku-4-5' does not exist.", 'type': 'invalid_request_error', 'param': 'model', 'code': 'model_not_found'}
 api-1       | ERROR 2026-04-30 16:57:50,878 log 28 133751456723712 Bad Gateway: /api/v1/scrapes/237/llm-extract/
 api-1       | 172.19.0.1 - - [30/Apr/2026:16:57:50 -0700] "POST /api/v1/scrapes/237/llm-extract/ HTTP/1.1" 502 268 "-" "python-httpx/0.28.1"
-*** who is calling llm-extract?
-*** what is the error for?
-*** My resume never parsed :(
+*** who is calling llm-extract? :scrape:
+*** what is the error for? :scrape:
+*** My resume never parsed :( :scrape:
 
 
-** TODO when pasting a url for a new job-post :bug:
+** TODO when pasting a url for a new job-post :bug:scrape:
 https://careercaddy.online/job-posts/1481
 the url submitted and I was taken to the job post.
 I should be taken to job-post.show.scrapes.show
 however I had to go to job-post.show.scrapes.index and I did not see my scrape there
 I refreshed the page and saw it then in "hold"
 when it completed, I had to reload the page to see the updated job-post.description
-** PROJ AI chat work [0/3]
-*** TODO AI chat still uses career data when grabbing my name
-*** TODO AI still decided to update_anser tool instead of create_answer.  It did pull the correct context and gave a generic answer blowing away the one I wanted to interate on.
-*** TODO AI chat will put answers in the chat but not write new answers with MCP
-** PROJ [#B] when adding "vetted bad/good' the current filters on jp.index filter out the item dynamically
-** LOOP result from scrape https://careercaddy.online/scrapes/218:
+** LOOP result from scrape https:  careercaddy.online scrapes 218: :scrape:
 If are copying this link from a mail reader please ensure that you have copied all the lines in the link.
-** TODO JobPost dedupe — merge company_id into NULL-fingerprint stubs [api]
-:PROPERTIES:
-:CREATED: [2026-04-30]
-:END:
-Followup from the cc_auto pipeline migration plan
-([[file:~/.claude/plans/zippy-booping-donut.md]]). When
-=create_job_post_with_company_check= finds an existing post with link match
-but the existing post has =company_id=NULL= while the incoming request
-supplies =company_id=, prefer merging the company_id into the existing post
-rather than creating a duplicate. PR #74's =merge_empty_fields_from_attrs=
-covered the link-match path on full posts; this extends to the case where
-the existing stub has a NULL company (Microsoft regression #22 in the
-:IMPORTANT: tally). cc_auto's stage-5 introspection will surface
-=stage5.fingerprint_null_risk= warnings once the introspection PR
-(E+F+H) ships, so we'll have data on how often the precondition fires
-before designing the fix.
-** TODO Scrape diagnostic panel on /scrapes/<id> [frontend]
+** TODO Scrape diagnostic panel on  scrapes <id> :frontend:scrape:
 :PROPERTIES:
 :CREATED: [2026-04-30]
 :END:
@@ -1753,10 +1254,94 @@ Scope: read-only, gated to staff or scrape-owner. Source of motivation:
 "Senior Software Engineer Code Scanning", correctly landed but extractor
 failed on both tiers — no JobPost created, user couldn't tell why
 without external tooling).
-** TODO didn't we want mailto: as a link ?
-** TODO replace ↗ with {{link.hostname}} ↗
+** TODO replace ↗ with {{link.hostname}} ↗ :scrape:
 https://job-boards.greenhouse.io/defenseunicorns?error=true
-** SHIPPED [#A] Harden =make ci= so it cannot return green-but-broken [dagger]
+** TODO Verify apply-resolver on a real scrape per seeded host :tier6:scrape:
+Queue one job URL per seeded host (linkedin, greenhouse + boards,
+lever + jobs, jobot, indeed, ziprecruiter), let the poller pick up,
+confirm =JobPost.apply_url{,_status,_resolved_at}= populates and
+the =<ApplyDestination>= chip renders correctly on
+=/job-posts/:id=. Tweak the seed when a host doesn't match.
+** TODO [#B] JobApplication.tracking_url — per-user post-submit status link :api:automation:scrape:
+[2026-04-22] Separate from the =JobPost.application_url= work (which is
+the pre-apply external destination). =tracking_url= is the URL returned
+to the user after they submit: Lever candidate portal, Greenhouse
+candidate dashboard, LinkedIn withdraw-application link. Per-application,
+user-specific.
+
+Scope:
+- Migration: =JobApplication.tracking_url : text= (nullable).
+- Automator hook: when processing confirmation emails ("Thanks for
+  applying to X"), parse out the status/withdraw link and populate.
+- Frontend: on =/job-applications/{id}=, show "Check application
+  status →" if set.
+- Manual fill: editable field on =job-applications.edit= for when the
+  automator misses.
+
+Do NOT conflate with =JobPost.application_url= — one is the entry point
+(ambient, per-post), the other is the user's outbound receipt
+(per-application). See =notes.org::*Apply-destination resolution= for
+the full semantic split.
+
+** TODO [#C] Subnav control sizing is inconsistent :frontend:scrape:
+[2026-04-20] =/job-posts= subnav stacks =Search= (input), =Filters= (compact
+HyperUI-style dropdown trigger =px-2.5 py-1 text-xs= bordered), and
+=+ New Job Post= (app =.btn=, taller + bigger text). Heights don't line
+up. Same mismatch will land anywhere else we add more subnav controls
+(applications, scrapes, resumes). Decide:
+- unify on =.btn= height with a =.btn.ghost= variant for non-primary
+  actions like Filters, OR
+- downsize =.btn= on list/index pages to match the compact control.
+Pick one and roll out so subnav reads as a single bar. Blocks clean
+filter-menu rollout beyond job-posts.
+** https:  careercaddy.online scrapes 189 :scrape:
+its a stubbed that short circuted
+
+** PENDING_APPROVAL tool tips — where could they be useful? :PENDING_APPROVAL:frontend:
+I have not approved the list
+[[file:notes.org::*Tooltips][Considerations → notes.org]]
+
+** READY Tackling deprecations :PENDING_APPROVAL:APPROVED:frontend:
+[[file:notes.org::*Tackling Ember deprecations][Considerations → notes.org]]
+
+** TODO [#C] Reactive Resume plugin resumerx :PENDING_APPROVAL:frontend:
+[[file:notes.org::*Reactive Resume as a PDF-render plugin][Plugin architecture + scope → notes.org]]
+
+*** TODO ResumeRX MVP spike :api:frontend:
+[2026-04-20] Pre-plugin round-trip proof on =feature/rxresume-mvp=.
+Steps: (1) =api/rxresume-dev.yml= compose brings up rxresume +
+postgres + minio + chromium on localhost:3333; (2) manual API-key
+issue from the rxresume UI; (3) =rxresume_mapper.py= converts
+=Resume.to_export_context()= to rxresume JSON; (4) =rxresume_client.py=
+import→print→delete round-trip; (5) =?format=pdf= on existing
+=/resumes/:id/export/=. Frontend deferred. Not merging to main —
+feeds the eventual plugin PR.
+[[file:notes.org::*Reactive Resume — MVP spike][Full plan → notes.org]]
+
+** IDEA Flash message slide-wipe transition :frontend:
+Queue sequential display instead of stacking. First flash finishes its time, slides left, next slides in.
+** TODO make pills so flex can stack nicely on mobile :frontend:
+https://www.hyperui.dev/components/application/tabs/#component-5-dark
+** DONE Subnav search clear button :frontend:
+CLOSED: [2026-05-03]
+:PROPERTIES:
+:CREATED:  [2026-05-03]
+:END:
+Added an × clear button to =frontend/app/components/menus/subnav-search.hbs/.js=
+that appears only when the input has text. Clicking it clears =inputValue= and
+immediately fires =@onSearch('')= (no debounce). All 7 subnav search bars get
+the button automatically — no call-site changes needed. Wrapper div +
+=.subnav-search-clear= CSS added to =app/styles/app.css=.
+
+** TODO tiny button to go to  companies <id> :frontend:
+** DONE job-posts list: hover date shows created datetime :frontend:
+CLOSED: [2026-05-02]
+=frontend/app/components/job-posts/list.hbs= — wrapped posted-date cell in
+=<span title="created: ...">= using =createdAt= so hovering reveals the exact
+ingestion timestamp. Lets the user confirm email-sourced posts arrived at the
+expected time without opening the record. Frontend PR #103.
+
+** SHIPPED [#A] Harden =make ci= so it cannot return green-but-broken [dagger] :frontend:
 CLOSED: [2026-05-02]
 [2026-04-29] Tally #9/#13/#14/#19 are all the same shape: Dagger
 =call build-api= / =call build-frontend= summarize a successful build
@@ -1793,59 +1378,39 @@ Acceptance:
 - README / agent guidance updates to drop the "grep for # pass N
   yourself" workaround — the tally rules can stop chasing it.
 - New tally entry retiring tally #9/#13/#14/#19 as superseded.
-** TODO Verify apply-resolver on a real scrape per seeded host :tier6:
-Queue one job URL per seeded host (linkedin, greenhouse + boards,
-lever + jobs, jobot, indeed, ziprecruiter), let the poller pick up,
-confirm =JobPost.apply_url{,_status,_resolved_at}= populates and
-the =<ApplyDestination>= chip renders correctly on
-=/job-posts/:id=. Tweak the seed when a host doesn't match.
-** TODO deleting a job-post makes job-posts.index freak out and claim job-post doesn't have a company :bug:
-I had two job-posts with teh same name and the same company
-I deleted one, when it redirected, I saw one with 'missing company' for company
-I refreshed and it went away.
-
-** TODO Reports: applies-by-hostname cut on sources sankey :tier6:
+** TODO Reports: applies-by-hostname cut on sources sankey :tier6:frontend:
 Add an "applies-by-hostname" cut on the sources sankey distinct
 from the entry-URL hostname — postings often live on a tracker but
 resolve through to a real ATS, and the rollup should reflect the
 *destination* host, not the entry host.
 
 [[file:notes.org::*Apply-destination resolution (final URL behind the apply button)][Plan → notes.org]]
-*** Tier 6: Plans & proposals
+*** Tier 6: Plans & proposals :frontend:
 
-** TODO [#B] JobApplication.tracking_url — per-user post-submit status link [api+automation]
-[2026-04-22] Separate from the =JobPost.application_url= work (which is
-the pre-apply external destination). =tracking_url= is the URL returned
-to the user after they submit: Lever candidate portal, Greenhouse
-candidate dashboard, LinkedIn withdraw-application link. Per-application,
-user-specific.
+** WAIT Retire BaseSerializer.slim_attributes in favor of fields[type] :api:frontend:
+[2026-04-29] Once =fields[<type>]= sparse-fieldsets land (this PR), the
+=slim= flag and per-class =slim_attributes= become redundant — every
+caller that wants a slim representation can ask for exactly the
+fields it needs via JSON:API. Remove =slim=, =slim_attributes=,
+=to_slim_resource=, and =_is_slim_request=, then audit each frontend
+caller that currently passes =?slim=true= and replace with explicit
+=fields[<type>]=...=. Resume's =meta.counts= block (only emitted in
+slim mode today) needs a separate decision — either always emit, gate
+on a different param, or move to its own endpoint. Filed alongside
+the BaseSerializer fields[<type>] patch.
 
-Scope:
-- Migration: =JobApplication.tracking_url : text= (nullable).
-- Automator hook: when processing confirmation emails ("Thanks for
-  applying to X"), parse out the status/withdraw link and populate.
-- Frontend: on =/job-applications/{id}=, show "Check application
-  status →" if set.
-- Manual fill: editable field on =job-applications.edit= for when the
-  automator misses.
+*** Resume is different in that we presume includes most of the time. :frontend:
+this problem seesaws on either remove slim and use includes explicitly and fields when you want slim.  removing implicit includes has it's own trade offs
 
-Do NOT conflate with =JobPost.application_url= — one is the entry point
-(ambient, per-post), the other is the user's outbound receipt
-(per-application). See =notes.org::*Apply-destination resolution= for
-the full semantic split.
-
-** TODO [#C] Subnav control sizing is inconsistent [frontend]
-[2026-04-20] =/job-posts= subnav stacks =Search= (input), =Filters= (compact
-HyperUI-style dropdown trigger =px-2.5 py-1 text-xs= bordered), and
-=+ New Job Post= (app =.btn=, taller + bigger text). Heights don't line
-up. Same mismatch will land anywhere else we add more subnav controls
-(applications, scrapes, resumes). Decide:
-- unify on =.btn= height with a =.btn.ghost= variant for non-primary
-  actions like Filters, OR
-- downsize =.btn= on list/index pages to match the compact control.
-Pick one and roll out so subnav reads as a single bar. Blocks clean
-filter-menu rollout beyond job-posts.
-** TODO Retire dead jinja resume-export path [api]
+** DONE nuclear placement :frontend:
+CLOSED: [2026-05-02]
+Moved delete-confirm panel above re-extract section in =job-posts/form.hbs=.
+Refactored the "About the job" card in =job-posts/show.hbs= to use =Panel::Card @title= + =<:top>= slot for header actions.
+Fixed a subsequent Glimmer template compiler error: non-block content alongside a named block must be wrapped in =<:default>=.
+Also updated =job-posts/aliases-panel.hbs= to label the link field "Link" when canonical differs.
+Frontend PR #101: =fix/nuclear-confirm-placement=.
+/home/oldbones/Pictures/screenshot-2026-04-30_17-43-49.png
+** TODO Retire dead jinja resume-export path :api:
 [2026-04-26] Cleanup follow-up after [#A] audit. Three orphaned
 artifacts of the deprecated docxtpl-based export, all reachable only
 via =ResumeExportService= (which has no callers):
@@ -1876,94 +1441,239 @@ solely for the dead surface. One PR, one concern.
 
 [[file:notes.org::*Resume Word-export jinja audit][Original audit]]
 
-** WAIT Retire BaseSerializer.slim_attributes in favor of fields[type] [api]
-[2026-04-29] Once =fields[<type>]= sparse-fieldsets land (this PR), the
-=slim= flag and per-class =slim_attributes= become redundant — every
-caller that wants a slim representation can ask for exactly the
-fields it needs via JSON:API. Remove =slim=, =slim_attributes=,
-=to_slim_resource=, and =_is_slim_request=, then audit each frontend
-caller that currently passes =?slim=true= and replace with explicit
-=fields[<type>]=...=. Resume's =meta.counts= block (only emitted in
-slim mode today) needs a separate decision — either always emit, gate
-on a different param, or move to its own endpoint. Filed alongside
-the BaseSerializer fields[<type>] patch.
+** TODO Deep-link navigate targets into resume edit form (anchors) :APPROVED:chat:
+[2026-04-18 ai+frontend] Follow-on from the "no editing linked
+resources via chat" decision. When chat sends a user to
+=/resumes/{id}/edit= to fix something, it currently drops them at
+the top of a long form. Better: deep-link to the specific field.
 
-*** Resume is different in that we presume includes most of the time.
-this problem seesaws on either remove slim and use includes explicitly and fields when you want slim.  removing implicit includes has it's own trade offs
+Three options (cheapest → richest):
+1. *Hash-fragment scroll* — render =id="experience-{id}"= (and similar
+   anchors for education / certification / project) on each card in
+   =resumes/edit.hbs=. Agent emits
+   ={navigate: "/resumes/39/edit#experience-128"}=; browser scrolls.
+   Minimal change; no Ember focus logic.
+2. *Query-param focus* — =?focus=experience-128.title= on the edit
+   route. Route handler expands the matching panel + calls =.focus()=
+   on the target input after render. Needs a small helper mapping
+   =resource.field= → DOM input id.
+3. *Field-level anchors* — =#experience-128-title=, =#education-77-
+   degree=, etc. Hybrid of (1) and (2). Agent already knows the
+   resource id and field name from =show_resume= markdown.
 
-** DONE nuclear placement :frontend:
+Prompt surface: teach the agent "when user wants to change an
+experience field, emit
+={navigate: '/resumes/{r}/edit?focus=experience-{e}.{field}'}=";
+edit route handles the rest. No new tools.
+
+Disambiguation risk: if the user says "change my title at RHI" and
+has two Robert Half experiences, the agent still has to pick. Same
+problem as today — this TODO is about delivery, not selection.
+
+Value:
+- User edits themselves → fewer silent-overwrite bugs like the
+  OFFICE BADASS incident.
+- Deep-link IS the teaching moment; next time they know where the
+  form lives.
+- Zero new chat tools to maintain.
+
+** LOOP Agent understanding of Career Data (aggregated, not a form) :APPROVED:chat:
+:LOGBOOK:
+- Note taken on [2026-04-23 Thu 19:44] \\
+  we may have cleared this bar in another commit
+:END:
+
+[2026-04-18 ai] Hit during AW (agent wizard) e2e: user asked AW what to do next and
+the agent said "upload or create a Resume... go to your Career Data
+page to start building your profile." Career Data is NOT a
+fill-in-the-form resource — it's a READ-ONLY aggregated view
+assembled from the user's FAVORITED resumes, cover letters, and
+Q&A answers. The user doesn't "go to Career Data and add things";
+they go to /resumes (or /cover-letters or /answers), create/edit
+there, and star the good ones.
+
+Fix landed in the main chat SYSTEM_PROMPT's App Guide entry for
+Career Data this session. Still TODO:
+- Audit other places in the codebase / docs that imply "fill in
+  Career Data" and correct. Grep for =career-data= in docs/.
+- Verify AW sub-agent prompt is consistent (it doesn't currently
+  discuss Career Data but if we expand its scope, apply the same
+  rule).
+- Consider: when the sub-agent's =snapshotForChat= says all
+  onboarding is done, the main chat has no stored "what's next?"
+  rubric and hallucinates advice. Better to define a small
+  post-onboarding progression (e.g. "you have N resumes; favorite
+  the current one so Career Data picks it up; then add a job post")
+  and embed it as an App Guide section the agent can quote.
+
+** PROJ AI chat work [0/5] :chat:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:END:
+*AI answer service is garbage
+*** TODO Resolution
+CLOSED: [2026-05-04]
+
+Fixed in agents PR #10. Six complaints traced to three root causes:
+- RC-A: no first-class profile tool. Added =get_current_user= wrapping
+  =/api/v1/me/= so the chat agent has a sanctioned identity-lookup tool;
+  rewrote =get_career_data= docstring to actively repel identity questions.
+- RC-B: =create_answer= and =update_answer= looked interchangeable.
+  Rewrote both docstrings: =create_answer= is the DEFAULT for any new
+  content (incl. variants); =update_answer= is DESTRUCTIVE and only fires
+  on explicit replace-language. Tool docstrings are read every turn —
+  much stickier than 475-line system-prompt prose.
+- RC-C: ungrounded drafts. Both write-tool docstrings now spell out a
+  grounding requirement — must have question/job-post/career context in
+  conversation before drafting; fetch only what is missing; =get_career_data=
+  only on genuine role-fit requests.
+
+Also compressed the Modifying-an-Existing-Answer prompt section (~46→28
+lines), added a must-persist line under Answering-Questions-via-Chat,
+pointed the User Profile block at =get_current_user= for fresh reads,
+added =/settings/profile= to the routing table, and bumped
+=test_career_caddy_scope_has_27_tools= → 28.
+
+Files: agents/lib/api_tools.py, agents/lib/toolsets.py,
+agents/mcp_servers/chat_server.py, plus the two tests.
+*** TODO AI chat still uses career data when grabbing my name :chat:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:END:
+
+*** TODO agents keep calling career-data instead of profile data :chat:
+
+*** TODO AI still decided to update_anser tool instead of create_answer.  It did not pull the correct context and gave a generic answer blowing away the one I wanted to interate on.
+*** TODO AI chat will put answers in the chat but not write new answers with MCP :chat:
+good answers get follow ups iterating on them takes a couple of steps. 
+*** TODO AI should offer to modify answer or create a new answer.
+or take more feedback. 
+** TODO JobPost dedupe — merge company_id into NULL-fingerprint stubs :api:dedupe:
+
+:PROPERTIES:
+:CREATED: [2026-04-30]
+:END:
+Followup from the cc_auto pipeline migration plan
+([[file:~/.claude/plans/zippy-booping-donut.md]]). When
+=create_job_post_with_company_check= finds an existing post with link match
+but the existing post has =company_id=NULL= while the incoming request
+supplies =company_id=, prefer merging the company_id into the existing post
+rather than creating a duplicate. PR #74's =merge_empty_fields_from_attrs=
+covered the link-match path on full posts; this extends to the case where
+the existing stub has a NULL company (Microsoft regression #22 in the
+:IMPORTANT: tally). cc_auto's stage-5 introspection will surface
+=stage5.fingerprint_null_risk= warnings once the introspection PR
+(E+F+H) ships, so we'll have data on how often the precondition fires
+before designing the fix.
+** DONE Extension v0.3.6: ORIGIN → api.careercaddy.online :frontend:extension:
 CLOSED: [2026-05-02]
-Moved delete-confirm panel above re-extract section in =job-posts/form.hbs=.
-Refactored the "About the job" card in =job-posts/show.hbs= to use =Panel::Card @title= + =<:top>= slot for header actions.
-Fixed a subsequent Glimmer template compiler error: non-block content alongside a named block must be wrapped in =<:default>=.
-Also updated =job-posts/aliases-panel.hbs= to label the link field "Link" when canonical differs.
-Frontend PR #101: =fix/nuclear-confirm-placement=.
-/home/oldbones/Pictures/screenshot-2026-04-30_17-43-49.png
-** REFERENCE Jinja markup for the word template
-Source transcription of =api/templates/resume_export.docx=. Kept for audit
-reference — see DONE entry above + notes.org audit.
-*** head
-{{ header.name }}
-{{header.title }}
-{{HEADER.EMAIL}} * {{HEADER.PHONE}}
-*** Body
-{% if summary %}
-Summary
-{{ summary }}
-{% endif %}
-{% if skills %}
-Skills
-{% if skills.language_skills %}
-Languages: {{ skills.language_skills }}
-{%- endif -%}
-{% if skills.database_skills %}
-Databases: {{ skills.database_skills }}
-{%- endif -%}
-{% if skills.framework_skills %}
-Frameworks: {{ skills.framework_skills }}
-{%- endif -%}
-{% if skills.tool_skills %}
-Platforms: {{ skills.tool_skills }}
-{%- endif -%}
-{% if skills.security_skills %}
-Security: {{ skills.security_skills }}
-{%- endif -%}
-{%- endif -%}
-{% if experiences %}
-Experience
-{% for experience in experiences %}
-	{% if experience.date_range %}{{ experience.date_range }}{% endif %}
-{% if experience.company %} — {{ experience.company }}{% endif %}{% if experience.location %} — {{ experience.location }}{% endif %}
-{% if experience.summary %}
-{{ experience.summary }}  {# This should use "RP Summary" style #}
-{%- endif -%}
-{% for d in experience.descriptions %}
-    • {{ d }}
-{%- endfor -%}
-{% endfor %}
-{% endif %}
-{% if certifications %}
-Certifications
-{% for cert in certifications %}
-{{ cert.title }}{% if cert.issuer %} — {{ cert.issuer }}{% endif %}{% if cert.issue_date %} — {{ cert.issue_date }}{% endif %}
-{% if cert.content %}{{ cert.content }}{% endif %}
-{% endfor %}
-{% endif %}
+=popup.js= =ORIGIN= constant changed from =careercaddy.online= to
+=api.careercaddy.online=. Symptom: 405 Method Not Allowed on Connect
+because =careercaddy.online= is the Ember frontend domain; Caddy there
+does not proxy POST =/api/v1/*= to Django. Using the API subdomain
+directly fixes it. Frontend PR merged to main; parent already pinned.
+** DONE Extension: hardcode origin = https:  careercaddy.online :frontend:extension:
+CLOSED: [2026-05-02]
+v0.3.1 — removed the configurable origin input from =popup.html=, dropped
+=ccOrigin= from STORAGE_KEYS, hardcoded =ORIGIN= constant in =popup.js= and
+=background.js=. The frontend already strip-replaced the public download
+buttons (no .xpi/.zip artifacts in =public/extensions/=); developers test
+via =Load unpacked= against the source folder. Store-submission
+checklists captured in =notes.org → Browser Extension → Publishing
+pre-flight=.
 
-{% if educations %}
-Education
-{% for edu in educations %}
-{{ edu.institution }}{% if edu.degree %} — {{ edu.degree }}{% endif %}{% if edu.major %} — {{ edu.major }}{% endif %}{% if edu.minor %} — Minor: {{ edu.minor }}{% endif %}{% if edu.issue_date %} — {{ edu.issue_date }}{% endif %}
-{% endfor %}
-{% endif %}
-{% if projects %}
-Projects
-{% for proj in projects %}
-{% for bullet in proj.description %}
-    • {{ bullet }}  {# This should use "RP Bulleted List" style #}
-{%- endfor -%}
-{% endfor %}
-{% endif %}
-* Bugs 🐛
-** https://careercaddy.online/scrapes/189
-its a stubbed that short circuted
+** SHIPPED Extension: dark-mode + palette-aware popup, Enter-to-submit :frontend:extension:
+CLOSED: [2026-05-02]
+v0.3.3 → v0.3.5. Visual rewrite of =popup.html= around CSS custom
+properties driven by =data-theme=dark= and =data-palette=jade|rose|amber|violet|blue=
+on =<html>=. Mirrors the app's six palette names; dark variants only
+override =--accent-50= and =--accent-100= so the brighter accent stays
+consistent.
+
+Theme storage in =chrome.storage.local= as =ccTheme= ('system'/'light'/'dark')
++ =ccPalette=. Best-effort import: =scripting.executeScript= runs against
+the active CC tab and slurps =theme-mode= / =theme-palette= from its
+=localStorage=, then writes through to extension storage. Runs on every
+popup open (=loadSaved()=), not just on Connect — so users who upgraded
+after their first connect pick up the app's theme without
+disconnect/reconnect, and theme changes in the app surface on next popup.
+
+Footer sun/moon button manually overrides the saved mode. =matchMedia=
+listener re-renders when system pref flips while popup is open.
+
+v0.3.5 also: Enter in username or password triggers Connect.
+
+Local-build XPI for the user lives in =~/Sandbox/cc-ext-local/= and
+=~/Sandbox/career-caddy-sender-local-0.3.5.xpi= — distinct gecko id
+(=career-caddy-sender-local@careercaddy.online=) so it coexists with the
+prod extension in one Firefox profile.
+
+** DONE Ingest abuse defense — Phase 1 (hygiene) :api:frontend:security:
+CLOSED: [2026-05-04 Mon 15:15]
+Phase 1 follow-up to the Phase 0 ingest defenses. Plan at
+=~/.claude/plans/dazzling-stirring-church.md=. Three independent sub-tasks:
+
+1. Tracking-param strip + canonical-link normalization in
+   =lib/url_policy.normalize_link()= (utm_*, fbclid, gclid, mc_*, _hs*,
+   ref, ref_src). Backfill =JobPost.canonical_link= for existing rows.
+2. PII disclaimer in popup connect screen + =/docs/extension-privacy/=
+   page describing what the extension reads and stores.
+3. Frontend XSS audit — grep =frontend/app/templates/= for =html-safe=,
+   =triple-stash=, markdown render, =innerHTML= on JobPost-derived
+   content paths.
+
+* Backlog
+** PROJ [#C] Electron desktop app feasibility :PENDING_APPROVAL:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:END:
+[[file:notes.org::*Electron Desktop App — Feasibility Study][Architecture + trade-offs → notes.org]]
+
+** WAIT AW: navigate on intent, don't just instruct :APPROVED:chat:
+[2026-04-18 ai+frontend] Hit during Agent Wizard e2e: AW says "Head
+over to Job Postings to add a job post" without emitting a navigate
+marker or a clickable link. The user still has to find the page. Two
+concrete gaps:
+
+1. When the user signals intent ("I want to add a job post", "take
+   me to my resume", "show me cover letters"), the sub-agent should
+   emit =<!-- navigate:/path -->= AND include a visible markdown
+   link — not describe where to go. The onboarding_agent.py prompt
+   already has this rule but the model skipped it here.
+
+2. Elicitation action buttons currently round-trip a chat message
+   back to the agent. "Add a job post" as an action label becomes a
+   new user turn that AW interprets, instead of navigating directly.
+   The elicitation payload should support an optional =navigate=
+   field so a button can transition the route without consuming an
+   LLM turn — cheaper and instant.
+
+Tasks:
+- [ ] Tighten =onboarding_agent.py= prompt: "When the user signals
+  intent to go somewhere OR you're describing a page they should
+  use, you MUST emit =<!-- navigate:/path -->= in the response AND
+  include the matching =[label](/path)=. Don't say 'Head over to X'
+  with no link."
+- [ ] Extend elicitation JSON schema in the main chat prompt to
+  accept ={"label": "...", "navigate": "/path"}= in addition to the
+  existing ={"label": "...", "message": "..."}= form. The frontend
+  =services/chat.js= handler should call =router.transitionTo= on
+  navigate-typed actions instead of =sendMessage=.
+- [ ] Regression test: after a "take me to X" turn, assert a
+  navigate marker is present in the sub-agent's response.
+
+** PROJ Feature sorting tables
+* Icebox
+Deferred but not dead. Same category layout.
+
+** TODO Ian Finnis letter :PENDING_APPROVAL:APPROVED:
+[[file:notes.org::*Ian Finnis letter][Considerations → notes.org]]
+
+
+** LOOP [#C] As a superuser I want to be able to manage user accounts :APPROVED:infra:
+[[file:notes.org::*Superuser account management][Considerations → notes.org]]
+** TODO decide on user roles and be able to manage them as admin :infra:
+
+** TODO scrape icon better than paperclip ? :extension:
+* Archive                                            :IMPORTANT:
+Auto-populated by =cc-todo-archive-*=. Do not rely on freshness.
