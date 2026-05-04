@@ -234,7 +234,7 @@ implements a =loading= action that returns =true= (suppresses the substate)
 when =transition.from.name === routeName= — i.e. in-route refreshes only;
 cold loads still get the skeleton. Frontend PR #88.
 * Inbox
-** TODO Linkedin: SDUI partial-render escape hatch — accept placeholder description :scrape:agents:bug:
+** STRT Linkedin: SDUI partial-render escape hatch — accept placeholder description :scrape:agents:bug:
    :PROPERTIES:
    :CREATED:  2026-05-04
    :END:
