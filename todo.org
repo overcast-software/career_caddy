@@ -234,6 +234,66 @@ implements a =loading= action that returns =true= (suppresses the substate)
 when =transition.from.name === routeName= — i.e. in-route refreshes only;
 cold loads still get the skeleton. Frontend PR #88.
 * Inbox
+** TODO Linkedin: SDUI partial-render escape hatch — accept placeholder description :scrape:agents:bug:
+   :PROPERTIES:
+   :CREATED:  2026-05-04
+   :END:
+   Scrape 298 (=jobs/view/4407097463=) ran 4× today: 1 success, 3
+   =ExtractFail=. The 3 failures hit LinkedIn's documented SDUI
+   partial-render state — top card + Premium card + hiring-team card
+   render but the =About the job= subtree never lands in the DOM.
+   Profile id=2 already documents this in =extraction_hints= and
+   instructs the LLM to emit a placeholder description string
+   ("[DESCRIPTION NOT CAPTURED — LinkedIn page rendered only the top
+   card …]") while still extracting title/company/location/salary
+   from the visible card. But on every fail run today,
+   =EvaluateExtraction= bins the Tier1Mini output as fail, routes to
+   =Tier2Haiku= (which no-ops in 130-150ms), then to =ExtractFail=.
+   The placeholder path is never honored.
+
+   Files to inspect:
+   - =agents/scrape_graph/nodes/evaluate_extraction.py= — what is the
+     pass/fail rule and does it special-case the placeholder string
+     or =description.length < N=?
+   - =agents/scrape_graph/nodes/tier1_mini.py= /
+     =agents/scrape_graph/nodes/tier2_haiku.py= — are the prompts
+     even given the relevant hints from =extraction_hints=, and is
+     the placeholder string in the prompt?
+   - =agents/scrape_graph/nodes/persist_job_post.py= — would saving
+     a JobPost with the placeholder description and =is_partial=
+     (or similar) flag be acceptable downstream?
+
+   Smallest test that would catch the regression: feed a fixture
+   matching the persisted =job_content= for scrape 298 (top card +
+   "Use AI to assess how you fit" + "Looking for talent?" + footer,
+   no responsibilities prose) into the extract pipeline and assert
+   it produces a JobPost with the documented placeholder description
+   rather than =ExtractFail=. Fixture text is in the stored html for
+   scrape 298 (id=298).
+
+   Trace evidence: =mcp_get_scrape_graph_trace scrape_id=298= shows
+   four full runs, the 08:49 success matched =h2:has-text("About the
+   job")= in 18ms, and the three failures all timed out the entire
+   19-selector list with =matched_selector=null=. Logfire confirms
+   =Scrape 298 graph done outcome=success job_post_id=1650 tiers=2=
+   for the 08:49 run.
+
+** TODO ResolveApplyUrl: short-circuit on internal_apply_markers (Easy Apply false-fail) :scrape:agents:bug:
+   :PROPERTIES:
+   :CREATED:  2026-05-04
+   :END:
+   On scrape 298's 08:49 success run, =ResolveApplyUrl= reported
+   =reason=no_selector_matched apply_url_status=failed= even though
+   the page rendered an Easy Apply button (visible in the extract-fail
+   screenshot, and the LinkedIn profile's =apply_resolver_config.internal_apply_markers=
+   includes =.jobs-apply-button--easy-apply=). The resolver should
+   short-circuit when an =internal_apply_markers= selector matches
+   and return =internal/easy-apply= (or equivalent) rather than
+   =failed=. Minor telemetry bug — JobPost still saved — but it
+   pollutes the apply-url failure metric and hides genuine resolver
+   misses on external-apply jobs. Split out from the SDUI partial-render
+   TODO above (scrape 298).
+
 ** STRT SettleWait fires on every path; bumped 2s→5s :scrape:agents:bug:
    :PROPERTIES:
    :CREATED:  2026-05-04
