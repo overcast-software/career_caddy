@@ -278,6 +278,32 @@ cold loads still get the skeleton. Frontend PR #88.
    =Scrape 298 graph done outcome=success job_post_id=1650 tiers=2=
    for the 08:49 run.
 
+** TODO Hold-poller "graph done" log uses entry-time scrape_id (false-positive success on parent) :scrape:agents:bug:obs:
+   :PROPERTIES:
+   :CREATED:  2026-05-04
+   :END:
+   When ResolveFinalUrl creates a child scrape and swaps =state.scrape_id=,
+   downstream nodes correctly target the child — but the hold-poller's
+   terminal log line ("Scrape %s graph done outcome=%s job_post_id=%s
+   tiers=%d") is hardcoded to the *original* (entry-time) scrape_id. So
+   the child's success is reported in logfire under the parent's id.
+   Confirmed on scrape 302 (LinkedIn /uas/login redirect): logfire shows
+   "Scrape 302 graph done outcome=success" twice, while scrape 302 itself
+   was stuck at status='running' and the work actually happened on child
+   scrape 303 (linked to jp 1647).
+
+   Now that c5dc5b8 terminal-closes the parent, the parent will reach a
+   real terminal state — but the success log line is still misattributed.
+   That makes logfire/grep-driven debugging actively misleading: a search
+   for "Scrape 302 graph done" finds two success entries even though
+   scrape 302 itself produced no JobPost.
+
+   Fix: capture the swap in =state.scrape_id_chain= (or similar) and have
+   the terminal log emit both the entry id and the final id, e.g.
+   ="Scrape 302→303 graph done outcome=success ..."=. Or just use
+   =state.scrape_id= (the post-swap value) so the message points at the
+   row that actually carries the work.
+
 ** TODO ResolveApplyUrl: short-circuit on internal_apply_markers (Easy Apply false-fail) :scrape:agents:bug:
    :PROPERTIES:
    :CREATED:  2026-05-04
