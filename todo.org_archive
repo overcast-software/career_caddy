@@ -4339,3 +4339,1191 @@ child, no signals/save. Cascade fires only when =company_id=
 actually changes (guards against UPDATE storm on every edit).
 Children's textual content is intentionally NOT rewritten — Q&A,
 cover letters, applications are write-once-and-forget in practice.
+
+* KILL why did it decide it was closed?
+CLOSED: [2026-05-02 Sat 18:17]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-02 Sat 18:17
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Bugs 🐛
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: KILL
+:END:
+https://www.linkedin.com/jobs/view/4408226465/
+https://careercaddy.online/job-posts/1533/scrapes/240
+/home/oldbones/Pictures/screenshot-2026-04-30_18-08-24.png
+why did it fail?
+why did the description suck?
+
+* DONE notes fro job-description.show isn't style compliant
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-02 Sat 18:17
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Bugs 🐛
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+/home/oldbones/Pictures/screenshot-2026-04-30_18-08-24.png
+
+* SHIPPED revamp scrapes edit page :APPROVED:frontend:
+CLOSED: [2026-04-30 Thu]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 13:51
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/scrape
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+[[file:notes.org::*Revamp scrapes/edit page][Considerations → notes.org]]
+- =scrapes/show=: pulled Edit / Retry / Re-parse / Graph out of =<:subnav>=
+  and into a =form-actions= row beneath the panel-card. Subnav now empty.
+- =scrapes/edit=: dropped the lonely =View= link from =<:subnav>=; form
+  footer groups Save + Cancel on the left and the destructive Delete on
+  the right (=ml-auto=). Delete now requires a =confirm()= ("nuclear"
+  guard that was missing).
+- =components/scrapes/form.{hbs,js}=: Cancel link added; submitDelete
+  short-circuits on confirm-deny. Delete sits right of the gap so it
+  can't be hit accidentally next to Save.
+
+* SHIPPED Search input flicker on  scrapes [frontend]
+CLOSED: [2026-04-30 Thu 17:47]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 13:51
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/scrape
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+=refreshModel: true= on the =search= QP triggered the loading substate every
+keystroke; =scrapes/index-loading.hbs= has no =<:subnav>= slot, so the search
+input was torn down + remounted (focus loss + visible flicker). Route now
+implements a =loading= action that returns =true= (suppresses the substate)
+when =transition.from.name === routeName= — i.e. in-route refreshes only;
+cold loads still get the skeleton. Frontend PR #88.
+
+* SHIPPED LinkedIn SDUI partial-hydration — guardrails + selector discovery :scrape:agents:bug:
+   CLOSED: [2026-05-03]
+   :PROPERTIES:
+   :ARCHIVE_TIME: 2026-05-04 Mon 13:52
+   :ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+   :ARCHIVE_OLPATH: Active/scrape
+   :ARCHIVE_CATEGORY: todo
+   :ARCHIVE_TODO: SHIPPED
+   :ARCHIVE_ITAGS: IMPORTANT
+   :END:
+   All three code-side changes shipped on
+   =feature/scrape-graph-scrolltoload= (agents submodule). (1)
+   =ValidateExtraction= now rejects parsed descriptions that are
+   short, lack real-job vocabulary, and are dominated by chrome
+   words / salary fragments — reasons list gains =ui_chrome_only=.
+   (2) =WaitReadySelector= emits =matched_selector= + =timed_out=
+   in its trace payload so future investigations can read the trace
+   alone instead of grepping selectors. (3) New =ScrollToLoad= node
+   sits between the wait/settle pair and =ExpandTruncations=; it
+   scrolls in 800px / ~250ms ticks until the profile's ready
+   selector matches or scrollHeight stalls (capped ~5s), then
+   500ms post-settle. Trace payload carries =ticks= /
+   =matched_selector= / =final_scroll_y=. =NODE_META= and
+   =graph_static.json= regenerated. New tests:
+   =tests/test_scroll_to_load.py= drives a fake page simulating
+   IntersectionObserver hydration; =test_validate_extraction.py=
+   adds the chrome-only repro from jp 1650. Stretch sub-task #4
+   (auto-attended for =/comm/jobs/view/=) deferred. Once deployed,
+   re-scrape jp 1644/1645/1647/1649/1650 to confirm real
+   descriptions land.
+:PROPERTIES:
+:CREATED:  [2026-05-03]
+:END:
+*Trigger:* User flagged jp 1644, 1645, 1647, 1649, 1650 — every
+LinkedIn =/comm/jobs/view/= scrape since the SDUI rollout (≥ scrape 232,
+2026-04-30) has been persisting a fabricated or chrome-only description
+because the description body never hydrates within the 7 s wait+settle
+window. Full diagnosis in =notes.org= "Scrape Log" entry
+[2026-05-03 23:55]. ScrapeProfile mutation (profile id 2) has been
+applied to (a) lead =ready_selector= with SDUI-tolerant aria/data-testid
+selectors and (b) instruct Tier1/2/3 LLMs not to fabricate when the
+partial-render fingerprint is present. That blunts the symptom but does
+not fix the root cause. This todo tracks the three code-side changes
+needed to fully close the regression.
+
+*Sub-tasks:*
+1. =ValidateExtraction= must reject UI-chrome-only descriptions.
+   - File: scrape-graph EvaluateExtraction / ValidateExtraction node
+     (search =agents/scrape_graph/= for =ValidateExtraction=).
+   - Heuristic: reject when =description= is ≤ ~200 chars AND contains
+     none of [responsibilities, qualifications, requirements, experience,
+     years, you will, we are looking, about the role, about the job, our
+     team] (case-insensitive) AND ≥ 60 % of its tokens are pill words
+     (Remote, Hybrid, On-site, Full-time, Part-time, Contract, Apply,
+     Save, dollar-amount patterns, "Use AI to assess how you fit").
+   - Smallest test: =agents/tests/test_validate_extraction.py= — assert
+     that a description equal to "$215K/yr - $250K/yr\nRemote\nFull-time
+     \nApply\nSave\nUse AI to assess how you fit" routes to =ExtractFail=
+     instead of =PersistJobPost=.
+2. =WaitReadySelector= graph payload must distinguish hit vs timeout.
+   - File: scrape-graph =WaitReadySelector= node (same package).
+   - Today =duration_ms=5000= is emitted both when the selector matched
+     after 5 s and when it timed out — the linkedin investigation had
+     to infer the timeout from the legacy-selector grep returning zero.
+     Add =matched_selector= (string or null) and =timed_out= (bool) to
+     the graph payload so future Scrape Log investigations can read the
+     trace alone.
+   - Smallest test: assert payload shape on a scrape against a static
+     HTML fixture with and without the ready selector present.
+3. Add a =ScrollToLoad= step to the scrape graph (LAZY-HYDRATION FIX).
+   - *Selector experiment resolved [2026-05-04].* User provided
+     screenshot of =/jobs/view/4407097463= showing the "About the job"
+     card fully rendered with prose. The description IS in the DOM
+     when the card scrolls into view; the existing
+     =ready_selector= candidate =[aria-label*='About the job' i]= is
+     correct. The reason every recent scrape misses the body is that
+     LinkedIn flagship-web uses IntersectionObserver-driven lazy
+     hydration and the scrape pipeline never scrolls. See
+     =notes.org= Scrape Log entry =[2026-05-04 00:35]= follow-up under
+     the [2026-05-03 23:55] linkedin.com block for the full evidence
+     chain.
+   - File: =agents/scrape_graph/= — new node between =SettleWait= and
+     =ExpandTruncations=. Page =window.scrollBy(0, 800)= in ~250 ms
+     increments until either (a) one of the =ready_selector= candidates
+     now matches, or (b) =document.body.scrollHeight= stops advancing
+     for two consecutive ticks. Cap total scroll loop at ~5 s. Then
+     run a brief settle (≈500 ms) so the just-fetched description
+     XHR can paint before =ExpandTruncations= looks for "See more".
+   - Smallest test: a Playwright fixture page that renders a
+     =[aria-label='About the job']= subtree only after an
+     IntersectionObserver fires. Without the new node, =Capture= must
+     not contain "About the job"; with it, =Capture= must.
+   - Bonus: emit the scroll-loop telemetry (=ticks=, =matched_selector=,
+     =final_scroll_y=) into the graph payload so future Scrape Log
+     investigations can read the trace alone — pairs with sub-task 2.
+   - Stretch: leave the per-profile ready-wait constant alone; the
+     scroll loop subsumes the "wait longer" hypothesis because once
+     the card intersects, hydration happens in <1 s.
+4. (Stretch) Decide whether =linkedin.com/comm/jobs/view/*= without a
+   warm authenticated session should route to the attended/authenticated
+   browser path automatically. The =/comm/= variant is the email-deep-link
+   form and almost always implies the user expects auth-grade content.
+
+*Why this can't be a profile-only fix:* the profile blob can ship
+selectors and prompt scaffolding, but it cannot (a) reject extractions
+post-hoc, (b) change graph-payload schema, or (c) decide between
+unattended and attended browser engines. All three live in
+=agents/scrape_graph/= and =agents/pollers/=.
+
+*Stretch sub-task #4 — deferred:* whether =/comm/jobs/view/*= without
+a warm authenticated session should auto-route to the attended browser
+path is left as a future TODO; not blocking the lazy-hydration fix.
+
+*Until this lands:* the five affected JobPosts (1644, 1645, 1647, 1649,
+1650) hold fabricated descriptions. Either flip them to the
+"[DESCRIPTION NOT CAPTURED — ...]" sentinel by hand, or re-scrape via
+=make poller ARGS="--attended"= so the description body has a chance
+to hydrate.
+
+* SHIPPED SettleWait fires on every path; bumped 2s→5s :scrape:agents:bug:
+CLOSED: [2026-05-04 Mon 14:03]
+   :PROPERTIES:
+   :CREATED:  2026-05-04
+   :LAST_TOUCHED: [2026-05-04]
+   :ARCHIVE_TIME: 2026-05-04 Mon 14:08
+   :ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+   :ARCHIVE_OLPATH: Active/scrape
+   :ARCHIVE_CATEGORY: todo
+   :ARCHIVE_TODO: SHIPPED
+   :ARCHIVE_ITAGS: IMPORTANT
+   :END:
+   Followup to today's WaitReadySelector iterate ship. Scrape 298
+   re-run at 08:49 UTC matched =h2:has-text("About the job")= in
+   *18ms* and routed straight through ScrollToLoad → ExpandTruncations
+   → Capture, but Tier1Mini still got partial content because matching
+   the heading only proves the section header is in DOM, not that the
+   description body has finished streaming. User pushed for the
+   simplest possible fix: just sleep before reading the DOM. Done —
+   =WaitReadySelector= now always routes to =SettleWait= (hit path
+   too, not just miss); =SettleWait= sleeps 5s instead of 2s. Cost is
+   +5s per scrape, which is nothing compared to the 30s we used to
+   burn on Capture's font-wait stall. Return type narrowed
+   =Union[ScrollToLoad, SettleWait]= → =SettleWait=. =NODE_META=
+   updated, =graph_static.json= regenerated (28 nodes / 37 edges —
+   one edge dropped).
+
+* SHIPPED WaitReadySelector iterates ready_selector list :scrape:agents:bug:
+CLOSED: [2026-05-04 Mon 14:03]
+   :PROPERTIES:
+   :CREATED:  2026-05-04
+   :LAST_TOUCHED: [2026-05-04]
+   :ARCHIVE_TIME: 2026-05-04 Mon 14:08
+   :ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+   :ARCHIVE_OLPATH: Active/scrape
+   :ARCHIVE_CATEGORY: todo
+   :ARCHIVE_TODO: SHIPPED
+   :ARCHIVE_ITAGS: IMPORTANT
+   :END:
+   Scrapes 295 + 296 (LinkedIn jobs/view/4407097463, Magnitude
+   Consulting Forward Deployed engineer) repeatedly hit
+   =WaitReadySelector= timeout=true / matched_selector=null even after
+   the enhancer landed a fat ready_selector on profile id=2 leading
+   with =h2:has-text("About the job")=. Two hypotheses: (A) Playwright's
+   CSS parser silently neutralizes a comma list when one fragment is a
+   text-engine selector like =:has-text()=; (B) a single 5s budget on
+   the whole list is too tight against LinkedIn flagship-web's paint.
+   Iteration is robust to both: split the list, try each via
+   =locator(s).first.wait_for(state="visible", timeout=1500)=, return
+   on first hit, record the winner. Profile schema (the JSON blob)
+   moves from str → list[str]; agent normalizes either form so legacy
+   profiles keep working. =LoadProfile= now emits
+   =ready_selector_count= + =ready_selector_hash= so a future
+   investigation can correlate "selector misses" with "which profile
+   version was loaded". =WaitReadySelector= payload gains per-attempt
+   =duration_ms= / =matched= / =error= class (timeout vs parse), so
+   the next failed run tells us whether it's flake or a bad selector.
+   Tests: =tests/test_wait_ready_selector.py= (6 cases — first-match
+   short-circuit, all-miss, legacy-string normalization, parens-aware
+   split, no-page no-op, parse-vs-timeout error class).
+
+* DONE Extension from-text: synchronous extraction + paste-fallback for source==extension :api:bug:
+CLOSED: [2026-05-02]
+:PROPERTIES:
+:CREATED:  [2026-05-02]
+:ARCHIVE_TIME: 2026-05-04 Mon 14:09
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/scrape
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Trigger:* scrape 273 (manually flipped to =failed= 2026-05-02). Extension-ingested
+scrape from =https://careers.dat.com/jobs/?gh_jid=5741667004&gh_src=fd81f4a54us=
+sat in =status=extracting= for >4 minutes with no progress and no recovery.
+Logfire showed zero =parse_scrape= / =process_evaluation= / Tier1Mini spans
+system-wide for the prior 24h — the =parse_scrape= daemon thread either died
+silently after flipping status to =extracting= (line 756 of
+=job_post_extractor.py=) or never executed. The user (plugin clicker) was
+sitting at their machine waiting for a result that never came.
+
+*Why this fix shape:* the extension is reliable in 99% of cases — the
+captured =job_content= is usable. We don't need an async daemon-thread
+gambit for plugin scrapes: the request is already a synchronous user
+action, and the LLM extraction call is fast (~2-10s, no browser fetch).
+Block the request. Eliminate the stuck-extracting class entirely for
+this code path.
+
+** Files
+
+- =api/job_hunting/api/views/scrapes.py= — =from_text= action (line 582-692).
+  =parse_scrape= is currently called at line 686 with default =sync=False=
+  (which spawns a daemon thread).
+- =api/job_hunting/lib/parsers/job_post_extractor.py= — =process_evaluation=
+  (line 211+); paste fallback at lines 242-249.
+
+** Change A: =from_text= calls =parse_scrape(..., sync=True)=
+
+In =api/job_hunting/api/views/scrapes.py=, line 686:
+
+#+begin_src python
+# BEFORE
+parse_scrape(scrape.id, user_id=request.user.id)
+
+# AFTER
+parse_scrape(scrape.id, user_id=request.user.id, sync=True)
+#+end_src
+
+The endpoint now blocks until =parse_scrape= reaches a terminal status
+(=completed= or =failed=). Status flow becomes:
+=pending= → =extracting= → =updating_profile= → =completed= | =failed=,
+all inside the single HTTP request.
+
+Caveat: typical =from_text= LLM call is 2-10s. Long enough that the
+endpoint should return =200/202= with the terminal status reflected in
+the response body so the popup can show "added ✓" or "failed" immediately
+instead of polling. The current 202 response is fine; the popup already
+hands off to a background poller (=background.js= =pollScrapeOnce=). With
+sync=True the scrape is already terminal when the response comes back,
+so the first poll gets the result immediately. No popup change required.
+
+** Change B: extend paste fallback in =process_evaluation=
+
+In =api/job_hunting/lib/parsers/job_post_extractor.py=, lines 242-249:
+
+#+begin_src python
+# BEFORE
+effective_description = validated_data.description
+if (
+    not effective_description
+    and getattr(scrape, "source", None) == "paste"
+):
+    fallback = (scrape.job_content or "").strip()
+    if fallback:
+        effective_description = fallback
+
+# AFTER
+effective_description = validated_data.description
+if (
+    not effective_description
+    and getattr(scrape, "source", None) in ("paste", "extension")
+):
+    fallback = (scrape.job_content or "").strip()
+    if fallback:
+        effective_description = fallback
+#+end_src
+
+Reasoning: when the LLM omits a description on an =extension= scrape,
+the captured =job_content= IS the user's intended description (modulo
+nav/footer chrome). Letting it pass through is graceful degradation
+when the LLM is broken/unavailable. Layer 1 stub-upgrade gate
+(=STUB_MIN_WORDS=60=, just shipped in api PR #84) protects against
+chrome-only fallbacks polluting good existing JPs — a thin fallback
+won't overwrite a populated description.
+
+Risk: an extension capture that's mostly chrome (e.g. greenhouse-
+iframed pages where iframe text doesn't reach =document.body.innerText=)
+will populate the description with nav/footer noise on a fresh-create.
+Acceptable trade because: (a) better than silent loss, (b) Layer 1
+prevents replacement of good descriptions, (c) the iframe class is
+addressed by the separate extension =allFrames= todo below.
+
+** Tests
+
+Add to =api/job_hunting/tests/test_scrape_from_text.py=:
+
+#+begin_src python
+class TestFromTextSyncExtraction(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="t", password="p")
+        self.client.force_authenticate(user=self.user)
+
+    @patch("job_hunting.lib.parsers.job_post_extractor._build_agent_for_model")
+    def test_extension_source_blocks_until_terminal(self, mock_agent):
+        # Mock LLM to return a valid ParsedJobData
+        mock_agent.return_value.run_sync.return_value = ...
+
+        resp = self.client.post(
+            "/api/v1/scrapes/from-text/",
+            {"text": "..." * 100, "link": "https://example.com/job/1",
+             "source": "extension"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 202)
+        scrape_id = resp.data["data"]["id"]
+        scrape = Scrape.objects.get(pk=scrape_id)
+        # MUST be terminal — sync=True guarantees no leftover extracting state
+        self.assertIn(scrape.status, ("completed", "failed"))
+#+end_src
+
+Add to =api/job_hunting/tests/test_job_post_extractor.py= near the
+existing =test_paste_scrape_falls_back_to_job_content_when_llm_omits_description=:
+
+#+begin_src python
+@patch("job_hunting.lib.parsers.job_post_extractor.JobPostExtractor.analyze_with_ai")
+def test_extension_scrape_falls_back_to_job_content_when_llm_omits_description(
+    self, mock_analyze
+):
+    # LLM returns valid data but with description=None
+    mock_analyze.return_value = ParsedJobData(
+        title="Engineer", company_name="Acme", description=None
+    )
+    raw_text = "Real description text " * 50  # ≥ STUB_MIN_WORDS
+    scrape = Scrape.objects.create(
+        url="https://example.com/job/1",
+        job_content=raw_text,
+        status="pending",
+        created_by=self.user,
+        source="extension",
+    )
+    parse_scrape(scrape.id, user_id=self.user.id, sync=True)
+
+    job = JobPost.objects.get(link="https://example.com/job/1")
+    self.assertIn("Real description text", job.description)
+#+end_src
+
+** Acceptance criteria
+1. =from-text= endpoint never returns while a scrape is in =extracting=.
+2. Extension scrape with LLM omitting description ends up with =job_content=
+   stored as JobPost.description (not lost).
+3. =make ci= green.
+4. Smoke test on prod: submit any plugin scrape; confirm it reaches a
+   terminal status before the popup's first poll.
+
+** Out of scope
+- Changing the popup-side handoff to background.js (no change needed).
+- Sweeper for =extracting > N min= rows from OTHER code paths (re-extract,
+  hold-poller). Tracked separately under "Extracting-state safety net" todo.
+- Iframe-walking in the extension capture (separate todo).
+
+* DONE Description merge + arbiter [PR A: Layer 1, PR B: Layer 2] :api:ai:
+CLOSED: [2026-05-02]
+:PROPERTIES:
+:CREATED:  [2026-05-02]
+:ARCHIVE_TIME: 2026-05-04 Mon 14:09
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/scrape
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+[[file:notes.org::*Description merge + arbiter (PR A: Layer 1 / PR B: Layer 2)][Plan → notes.org Tier 6]]
+- *PR A — Layer 1*: cold-path =get_or_create= asymmetry. When match returns
+  =created=False= and existing JP is thin, run the same overwrite as the
+  link-hit-thin branch. Fixes jp 1603 class (extension scrape from
+  welcometothejungle deduped to email-sourced LinkedIn JP, but
+  =process_evaluation= dropped the rich description on the floor).
+  STRT [2026-05-02]: api PR #84 merged. Adds new sentinels
+  =updated_stub_via_fingerprint= / =duplicate_via_fingerprint=. 4 new tests.
+  Promote to SHIPPED after parent Deploy goes green.
+- *PR B — Layer 2*: arbiter LLM picks =keep_existing | use_new | merge=
+  when both descriptions are non-thin and differ materially. Audit row per
+  decision in new =JobPostDescriptionDecision= model (migration 0066). Behind
+  =INGEST_ARBITER_ENABLED= env flag (default on). Cheapness gate: Jaccard
+  5-gram overlap > 0.70 and word-count ratio < 1.5 skips LLM. 17 new tests
+  in =test_description_arbiter.py=. =description_arbiter= added to
+  =_agent_role_specs()=. api PR #N merged [2026-05-02].
+- *Backfill*: =python manage.py rerun_arbiter --since 2026-04-01= as a
+  one-shot after PR A+B land.
+
+* DONE https:  careercaddy.online scrapes 54
+CLOSED: [2026-05-04 Mon 14:34]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 14:34
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/scrape
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+this one timed out and a pefect screenshot got created for debugging.
+I want to rescue from timeout and try parsing whats there.  that's the most successful thing I built (without AI).  Lets try that since scrape is flakey anyway.
+
+Diagnosis [2026-05-04 scrape-profile-enhancer]: scrape 54 is
+actually =status: completed= today with a 9074-char =job_content=
+captured (LinkedIn comm/jobs/view/4403039381 — Sundayy / Software
+Engineer (full stack) / Tines). It has no graph_trace rows because
+it predates Phase 1b graph instrumentation. So the "timed out"
+framing in the TODO body is a description of the *historical*
+failure mode, not the current row state.
+
+The user's ask still stands as a forward-looking design: when a
+graph timeout fires (or any node-level wall-clock budget — see
+sibling todo on =ResolveFinalUrl=), keep whatever DOM/text was
+captured at the moment of the timeout and feed it into the same
+parse path the from-text / paste pipeline uses, instead of going
+straight to ExtractFail. That is the path the user describes as
+"the most successful thing I built (without AI)" — pre-graph
+parse_scrape on raw captured text.
+
+Bundle this with the ResolveFinalUrl-timeout todo below: both want
+a node-level timeout that doesn't kill the whole graph. Proposal —
+unify as =NodeTimeout=:
+- Wrap each node's =run()= in =asyncio.wait_for(asyncio.to_thread(...))=
+  with per-node budgets read from a small registry.
+- On TimeoutError, route to a single =NodeTimeout= node that:
+  a) PATCHes the parent scrape so the row escapes =running=,
+  b) snapshots whatever =state.captured_text= / =state.html= we already
+     have into =Scrape.job_content= via =PersistScrape=,
+  c) routes to =StartExtract= (Tier0 CSS / paste-style parse on the
+     captured text), NOT =ExtractFail=.
+
+That is what gives scrape 54's "perfect screenshot" the rescue path
+the user wants — even on a wedged Camoufox session, =page.content()=
+typically still returns and the text-only extractor can run.
+
+Action: deferred to code; the immediate ResolveFinalUrl bound is on
+=feature/resolve-final-url-timeout= (agents) as a narrower fix; a
+follow-up todo for the generic =NodeTimeout= rescue path is needed
+once the targeted fix lands.
+
+Verification: scrape 54 has full =job_content= already; the user
+can re-trigger extraction from the existing captured text without
+re-running the browser. Use that as the integration-test fixture
+for the rescue path.
+
+* SHIPPED Ingest abuse defense — Phase 0 lift onto =POST  job-posts = :api:security:
+CLOSED: [2026-05-02]
+:PROPERTIES:
+:CREATED:  [2026-05-02]
+:ARCHIVE_TIME: 2026-05-04 Mon 14:35
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/scrape
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Plan at =~/.claude/plans/this-flowchart-got-lost-magical-candle.md=.
+
+cc_auto inbox triage, the chat agent's =create_job_post_with_company_check=
+tool, and the manual create form all POST directly to
+=/api/v1/job-posts/=, bypassing the URL-policy gate the Phase 0 work
+added to =/scrapes/=. The flowchart in =notes.org= the user just
+retrieved makes this asymmetry explicit.
+
+What landed (api submodule, =feature/ingest-url-policy=):
+- =api/views/jobs.py:JobPostViewSet.create= calls
+  =validate_submission_url(link)= immediately after =pre_save_payload=.
+  422 with =blocked_scheme/blocked_self/blocked_private/blocked_malformed=
+  on rejection; envelope matches the scrapes path.
+- =tests/test_job_post_url_hygiene.py:TestJobPostUrlPolicy= — 6 cases
+  (javascript scheme, careercaddy.online self-host, RFC1918, =.local=,
+  clean URL regression, no-link skip).
+- Frontend manual-create controller already surfaces
+  =error.errors[0].detail= via =flashMessages.danger= — no FE change.
+- 656 api tests green; ruff clean.
+
+Tracker resolution (=is_tracker_host=/=resolve_tracker=) was
+*intentionally not lifted in this slice*. See Phase 2 entry below for
+the LinkedIn =/comm/= → login-wall finding that scoped this work down.
+
+* SHIPPED Ingest abuse defense — Phase 0 (own-domain, scheme, private host) :api:extension:security:
+CLOSED: [2026-05-02]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 14:35
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/scrape
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Concrete trigger: own-dogfood test — submitted =careercaddy.online= itself
+through the extension and the pipeline cheerfully minted a JobPost from the
+site's own marketing copy. Plan at =~/.claude/plans/dazzling-stirring-church.md=.
+
+What landed (api submodule, =feature/from-text-source-hint= follow-up):
+
+- =job_hunting/lib/url_policy.py= — single source of truth for
+  =validate_submission_url(raw)=. Hard-rejects scheme ∉ {http,https},
+  =SELF_HOSTS= (=careercaddy.online= + www variant, plus optional
+  =INGEST_BLOCKED_HOSTS= env), and private hosts (=localhost=, RFC1918,
+  link-local, =*.local= / =*.internal= / =*.lan= / =*.localhost=, IP
+  literals via =ipaddress= module). Raises =UrlPolicyError(code, msg)=
+  with stable codes: =blocked_self= / =blocked_scheme= / =blocked_private=
+  / =blocked_malformed=.
+- =api/views/scrapes.py= — both =from_text= and =create= call the validator;
+  422 with the policy code on rejection. =from_text= also enforces
+  =FROM_TEXT_MIN_LEN=200= / =FROM_TEXT_MAX_LEN=500_000= (codes
+  =text_too_short= 400 / =text_too_long= 422).
+- =tests/test_url_policy.py= (21 cases) + =test_scrape_from_text.py=
+  (new =TestScrapeFromTextPolicy=, 6 cases). Existing classes patched with
+  =@patch("...FROM_TEXT_MIN_LEN", 1)= so they keep testing what they were
+  written for. 44 tests green.
+
+What landed (frontend extension, =feature/extension-direct-post=):
+
+- =popup.js= — mirrors =SELF_HOSTS= / scheme / private-host check via
+  =classifyUrl(tab.url)= before the page read; fast-fails in the popup
+  with a friendly message before any POST.
+- v0.3.2 in =manifest.json= + =README.md= version-history entry.
+
+The API check is authoritative; the popup mirror is defense in depth (a
+=curl= can bypass the popup but not =url_policy.py=).
+
+* SHIPPED Verify linkedin.com ready_selector fix on next job-view scrape :scrape:
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 14:35
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/scrape
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+** [2026-05-04 19:55] verified on scrape 304 — h2:has-text("About the job") matched on pass 3 / 19s; clean Tier1 → PersistJobPost. Scrape Log: =Operations/Scrape Log= → =[2026-05-04 19:55] linkedin.com — verified: ready_selector fix works on flagship-web=
+
+:PROPERTIES:
+:CREATED:  2026-05-01
+:END:
+Profile id 2 (linkedin.com) updated 2026-05-01 16:53 UTC with
+=ready_selector: ".show-more-less-html, .jobs-description__container, section.show-more-less-html, .description__text"=
+to fix the ExpandTruncations no-op on scrape #250 (job-post 1315,
+Lululemon Senior Cybersecurity Engineer). See Scrape Log entry
+[2026-05-01] in notes.org for diagnosis.
+
+Verification on the next linkedin.com /jobs/view/ scrape:
+- =get_scrape_graph_trace= should show =WaitReadySelector= routing
+  to =ExpandTruncations= directly (skipping SettleWait) with
+  =duration_ms > 0= (the actual selector wait, up to 5000 ms).
+- =ExpandTruncations= duration should be >100 ms with a click
+  landing — logfire span =expanded truncation: ...= present.
+- Capture body should contain the *full* job description, not the
+  CSS-clipped preview.
+- If still failing: re-scrape job-post 1315 manually, pull the
+  screenshot, and check whether the description container uses a
+  different class on the public (logged-out) variant. Candidates
+  to add: =[data-test-description]=, =.core-rail .description=.
+
+Update [2026-05-01 ~17:00 UTC]: scrape #257 → child #258 (jp 1574,
+LinkedIn /comm/ → /jobs/view/4406443184/, AES Group Infrastructure
+Engineer) revealed a *second* failure mode: when cookies authenticate
+into flagship-web (logged-in SPA), none of the four
+public-guest selectors match — the captured =job_content= for #258
+is just nav + footer chrome ("0 notifications / Skip to main content
+/ ... LinkedIn Corporation © 2026"); zero hits in the captured HTML
+for any of =jobs-description=, =show-more-less-html=,
+=description__text=, =jobs-box__html=, =about-the-job=, etc. The job
+description body never hydrated before Capture.
+- Symptoms in the graph trace (scrape 258): WaitReadySelector
+  duration 5011ms (full timeout, no match), Capture duration 30115ms
+  (likely networkidle timeout), Tier0CSS 0ms (nothing to extract,
+  fell straight through to Tier1Mini), Tier1Mini scraped only meta
+  ("Top applicant, Seattle, WA.") which became jp 1574's description.
+  ResolveApplyUrl: =no_selector_matched=.
+- Profile #2 ready_selector extended (2026-05-01 ~17:00 UTC) with
+  flagship-web (authenticated) selectors:
+  =.jobs-description-content__text=,
+  =.jobs-description__content=, =.jobs-box__html-content=,
+  =.jobs-search__job-details--container=,
+  =.job-details-jobs-unified-top-card__primary-description-container=,
+  =article.jobs-description__container=,
+  =div[class*='jobs-description']=. Apply markers also extended
+  (=.jobs-s-apply button=, =button.jobs-apply-button=).
+- Verify on next /jobs/view/ scrape that authenticates: WaitReadySelector
+  duration <5000ms with a flagship selector winning, Tier0CSS
+  duration_ms > 0 (actual extraction, not 0ms passthrough), captured
+  body length >> 600 chars.
+- Re-scrape jp 1574 once a flagship-cookie session is active to
+  confirm the description fills with real body, not the meta blurb.
+
+Update [2026-05-02]: scrape #259 ran *after* the flagship-web
+selector additions and *still* produced a chrome+teaser-only
+description for jp 1574. Diagnosis (see notes.org Scrape Log
+=[2026-05-02] linkedin.com — "Promoted by hirer" off-platform
+variant=): jp 1574 is *not* the standard hydration-lag case — it
+is LinkedIn's off-platform-managed posting variant
+("Promoted by hirer · Responses managed off LinkedIn"). The
+description does not exist in the LinkedIn DOM at all; the apply
+CTA is locked inside =data-testid="interop-iframe"=. No further
+profile-2 selector tightening will recover this jp's description.
+The ready_selector additions remain correct for the *standard*
+flagship-web variant — verification of that fix is still pending
+on the *next* standard-variant linkedin /jobs/view/ scrape (i.e.
+one without the "Promoted by hirer" markers).
+
+Update [2026-05-02 ~later]: re-investigation of the captured HTML
+for scrape #259 (89 KB, full SDUI render) *partially corrects*
+the earlier "iframe-locked" claim above. The apply CTA *is*
+present in the LinkedIn DOM, not iframe-locked: it's an =<a>= with
+=aria-label="Apply on company website"= and =target="_blank"=
+pointing at =https://www.linkedin.com/safety/go/?url=<encoded>=
+which redirects out to the hirer (ceipal candidate portal in this
+case). The reason ResolveApplyUrl returned =no_selector_matched=
+is purely that profile #2's =apply_link_selectors= still listed
+only =a.jobs-apply-link[href]= and
+=a[data-tracking-control-name*='apply']=, neither of which match
+the new randomized-class SDUI markup. =apply_candidates= already
+captured the right anchor at score 0.7 — the resolver doesn't
+promote candidates, only honors selectors.
+
+Profile #2 =apply_link_selectors= updated 2026-05-02 to add (in
+priority order):
+- =a[aria-label='Apply on company website'][href]=
+- =a[aria-label^='Apply on'][href]=
+- =a[aria-label*='Apply on company'][href]=
+- =a[href*='linkedin.com/safety/go/'][aria-label*='Apply']=
+- =a[href*='/safety/go/'][target='_blank'][aria-label*='Apply']=
+Legacy =a.jobs-apply-link[href]= and the tracking-control-name
+fallback retained at the end of the list.
+
+The description-body story for the off-platform variant is
+unchanged: even in the 89 KB SDUI HTML, no job-body copy appears
+(zero hits for cloud/aws/responsibilit/qualification/etc.), so
+the hirer-side description is genuinely not in the DOM. The
+todo entry below ("LinkedIn off-platform-managed variant
+detection") still applies for the description side — but the
+apply-URL portion of that todo can be narrowed: apply *is*
+recoverable via aria-label, just not the description.
+
+Verification on next scrape of a /jobs/view/ posting with
+=Apply on company website= aria-label: ResolveApplyUrl should
+route to End with =apply_url_status: resolved= and a
+=link_selector= note matching one of the new aria-label
+selectors (likely the first).
+
+* SHIPPED JobPost.source clobber fix + jp.show URL aliases panel :api:frontend:
+CLOSED: [2026-05-01 Fri 13:51]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 14:35
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/scrape
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Job-post 1483 (Senior SWE, Optum/UnitedHealth) showed =source: scrape=
+in prod despite originating from a Jobright digest email
+(2026-04-30 16:22 UTC). cc_auto created the JobPost with
+=source="email"= the same evening; the next day a hold-poller scrape
+on the dice.com canonical URL clobbered the column to ="scrape"= via
+the stub-upgrade branch in =job_post_extractor.parse()=. Same posting
+is reachable via three URLs (jobright tracker, careers.unitedhealth
+apply page, dice canonical) and =job-posts.show= had no way to surface
+that — only the canonical link's ↗ and the resolved apply chip via
+=<ApplyDestination>=.
+
+Two coupled fixes:
+
+- *api*: =api/job_hunting/lib/parsers/job_post_extractor.py= — pull
+  =source= out of =job_defaults= into =create_only_source=, add
+  =_NO_OVERWRITE_FIELDS= ({=created_by=, =source=}) and skip those in
+  the force-merge + stub-upgrade loops, drop =source= from the
+  duplicate-merge dict. Cold-create branch still pins source from the
+  scrape so genuinely scrape-originated JobPosts keep their provenance.
+  Four new unit tests in =api/job_hunting/tests/test_job_post_extractor.py=
+  =TestSourcePreservation=: stub-upgrade preserves, force-reparse preserves,
+  full-duplicate preserves, cold-create still sets.
+
+- *frontend*: =frontend/app/models/job-post.js= — added =canonicalLink=
+  attr + =urlAliases= getter that produces a dedup'd list of
+  =[{url, label, hostname}]= across =link=, =canonicalLink=, =applyUrl=
+  (when status==resolved), and each =scrape.url= + =scrape.sourceLink=.
+  New =<JobPosts::AliasesPanel @jobPost />= (template-only) renders the
+  list as a "Reachable via" Panel::Card after the description, hidden
+  when ≤1 alias. =frontend/app/routes/job-posts/show.js= now side-loads
+  =scrapes= via =include= so the panel paints first-pass without flash.
+  Tests: =tests/unit/models/job-post-test.js= covers four
+  =urlAliases= cases, =tests/integration/components/job-posts/aliases-panel-test.js=
+  covers the empty + populated render paths.
+
+Local verification: 37/37 api tests green via
+=docker compose exec -T api python manage.py test job_hunting.tests.test_job_post_extractor=;
+=make ci= passes both =build-api= (ruff + bandit + Django test) and
+=build-frontend= (eslint + ember-template-lint + prettier +
+xvfb-run npm run test:ember).
+
+After deploy: manual fix-up =update_job_post(id=1483, source="email")=
+via MCP. Bulk backfill of historical mis-attributed JobPosts deferred
+(separate ticket — needs careful query design).
+
+Tally #23: stays at STRT until parent Deploy is green AND user has
+visually confirmed source label + aliases panel on a real prod record.
+
+* SHIPPED job-description.show isn't style compliant :frontend:
+CLOSED: [2026-04-30 Thu]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 14:35
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/scrape
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Reference: =~/Pictures/screenshot-2026-04-30_18-08-24.png= (LinkedIn).
+Lifted the description out of the header card into its own =Panel::Card=
+with an "About the job" h2; the Copy + Expand controls now live in the
+card header. Description paragraph renders with =whitespace-pre-line=
+(source line breaks preserved instead of one wall-of-text =<p>=),
+=max-w-prose= for measure, =line-clamp-[8]= for collapse (dropped the
+=max-h-24/max-h-screen= transition carrier — it left a hollow ribbon
+when text was shorter than 4 lines). Card hidden when no description.
+Out of scope (broader audit): header still uses =panel-card= + =btn= CSS
+classes instead of =<Panel::Card>= / Tailwind button utilities; no
+company avatar (data-side question, not a template fix).
+=frontend/app/templates/job-posts/show.hbs=.
+
+* PROJ AI chat work [0/5] :chat:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*AI answer service is garbage
+** TODO Resolution
+CLOSED: [2026-05-04]
+
+Fixed in agents PR #10. Six complaints traced to three root causes:
+- RC-A: no first-class profile tool. Added =get_current_user= wrapping
+  =/api/v1/me/= so the chat agent has a sanctioned identity-lookup tool;
+  rewrote =get_career_data= docstring to actively repel identity questions.
+- RC-B: =create_answer= and =update_answer= looked interchangeable.
+  Rewrote both docstrings: =create_answer= is the DEFAULT for any new
+  content (incl. variants); =update_answer= is DESTRUCTIVE and only fires
+  on explicit replace-language. Tool docstrings are read every turn —
+  much stickier than 475-line system-prompt prose.
+- RC-C: ungrounded drafts. Both write-tool docstrings now spell out a
+  grounding requirement — must have question/job-post/career context in
+  conversation before drafting; fetch only what is missing; =get_career_data=
+  only on genuine role-fit requests.
+
+Also compressed the Modifying-an-Existing-Answer prompt section (~46→28
+lines), added a must-persist line under Answering-Questions-via-Chat,
+pointed the User Profile block at =get_current_user= for fresh reads,
+added =/settings/profile= to the routing table, and bumped
+=test_career_caddy_scope_has_27_tools= → 28.
+
+Files: agents/lib/api_tools.py, agents/lib/toolsets.py,
+agents/mcp_servers/chat_server.py, plus the two tests.
+** TODO AI chat still uses career data when grabbing my name :chat:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:END:
+
+** TODO agents keep calling career-data instead of profile data :chat:
+
+** TODO AI still decided to update_anser tool instead of create_answer.  It did not pull the correct context and gave a generic answer blowing away the one I wanted to interate on.
+** TODO AI chat will put answers in the chat but not write new answers with MCP :chat:
+good answers get follow ups iterating on them takes a couple of steps. 
+** TODO AI should offer to modify answer or create a new answer.
+or take more feedback. 
+
+* DONE cc_auto followup agent: PositiveInt guard on api_client IDs
+CLOSED: [2026-05-04 Mon 15:10]
+:PROPERTIES:
+:CREATED:  [2026-05-04]
+:TAGS:     bugs:cc_auto:agents:
+:LAST_TOUCHED: [2026-05-04]
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Starbucks rejection email (jp 1702) was processed but jp 1702 unchanged.
+Followup agent fell through strategy 1 with no URL in body, called
+=get_applications_for_job_post(0)= → =GET /job-posts/0/job-applications/=
+→ 404, then list-and-picked unrelated app 60.
+
+Fix half 1 (this branch): switch required-id tool params on
+=cc_auto/src/client/api_client.py= to =PositiveInt= so pydantic-ai
+rejects 0 at the tool boundary. Six tools touched.
+
+Fix half 2 (next): =get_job_applications= takes no =company= filter,
+so the prompt-instructed strategy-3 fallback (=filter by company
+inferred from sender domain=) is impossible — agent ends up
+list-and-picking. Add company filtering and require the agent to
+use it before any blind selection.
+
+* DONE Score visibility: daemon-created scores invisible to user :frontend:api:bug:scrape:
+CLOSED: [2026-05-02]
+:PROPERTIES:
+:CREATED:  [2026-05-02]
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Three-part fix for auto-scored scores never appearing on job-post.show.scores.index:
+- =api/job_hunting/api/views/scores.py= — =ScoreViewSet.create()=: staff
+  service-account caller with no explicit =user= relationship now infers
+  =user_id= from =jp.created_by_id= so daemon scores land under the correct
+  owner, not the daemon account. Regular-user path unchanged (=is_staff= guard).
+- =api/job_hunting/api/serializers.py= — =JobPostSerializer.get_related("scores")=:
+  =linked_relationships= now filters =obj.scores= by =request.user.id= (user id
+  derived from the API token). Previously emitted all users' score IDs; Ember
+  Data 404'd on the non-owned ones and silently dropped them.
+- =api/job_hunting/api/views/scores.py= — =ScoreViewSet.list()=: added
+  =filter[job_post_id]= support so the frontend can query directly by post.
+- =frontend/app/routes/job-posts/show/scores.js= — replaced stale
+  =jobPost.scores= hasMany (cached empty when user visited before score existed)
+  with =store.query('score', {'filter[job_post_id]': job_post_id})= — always
+  live, same pattern as questions route.
+- =api/job_hunting/tests/test_score_create_and_list.py= — 10 new regression
+  tests covering staff inference, list filter, multi-tenancy isolation, and
+  linked_relationships user-scoping.
+Observed in dev logs after extension submissions of scrape 95 and 96 — the
+=GET /api/v1/scrapes/96/= request continued firing through the frontend
+proxy long after the scrape went terminal. Hypothesis: the frontend's
+=services/pollable.js= keeps a record's poll loop alive whenever any related
+resource transitions to =pending=. Auto-scoring creates a new =Score= row
+with =status=pending= as soon as the JobPost lands, and that pending Score
+may be retriggering the parent Scrape's poller (via the JobPost or via a
+shared pollable registry).
+
+Investigation steps:
+- Read =frontend/app/services/pollable.js= and trace the poll-keepalive
+  conditions. What stops the loop?
+- Trace =services/pollable.js= callers that register on Scrape vs Score —
+  is there any cross-registration where a pending Score in a job-post's
+  =scores= hasMany re-arms the scrape's poller?
+- Confirm with: visit =/scrapes/96= in the browser, watch network tab —
+  does the poll stop after the scrape goes terminal AND the auto-score
+  Score completes?
+- Score-count blow-up: if the loop keeps polling AND each iteration is
+  re-creating a new Score (instead of reusing one), the Score table will
+  fill up. Check =POST /api/v1/scores/= dedup logic — there's an existing
+  Score lookup on (job_post_id, resume_id, user_id) but if any of those
+  differ between iterations, dedup misses.
+
+Likely fix shapes (pick one after diagnosis):
+- Pollable terminates strictly on =terminal_status=, ignoring related
+  resource state.
+- Pending-Score auto-creates are deduped on (job_post_id, user_id) when
+  =resume_id is None= so re-arming doesn't multiply rows.
+- Pollable distinguishes "self pending" from "child pending" — stop on
+  the former, ignore the latter.
+
+Reproducer: submit a scrape from the extension with auto-score on, watch
+=docker compose logs -f api frontend= for sustained polling beyond the
+scrape's terminal status.
+
+
+* DONE Auto-score on from-text ingest + "Job post created" alert :api:frontend:bug:scrape:
+CLOSED: [2026-05-03]
+:PROPERTIES:
+:CREATED:  [2026-05-03]
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Followup to score-visibility fix. JP 1659 (from-text/extension submission) was
+never auto-scored because scoring relied on =score_poller= daemon which was never
+running. Replaced with synchronous fire-and-forget: from-text now scores
+immediately after =parse_scrape(sync=True)= completes.
+
+- =api/job_hunting/api/views/scores.py= — new =_auto_score_job_post(job_post_id,
+  user_id)= module-level helper: same fire-and-forget thread as the manual Score
+  button; silent no-op if no AI client, missing description, or no career data.
+- =api/job_hunting/api/views/scrapes.py= — =from_text= action: after
+  =parse_scrape(sync=True)=, reloads scrape, and if a JobPost was linked, calls
+  =_auto_score_job_post=. Wrapped in =try/except= so scoring failure never breaks
+  the 202 response.
+- =api/job_hunting/tests/test_scrape_from_text.py= — 3 new tests: score fires
+  after successful parse, not fired when parse links no job post, error doesn't
+  surface to caller.
+- =frontend/app/controllers/job-posts/new/paste.js= — "Job post created." flash
+  made =sticky: true= so it persists through the route transition (previously
+  timed out before the user could see it).
+- =frontend/app/controllers/job-posts/show/scores.js= — =_runAutoScore= now uses
+  =this.model= (live =store.query= result) instead of =jobPost.hasMany('scores').value()=
+  (stale cache). Prevents double-scoring when server created a pending score during
+  ingest; skips =scoreResume()= when any career-data score already exists.
+
+
+* DONE Retry scrape redirects to new child scrape :frontend:scrape:
+CLOSED: [2026-05-02]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+=job-posts/show/scrapes/show.js= controller: after =redo= POST, poll
+the source scrape's =scrapes= hasMany (reloaded with =include: scrapes=)
+until a child appears, then =router.transitionTo('job-posts.show.scrapes.show',
+jpId, childId)=. Falls back to reloading the original scrape if no
+child appears within 30 s (e.g. non-redirecting URLs). Added =@service router=.
+
+* DONE Tier1 closed-banner fabrication guard :ai:scrape:
+:PROPERTIES:
+:CREATED:  2026-05-01
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Tier1Mini extractor on scrape #251 (linkedin.com, jp 1550) prepended
+=**[CLOSED — applications no longer accepted]**= to the job description
+even though *none* of the six closed-state trigger phrases appear in
+the captured page body (verified: =grep -ic= for the canonical phrases
+returns 0 against scrape #251's =job_content=). Downstream, the
+regex in =api/job_hunting/lib/text_signals.py:34= matched the
+fabricated marker and flipped =posting_status="closed"= on a live
+posting, so the UI now shows a Closed chip and scoring / cover-letter
+flows would silently skip it. See Scrape Log entry
+=[2026-05-01] linkedin.com — Tier1 fabricates [CLOSED ...] banner=.
+
+*Suspect prompt path*
+- =agents/scrape_graph/nodes_extract.py= — Tier1Mini node assembles
+  the system prompt from the ScrapeProfile's =extraction_hints= and
+  =page_structure= fields. The linkedin.com profile's
+  =extraction_hints= contains a paragraph (look for "CLOSED-STATE
+  SIGNALS — IMPORTANT") instructing the model to lead the description
+  with =**[CLOSED — applications no longer accepted]**= when any of
+  six phrases appear. The hint *does not* require the model to quote
+  the matching source phrase, so a soft mis-classification produces an
+  unsubstantiated marker.
+- Confirm whether the runner inlines =extraction_hints= and
+  =page_structure= into the same system prompt; if so, the closed-
+  state block is rubbing shoulders with the obstacle / account-chooser
+  block under =page_structure=, raising the chance of cross-contamination.
+
+*Minimal fix shape (substantiation guard)*
+- Extend the Tier1/Tier2 response schema with an optional
+  =closed_evidence: str | None=. The closed-banner prefix may only be
+  rendered when =closed_evidence= is non-null *and* a validator
+  confirms it appears verbatim (case-insensitive) in the captured
+  =job_content=. Failed validation = drop the prefix; never flip
+  =posting_status= on unsubstantiated claims.
+- Apply the same pattern to any future "synthesize a structured claim
+  from soft signals" hint — generic safety property, not a
+  linkedin-only patch.
+
+*Reproducer / unit test sketch*
+- =agents/tests/test_extract_closed_signals.py= (new):
+  - Feed the extractor a fixture =job_content= that contains *no*
+    closed-state phrases but does contain LinkedIn-style ambient
+    chrome ("Reposted", "Over 100 people clicked apply").
+  - Use the active linkedin.com profile (or a fixture clone of its
+    extraction_hints) so the closed-state hint is in the prompt.
+  - Assert: the extractor's emitted =description= does *not* start
+    with =**[CLOSED= and =closed_evidence is None=.
+  - Negative companion test: feed content containing
+    "No longer accepting applications" verbatim and assert
+    =closed_evidence= equals that substring and the marker is
+    rendered.
+
+*Out of scope for this todo*
+- Manual cleanup of jp 1315 / jp 1550 (carried separately).
+- Any change to =text_signals.py:34=. The regex is correct; the bug
+  is upstream — don't make the closed-state detector permissive to
+  paper over LLM hallucinations.
+
+
+* DONE search-flicker fix: invert =loading()= booleans + add subnav skeletons :frontend:scrape:
+CLOSED: [2026-05-01 Fri 17:34]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+The two prior "fixes" ([[*Search input flicker on /scrapes \[frontend\]][PR #88]] and
+[[*search still disappears][the six-route mirror]]) had the =loading()=
+return values backwards. Per the Ember Loading Substates contract,
+=loading()= returning =false= prevents the loading template from
+rendering; returning =true= bubbles the event so the default behavior
+(=*-loading.hbs=) fires. The shipped code did the opposite of its own
+comment, so on every search keystroke =index-loading.hbs= still
+rendered → =<:subnav>= was empty → SearchBar torn down + remounted →
+visible flicker + focus loss. Tally #23 territory: prior entries were
+prematurely marked SHIPPED.
+
+This change inverts the booleans on all 7 list routes
+(=job-posts/index.js=, =scrapes/index.js=, =questions/index.js=,
+=companies/index.js=, =answers/index.js=, =summaries/index.js=,
+=job-applications/index.js=): self-transition → =false= (suppress
+substate), cross-route → =true= (show skeleton), initial load → =true=.
+
+Out-of-scope items completed in the same branch:
+- Removed unused =@keyframes subnav-fade-in= from =app/styles/app.css=
+  (a relic of an earlier liquid-fire attempt — defined but never
+  applied to any selector).
+- Added =<SubnavSkeleton />= component plus =<:subnav>= slot in all 7
+  =*-loading.hbs= templates so cold loads no longer have an empty
+  subnav strip flash in.
+- 21 new unit tests (3 per route × 7 routes) covering =loading()=
+  action behavior — regression coverage so this can't silently invert
+  again. Plus 2 integration tests for =<SubnavSkeleton />=.
+
+=make ci= green locally before push. Promote to SHIPPED only after
+parent Deploy turns green and the flicker is verified gone in prod.
+
+* DONE Subnav search clear button :frontend:
+CLOSED: [2026-05-03]
+:PROPERTIES:
+:CREATED:  [2026-05-03]
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Added an × clear button to =frontend/app/components/menus/subnav-search.hbs/.js=
+that appears only when the input has text. Clicking it clears =inputValue= and
+immediately fires =@onSearch('')= (no debounce). All 7 subnav search bars get
+the button automatically — no call-site changes needed. Wrapper div +
+=.subnav-search-clear= CSS added to =app/styles/app.css=.
+
+
+* DONE job-posts list: hover date shows created datetime :frontend:
+CLOSED: [2026-05-02]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+=frontend/app/components/job-posts/list.hbs= — wrapped posted-date cell in
+=<span title="created: ...">= using =createdAt= so hovering reveals the exact
+ingestion timestamp. Lets the user confirm email-sourced posts arrived at the
+expected time without opening the record. Frontend PR #103.
+
+
+* DONE nuclear placement :frontend:
+CLOSED: [2026-05-02]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Moved delete-confirm panel above re-extract section in =job-posts/form.hbs=.
+Refactored the "About the job" card in =job-posts/show.hbs= to use =Panel::Card @title= + =<:top>= slot for header actions.
+Fixed a subsequent Glimmer template compiler error: non-block content alongside a named block must be wrapped in =<:default>=.
+Also updated =job-posts/aliases-panel.hbs= to label the link field "Link" when canonical differs.
+Frontend PR #101: =fix/nuclear-confirm-placement=.
+/home/oldbones/Pictures/screenshot-2026-04-30_17-43-49.png
+
+* DONE Extension v0.3.6: ORIGIN → api.careercaddy.online :frontend:extension:
+CLOSED: [2026-05-02]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+=popup.js= =ORIGIN= constant changed from =careercaddy.online= to
+=api.careercaddy.online=. Symptom: 405 Method Not Allowed on Connect
+because =careercaddy.online= is the Ember frontend domain; Caddy there
+does not proxy POST =/api/v1/*= to Django. Using the API subdomain
+directly fixes it. Frontend PR merged to main; parent already pinned.
+
+* DONE Extension: hardcode origin = https:  careercaddy.online :frontend:extension:
+CLOSED: [2026-05-02]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+v0.3.1 — removed the configurable origin input from =popup.html=, dropped
+=ccOrigin= from STORAGE_KEYS, hardcoded =ORIGIN= constant in =popup.js= and
+=background.js=. The frontend already strip-replaced the public download
+buttons (no .xpi/.zip artifacts in =public/extensions/=); developers test
+via =Load unpacked= against the source folder. Store-submission
+checklists captured in =notes.org → Browser Extension → Publishing
+pre-flight=.
+
+
+* DONE Ingest abuse defense — Phase 1 (hygiene) :api:frontend:security:
+CLOSED: [2026-05-04 Mon 15:15]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 15:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Phase 1 follow-up to the Phase 0 ingest defenses. Plan at
+=~/.claude/plans/dazzling-stirring-church.md=. Three independent sub-tasks:
+
+1. Tracking-param strip + canonical-link normalization in
+   =lib/url_policy.normalize_link()= (utm_*, fbclid, gclid, mc_*, _hs*,
+   ref, ref_src). Backfill =JobPost.canonical_link= for existing rows.
+2. PII disclaimer in popup connect screen + =/docs/extension-privacy/=
+   page describing what the extension reads and stores.
+3. Frontend XSS audit — grep =frontend/app/templates/= for =html-safe=,
+   =triple-stash=, markdown render, =innerHTML= on JobPost-derived
+   content paths.
+
