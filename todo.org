@@ -234,6 +234,24 @@ implements a =loading= action that returns =true= (suppresses the substate)
 when =transition.from.name === routeName= — i.e. in-route refreshes only;
 cold loads still get the skeleton. Frontend PR #88.
 * Inbox
+** STRT SettleWait fires on every path; bumped 2s→5s :scrape:agents:bug:
+   :PROPERTIES:
+   :CREATED:  2026-05-04
+   :END:
+   Followup to today's WaitReadySelector iterate ship. Scrape 298
+   re-run at 08:49 UTC matched =h2:has-text("About the job")= in
+   *18ms* and routed straight through ScrollToLoad → ExpandTruncations
+   → Capture, but Tier1Mini still got partial content because matching
+   the heading only proves the section header is in DOM, not that the
+   description body has finished streaming. User pushed for the
+   simplest possible fix: just sleep before reading the DOM. Done —
+   =WaitReadySelector= now always routes to =SettleWait= (hit path
+   too, not just miss); =SettleWait= sleeps 5s instead of 2s. Cost is
+   +5s per scrape, which is nothing compared to the 30s we used to
+   burn on Capture's font-wait stall. Return type narrowed
+   =Union[ScrollToLoad, SettleWait]= → =SettleWait=. =NODE_META=
+   updated, =graph_static.json= regenerated (28 nodes / 37 edges —
+   one edge dropped).
 ** STRT WaitReadySelector iterates ready_selector list :scrape:agents:bug:
    :PROPERTIES:
    :CREATED:  2026-05-04
