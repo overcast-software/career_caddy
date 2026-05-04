@@ -5527,3 +5527,16 @@ Phase 1 follow-up to the Phase 0 ingest defenses. Plan at
    =triple-stash=, markdown render, =innerHTML= on JobPost-derived
    content paths.
 
+
+* DONE job-applications.index infinite scroll
+CLOSED: [2026-05-04 Mon 16:10]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:ARCHIVE_TIME: 2026-05-04 Mon 16:21
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+InfinityLoader was wired in the frontend but the API returned no meta/links envelope. Fixed JobApplicationViewSet.list() in api/job_hunting/api/views/jobs.py to emit the same meta + links.next pagination block as JobPostViewSet.
