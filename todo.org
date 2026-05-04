@@ -234,6 +234,31 @@ implements a =loading= action that returns =true= (suppresses the substate)
 when =transition.from.name === routeName= — i.e. in-route refreshes only;
 cold loads still get the skeleton. Frontend PR #88.
 * Inbox
+** STRT WaitReadySelector iterates ready_selector list :scrape:agents:bug:
+   :PROPERTIES:
+   :CREATED:  2026-05-04
+   :END:
+   Scrapes 295 + 296 (LinkedIn jobs/view/4407097463, Magnitude
+   Consulting Forward Deployed engineer) repeatedly hit
+   =WaitReadySelector= timeout=true / matched_selector=null even after
+   the enhancer landed a fat ready_selector on profile id=2 leading
+   with =h2:has-text("About the job")=. Two hypotheses: (A) Playwright's
+   CSS parser silently neutralizes a comma list when one fragment is a
+   text-engine selector like =:has-text()=; (B) a single 5s budget on
+   the whole list is too tight against LinkedIn flagship-web's paint.
+   Iteration is robust to both: split the list, try each via
+   =locator(s).first.wait_for(state="visible", timeout=1500)=, return
+   on first hit, record the winner. Profile schema (the JSON blob)
+   moves from str → list[str]; agent normalizes either form so legacy
+   profiles keep working. =LoadProfile= now emits
+   =ready_selector_count= + =ready_selector_hash= so a future
+   investigation can correlate "selector misses" with "which profile
+   version was loaded". =WaitReadySelector= payload gains per-attempt
+   =duration_ms= / =matched= / =error= class (timeout vs parse), so
+   the next failed run tells us whether it's flake or a bad selector.
+   Tests: =tests/test_wait_ready_selector.py= (6 cases — first-match
+   short-circuit, all-miss, legacy-string normalization, parens-aware
+   split, no-page no-op, parse-vs-timeout error class).
 ** SHIPPED LinkedIn SDUI partial-hydration — guardrails + selector discovery :scrape:agents:bug:
    CLOSED: [2026-05-03]
    All three code-side changes shipped on
