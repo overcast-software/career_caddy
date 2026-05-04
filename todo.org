@@ -234,6 +234,117 @@ implements a =loading= action that returns =true= (suppresses the substate)
 when =transition.from.name === routeName= — i.e. in-route refreshes only;
 cold loads still get the skeleton. Frontend PR #88.
 * Inbox
+** SHIPPED LinkedIn SDUI partial-hydration — guardrails + selector discovery :scrape:agents:bug:
+   CLOSED: [2026-05-03]
+   All three code-side changes shipped on
+   =feature/scrape-graph-scrolltoload= (agents submodule). (1)
+   =ValidateExtraction= now rejects parsed descriptions that are
+   short, lack real-job vocabulary, and are dominated by chrome
+   words / salary fragments — reasons list gains =ui_chrome_only=.
+   (2) =WaitReadySelector= emits =matched_selector= + =timed_out=
+   in its trace payload so future investigations can read the trace
+   alone instead of grepping selectors. (3) New =ScrollToLoad= node
+   sits between the wait/settle pair and =ExpandTruncations=; it
+   scrolls in 800px / ~250ms ticks until the profile's ready
+   selector matches or scrollHeight stalls (capped ~5s), then
+   500ms post-settle. Trace payload carries =ticks= /
+   =matched_selector= / =final_scroll_y=. =NODE_META= and
+   =graph_static.json= regenerated. New tests:
+   =tests/test_scroll_to_load.py= drives a fake page simulating
+   IntersectionObserver hydration; =test_validate_extraction.py=
+   adds the chrome-only repro from jp 1650. Stretch sub-task #4
+   (auto-attended for =/comm/jobs/view/=) deferred. Once deployed,
+   re-scrape jp 1644/1645/1647/1649/1650 to confirm real
+   descriptions land.
+:PROPERTIES:
+:CREATED:  [2026-05-03]
+:END:
+*Trigger:* User flagged jp 1644, 1645, 1647, 1649, 1650 — every
+LinkedIn =/comm/jobs/view/= scrape since the SDUI rollout (≥ scrape 232,
+2026-04-30) has been persisting a fabricated or chrome-only description
+because the description body never hydrates within the 7 s wait+settle
+window. Full diagnosis in =notes.org= "Scrape Log" entry
+[2026-05-03 23:55]. ScrapeProfile mutation (profile id 2) has been
+applied to (a) lead =ready_selector= with SDUI-tolerant aria/data-testid
+selectors and (b) instruct Tier1/2/3 LLMs not to fabricate when the
+partial-render fingerprint is present. That blunts the symptom but does
+not fix the root cause. This todo tracks the three code-side changes
+needed to fully close the regression.
+
+*Sub-tasks:*
+1. =ValidateExtraction= must reject UI-chrome-only descriptions.
+   - File: scrape-graph EvaluateExtraction / ValidateExtraction node
+     (search =agents/scrape_graph/= for =ValidateExtraction=).
+   - Heuristic: reject when =description= is ≤ ~200 chars AND contains
+     none of [responsibilities, qualifications, requirements, experience,
+     years, you will, we are looking, about the role, about the job, our
+     team] (case-insensitive) AND ≥ 60 % of its tokens are pill words
+     (Remote, Hybrid, On-site, Full-time, Part-time, Contract, Apply,
+     Save, dollar-amount patterns, "Use AI to assess how you fit").
+   - Smallest test: =agents/tests/test_validate_extraction.py= — assert
+     that a description equal to "$215K/yr - $250K/yr\nRemote\nFull-time
+     \nApply\nSave\nUse AI to assess how you fit" routes to =ExtractFail=
+     instead of =PersistJobPost=.
+2. =WaitReadySelector= graph payload must distinguish hit vs timeout.
+   - File: scrape-graph =WaitReadySelector= node (same package).
+   - Today =duration_ms=5000= is emitted both when the selector matched
+     after 5 s and when it timed out — the linkedin investigation had
+     to infer the timeout from the legacy-selector grep returning zero.
+     Add =matched_selector= (string or null) and =timed_out= (bool) to
+     the graph payload so future Scrape Log investigations can read the
+     trace alone.
+   - Smallest test: assert payload shape on a scrape against a static
+     HTML fixture with and without the ready selector present.
+3. Add a =ScrollToLoad= step to the scrape graph (LAZY-HYDRATION FIX).
+   - *Selector experiment resolved [2026-05-04].* User provided
+     screenshot of =/jobs/view/4407097463= showing the "About the job"
+     card fully rendered with prose. The description IS in the DOM
+     when the card scrolls into view; the existing
+     =ready_selector= candidate =[aria-label*='About the job' i]= is
+     correct. The reason every recent scrape misses the body is that
+     LinkedIn flagship-web uses IntersectionObserver-driven lazy
+     hydration and the scrape pipeline never scrolls. See
+     =notes.org= Scrape Log entry =[2026-05-04 00:35]= follow-up under
+     the [2026-05-03 23:55] linkedin.com block for the full evidence
+     chain.
+   - File: =agents/scrape_graph/= — new node between =SettleWait= and
+     =ExpandTruncations=. Page =window.scrollBy(0, 800)= in ~250 ms
+     increments until either (a) one of the =ready_selector= candidates
+     now matches, or (b) =document.body.scrollHeight= stops advancing
+     for two consecutive ticks. Cap total scroll loop at ~5 s. Then
+     run a brief settle (≈500 ms) so the just-fetched description
+     XHR can paint before =ExpandTruncations= looks for "See more".
+   - Smallest test: a Playwright fixture page that renders a
+     =[aria-label='About the job']= subtree only after an
+     IntersectionObserver fires. Without the new node, =Capture= must
+     not contain "About the job"; with it, =Capture= must.
+   - Bonus: emit the scroll-loop telemetry (=ticks=, =matched_selector=,
+     =final_scroll_y=) into the graph payload so future Scrape Log
+     investigations can read the trace alone — pairs with sub-task 2.
+   - Stretch: leave the per-profile ready-wait constant alone; the
+     scroll loop subsumes the "wait longer" hypothesis because once
+     the card intersects, hydration happens in <1 s.
+4. (Stretch) Decide whether =linkedin.com/comm/jobs/view/*= without a
+   warm authenticated session should route to the attended/authenticated
+   browser path automatically. The =/comm/= variant is the email-deep-link
+   form and almost always implies the user expects auth-grade content.
+
+*Why this can't be a profile-only fix:* the profile blob can ship
+selectors and prompt scaffolding, but it cannot (a) reject extractions
+post-hoc, (b) change graph-payload schema, or (c) decide between
+unattended and attended browser engines. All three live in
+=agents/scrape_graph/= and =agents/pollers/=.
+
+*Stretch sub-task #4 — deferred:* whether =/comm/jobs/view/*= without
+a warm authenticated session should auto-route to the attended browser
+path is left as a future TODO; not blocking the lazy-hydration fix.
+
+*Until this lands:* the five affected JobPosts (1644, 1645, 1647, 1649,
+1650) hold fabricated descriptions. Either flip them to the
+"[DESCRIPTION NOT CAPTURED — ...]" sentinel by hand, or re-scrape via
+=make poller ARGS="--attended"= so the description body has a chance
+to hydrate.
+
 ** DONE Subnav search clear button :frontend:
 CLOSED: [2026-05-03]
 :PROPERTIES:
