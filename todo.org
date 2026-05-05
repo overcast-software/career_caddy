@@ -14,9 +14,9 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
 Inbox (18)
-  Bug (1)
+  Bug (4)
   Enhancement (0)
-  Feature (0)
+  Feature (1)
   Idea (0)
 Backlog [0/3]
 Active [4/39]
@@ -43,14 +43,171 @@ Archive (0)
 :LAST_TOUCHED: [2026-05-04]
 :END:
 ** Feature
+*** DONE jp.show duplicate-candidate banner -- first cut shipped
+CLOSED: [2026-05-04]
+
+Shipped on branch =feat/jp-duplicate-candidates= across all four repos:
+
+- *api*: =GET /api/v1/job-posts/:id/duplicate-candidates/= action on JobPostViewSet (=api/job_hunting/api/views/jobs.py=). Three signal classes: =canonical_link= and =fingerprint= (high confidence), =title_similarity= (medium, catches the suffix-drift case fingerprint hashing can't — e.g. jp 999 vs jp 1428 'START UP BUS DEV ... 75-100% FTE'). Excludes self + duplicate_of chain, visibility-scoped per =list()=.
+- *api tests*: =api/job_hunting/tests/test_job_post_duplicate_candidates.py= — 9 tests covering each signal, exclusion, payload shape, and non-staff visibility filter.
+- *frontend*: =JobPosts::DuplicateCandidates= component (=app/components/job-posts/duplicate-candidates.{js,hbs}=) mounted above the description in =app/templates/job-posts/show.hbs=. Tailwind/HyperUI dark-mode utilities. Read-only first cut: clicking a candidate LinkTo-navigates; merge actions deferred.
+- *agents*: =get_duplicate_candidates= exposed via =agents/lib/api_tools.py= (passthrough TOOL_SHAPES entry), registered in =lib/toolsets.py= under the =career_caddy= scope, and surfaced as an =@server.tool()= in =agents/mcp_servers/public_server.py= so future agent verification is one MCP call instead of a curl ritual.
+- =tests/test_toolsets.py= count bumped 28 → 29.
+
+Local =make ci= green (lint + tests in parallel via Dagger). Sibling =test_job_post_triage= suite still green (21 total). Agents toolset/api_tools tests green (62 total).
+
+Follow-ups:
+- =@ember/render-modifiers= + ={{did-update}}= on the banner so navigating jp.show → jp.show with different ids re-fetches in place. Currently shows stale candidates from the previous jp on same-template route swap until next route entry.
+- 'Mark as duplicate of X' / 'Mark as different jobs' actions (POST /job-posts/:id/duplicate-decisions/). Companion to the cc_auto incoherence detection bug (sibling Inbox/Bug entry).
+
+Original brief:
+
+Background:
+The system has signals that two JobPost rows might be the same job, but jp.show today does not surface them:
+1. Title fingerprint match (same company, title differs only by trailing suffix like '75-100% FTE') -- jp 999 + jp 1428 are real dupes that fingerprint dedupe missed because the title strings differed by a suffix.
+2. Same hostname on link (multiple ZipRecruiter /km/ tokens point to the same underlying job).
+3. Existing scrape on this jp's host has landed on a different jp via fingerprint dedupe -- strong signal that the link goes somewhere else than what the jp says.
+4. JobPostDescriptionDecision audit rows show arbitrations between this jp and other jp's.
+
+UX target:
+On jp.show, render a banner above the description when one or more candidates exist:
+  'Possibly the same as: [#1428 START UP BUS DEV & PROG MGR ...] (matched by company + title suffix)'
+  'Resolved link points to a page already scraped under [#1428 ...]'
+With actions:
+  - 'Mark as duplicate of #1428' -> sets duplicate_of_id, redirects future views to canonical
+  - 'Mark as different jobs' -> records a not_duplicate decision so banner stops surfacing this pair
+  - 'Open the other post'
+
+API contract:
+GET /api/v1/job-posts/:id/duplicate-candidates/
+-> [{candidate_id, candidate_title, match_signals: ['title_suffix', 'host_match', 'scrape_redirect'], confidence: 'high'|'medium'|'low'}]
+
+Frontend:
+- New component DuplicateBanner in frontend/app/components/job-post/duplicate-banner.hbs
+- Tailwind utilities only (HyperUI dark-mode pattern)
+- Render conditionally when candidates list is non-empty
+- 'Mark as duplicate' performs PATCH /job-posts/:id/ {duplicate_of_id} and transitions to the canonical
+- 'Mark as different' POSTs to /job-posts/:id/duplicate-decisions/ with choice='not_duplicate'
+
+Reuse on the dedupe path:
+The API's get_or_create dedupe key (title, company) is already used in JobPostExtractor. Reuse the SAME normalizer in the duplicate-candidate query so the in-app banner matches what fingerprint dedupe would have caught had the titles been normalized.
+
+Tags: frontend, dedupe, api
+
+Code touchpoints:
+- api/job_hunting/api/views/job_posts.py: new action duplicate_candidates
+- api/job_hunting/lib/parsers/job_post_extractor.py: factor out title normalizer used by get_or_create
+- api/job_hunting/models/job_post_duplicate_decision.py: new model for not_duplicate dismissals
+- frontend/app/components/job-post/duplicate-banner.{hbs,js}
+- frontend/app/templates/job-posts/show.hbs: insert banner above description
 ** Enhancement
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:END:
 ** Bug
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
+*** TODO cc_auto creates JobPost with mismatched link/title/company (multi-job digest hallucination)
+Repro:
+- jp 1724 stored as title='Junior to Mid Level Full Stack Developer', company='Web Connectivity LLC', link=ziprecruiter.com/km/AAGj-... (per-recipient tracking token), description='This remote position offers a salary range of $50K - $85K per year.'
+- Following the link in a browser lands on the SNBL bilingual BD/PM job at SNBL USA -- a totally different job (different title, different company, different role).
+- Extension push from that page correctly extracted SNBL content and deduped to existing jp 1428 (the real SNBL post). jp 1724 stayed as garbage data.
+
+Root cause:
+cc_auto's email->JobPost path uses the LLM via MCP tool create_job_post_with_company_check (in mcp.careercaddy.online/mcp). When the source email is a multi-job digest, the LLM can lose cross-row alignment and pass title/company from one row with the link from another. The API endpoint accepts whatever the agent passes -- no coherence check.
+
+Cost: every hallucinated jp is a false positive in the user's library. Future enrichment attempts (in-app scrape using the bad link) compound it -- they will dedupe to a different post via fingerprint and leave the bad jp empty forever.
+
+Fix scope (api + cc_auto):
+1. cc_auto side: when a digest email yields multiple job-candidate spans, force one MCP call per span and pass the link+title+company as a single atomic unit per call. Reject the LLM output if the link host does not appear in the same span as the title/company text.
+2. api side defense-in-depth: when create_job_post_with_company_check is called and the link is fetchable, optionally do a cheap HEAD or short GET, and if the page <title> or <h1> contradicts the title arg by a wide edit-distance, refuse with 422 incoherent_job_post.
+3. Mark jp 1724 as duplicate_of_id=NULL but flag it in the audit pass below.
+
+Ops cleanup:
+- Run a one-time scan: for each cc_auto-sourced jp with thin description, GET the link, parse title, compare to stored title. Surface mismatches in a triage list. Don't auto-delete; human review.
+
+Tags: cc_auto, api, dedupe, bugs
+
+Code touchpoints:
+- agents/mcp_servers/public_server.py + chat_server.py: create_job_post_with_company_check tool definition.
+- ~/Projects/career_caddy_automation: the agent that drives the email triage; needs span-atomic call pattern.
+- api/job_hunting/api/views/job_posts.py: create endpoint accepts title/company/link without coherence check.
+*** TODO Extension push: no feedback path -- user cannot find where the scrape landed
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:END:
+Repro (production, 2026-05-04 -> 2026-05-05):
+- jp 1724 (Junior to Mid Level Full Stack Developer, source=email) created by cc_auto at 23:04 UTC.
+- User opened jp 1724 in browser; the source URL is a ZipRecruiter /km/AAGj-... tracking link that (when followed) lands on a /jobs/snbl-usa-...?expired_link=1 page (a different job).
+- User clicked the extension popup. Extension grabbed body.innerText + location.href and POSTed /api/v1/scrapes/from-text/ (source=extension, link=resolved /jobs/snbl-usa-...).
+- API: created Scrape 323 (status=pending), called parse_scrape sync. parse() ran the LLM, extracted SNBL bilingual BD job. Cold-create get_or_create(title, company) matched the EXISTING jp 1428 (cc_auto-stub from 2026-04-29, same title+company). last_outcome=duplicate_via_fingerprint. Scrape 323 linked to jp 1428.
+- Auto-score fired against jp 1428: Score 143, value=15. (jp1428.top_score is 15 -- matches.)
+- Extension background.js polled scrape 323 -> terminal completed -> POST score (already done by from_text but extension does it again? to confirm) -> OS notification fires "Career Caddy -- scored 15 ✓ START UP BUS DEV & PROG MGR ...".
+
+User outcome: viewed /job-posts/1724, saw no scrape, reported "didn't land." The scrape DID land -- on jp 1428. The user has no path to discover that.
+
+Verified state via MCP:
+- find_job_post_by_link(scrape 323's url) -> [] (jp 1428 still holds its old /km/AAH... tracking link, never updated to the canonical /jobs/snbl-usa-... URL the new scrape resolved).
+- get_scores(job_post_id=1428) -> Score 143 (the one auto-fired by from_text). Confirms scrape 323 -> jp 1428.
+- search_job_posts("START UP BUS DEV") -> jp 999 + jp 1428 (two existing dupes of the SNBL job from earlier email scrapes; their /km/ links differ per-recipient so canonical_link dedupe could never collapse them).
+
+Premier-feature gaps to close (from_text is the extension's selling point):
+
+A. Response payload contract -- /scrapes/from-text/ returns ONLY the Scrape resource. The extension has to do a follow-up GET include=job-post to learn where it landed. Make the response include the JobPost id + title + outcome (created / duplicate_via_link / duplicate_via_fingerprint / updated_stub / updated_stub_via_fingerprint) inline, e.g.
+  {data: <scrape>, meta: {job_post: {id, title, frontend_url, outcome}}}
+
+B. Extension popup feedback -- popup currently shows fire-and-forget "Sent ✓ -- watch for a notification." before closing. Should display a result card with the resolved JobPost title + clickable link (target=_blank to the jp frontend_url), and surface dedupe outcome ("linked to existing post" vs "created new").
+
+C. Notification click action -- background.js fires a plain notification with the title. Add a click handler that opens the resulting jp's frontend URL. MV3 supports api.notifications.onClicked.
+
+D. Data-hygiene: when parse_scrape hits duplicate_via_fingerprint and the new scrape.url is more canonical than the existing job_post.link (e.g. existing has /km/<token> tracking URL, new has /jobs/<slug> resolved URL), upgrade JobPost.link + canonical_link. Tests exist for stub-merging but not for link-canonicalization on dupe.
+
+E. Pre-existing fingerprint-dedupe gap -- jp 999 and jp 1428 are dupes of the same job that fingerprint dedupe never collapsed because their titles differ by a trailing suffix ("75-100% FTE"). Worth a normalizer: lowercase + strip trailing FTE/percentage/parens for the get_or_create lookup, while preserving the original on display.
+
+Tags: extension, dedupe, api, frontend, bugs
+
+Code touchpoints:
+- api/job_hunting/api/views/scrapes.py from_text (lines 582-711): build the meta block on the response.
+- api/job_hunting/lib/parsers/job_post_extractor.py process_evaluation duplicate_via_fingerprint branch (lines 451-467): add link-canonicalization upgrade.
+- frontend/public/extensions/career-caddy-sender/popup.js (sendBtn handler 344-460): show result card before window.close.
+- frontend/public/extensions/career-caddy-sender/background.js (notify, pollScrapeOnce, pollScoreOnce): add notifications.onClicked handler with stored frontendUrl.
+
+Tests to add:
+- test_from_text_response_includes_resolved_job_post (no mock; parse_scrape stubbed to set scrape.job_post_id)
+- test_from_text_response_meta_outcome_for_duplicate_via_fingerprint
+- test_duplicate_via_fingerprint_upgrades_link_when_more_canonical
+*** TODO from-text endpoint creates orphan scrape -- no JobPost link, no dedupe
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:END:
+Repro: extension v0.3.6 pushed page text from a ZipRecruiter listing on 2026-05-05 01:08:38 UTC.
+
+Result:
+- POST /api/v1/scrapes/from-text/ -> 202
+- Scrape 323 created (SNBL bilingual BD job, full content extracted)
+- Score 143 created
+- NO JobPost created; scrape not attached to any existing JobPost
+- search_job_posts "SNBL Japanese" returns 0; latest JobPost ids unchanged after the push
+
+User symptom: opened /job-posts/1724 expecting to see the scrape; jp 1724 is an unrelated email-sourced Junior Full Stack Developer post created by cc_auto an hour earlier. Frontend GET /api/v1/job-posts/1724/?include=scrapes returns no scrapes (correct -- they are not linked).
+
+Root cause hypotheses (need to read api views/scrapes.py from-text action):
+1. from-text view writes Scrape + Score but never creates/links a JobPost.
+2. Even if it tried to dedupe by canonical_link, the email path stores tracking links (ziprecruiter.com/km/AAGj-...) while the extension push has the resolved canonical (ziprecruiter.com/jobs/snbl-usa-...). Different strings -> no canonical match. Need fingerprint-based dedupe per Architecture/URL storage + dedupe pipeline; see feedback memory dedupe-first-on-new-write-paths.
+
+Logfire trace: 2026-05-05T01:08:38Z, span POST /api/v1/scrapes/from-text/, Firefox UA on Linux.
+
+Fix scope:
+- from-text must either (a) create a JobPost and link the scrape, or (b) dedupe to existing jp via fingerprint + canonical and link to that.
+- Decide: does extension push always create a new jp, or look up first? Probably look up by canonical_link after url_rewrites normalization, fall back to fingerprint, only create if neither matches.
+- Score 143 also dangles -- needs same job_post linkage.
+
+Tags: extension, dedupe, api, bugs, scrape
 *** TODO SPC o c should reload todo.org before capture
 :PROPERTIES:
 :CREATED:  [2026-05-04]
 :TAGS:     bugs:emacs:
+:LAST_TOUCHED: [2026-05-04]
 :END:
 org-capture via =SPC o c= writes against the in-memory buffer; if
 todo.org was edited externally (e.g. by =cc-todo-*= helpers from a
