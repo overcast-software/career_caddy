@@ -5553,3 +5553,69 @@ CLOSED: [2026-05-04 Mon 17:00]
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
 Fixed three bugs on jp.show.scores: (1) PowerSelect ▼ triangle escaped trigger container — app.css position:static→relative on .ember-power-select-trigger; (2) resume relationship not sent to API — was using peekRecord which returned null, switched to pass selectedResume directly; (3) new score row did not appear after submit — was using store.query snapshot (AdapterPopulatedRecordArray), switched route to return jobPost.hasMany(scores).value() after store.query so Ember Data live ManyArray handles createRecord auto-append. Also widened PowerSelect trigger (removed max-w-xs).
+
+* DONE jp.show duplicate-candidate banner -- first cut shipped
+CLOSED: [2026-05-04]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-04 Mon 19:21
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+Shipped on branch =feat/jp-duplicate-candidates= across all four repos:
+
+- *api*: =GET /api/v1/job-posts/:id/duplicate-candidates/= action on JobPostViewSet (=api/job_hunting/api/views/jobs.py=). Three signal classes: =canonical_link= and =fingerprint= (high confidence), =title_similarity= (medium, catches the suffix-drift case fingerprint hashing can't — e.g. jp 999 vs jp 1428 'START UP BUS DEV ... 75-100% FTE'). Excludes self + duplicate_of chain, visibility-scoped per =list()=.
+- *api tests*: =api/job_hunting/tests/test_job_post_duplicate_candidates.py= — 9 tests covering each signal, exclusion, payload shape, and non-staff visibility filter.
+- *frontend*: =JobPosts::DuplicateCandidates= component (=app/components/job-posts/duplicate-candidates.{js,hbs}=) mounted above the description in =app/templates/job-posts/show.hbs=. Tailwind/HyperUI dark-mode utilities. Read-only first cut: clicking a candidate LinkTo-navigates; merge actions deferred.
+- *agents*: =get_duplicate_candidates= exposed via =agents/lib/api_tools.py= (passthrough TOOL_SHAPES entry), registered in =lib/toolsets.py= under the =career_caddy= scope, and surfaced as an =@server.tool()= in =agents/mcp_servers/public_server.py= so future agent verification is one MCP call instead of a curl ritual.
+- =tests/test_toolsets.py= count bumped 28 → 29.
+
+Local =make ci= green (lint + tests in parallel via Dagger). Sibling =test_job_post_triage= suite still green (21 total). Agents toolset/api_tools tests green (62 total).
+
+Follow-ups:
+- =@ember/render-modifiers= + ={{did-update}}= on the banner so navigating jp.show → jp.show with different ids re-fetches in place. Currently shows stale candidates from the previous jp on same-template route swap until next route entry.
+- 'Mark as duplicate of X' / 'Mark as different jobs' actions (POST /job-posts/:id/duplicate-decisions/). Companion to the cc_auto incoherence detection bug (sibling Inbox/Bug entry).
+
+Original brief:
+
+Background:
+The system has signals that two JobPost rows might be the same job, but jp.show today does not surface them:
+1. Title fingerprint match (same company, title differs only by trailing suffix like '75-100% FTE') -- jp 999 + jp 1428 are real dupes that fingerprint dedupe missed because the title strings differed by a suffix.
+2. Same hostname on link (multiple ZipRecruiter /km/ tokens point to the same underlying job).
+3. Existing scrape on this jp's host has landed on a different jp via fingerprint dedupe -- strong signal that the link goes somewhere else than what the jp says.
+4. JobPostDescriptionDecision audit rows show arbitrations between this jp and other jp's.
+
+UX target:
+On jp.show, render a banner above the description when one or more candidates exist:
+  'Possibly the same as: [#1428 START UP BUS DEV & PROG MGR ...] (matched by company + title suffix)'
+  'Resolved link points to a page already scraped under [#1428 ...]'
+With actions:
+  - 'Mark as duplicate of #1428' -> sets duplicate_of_id, redirects future views to canonical
+  - 'Mark as different jobs' -> records a not_duplicate decision so banner stops surfacing this pair
+  - 'Open the other post'
+
+API contract:
+GET /api/v1/job-posts/:id/duplicate-candidates/
+-> [{candidate_id, candidate_title, match_signals: ['title_suffix', 'host_match', 'scrape_redirect'], confidence: 'high'|'medium'|'low'}]
+
+Frontend:
+- New component DuplicateBanner in frontend/app/components/job-post/duplicate-banner.hbs
+- Tailwind utilities only (HyperUI dark-mode pattern)
+- Render conditionally when candidates list is non-empty
+- 'Mark as duplicate' performs PATCH /job-posts/:id/ {duplicate_of_id} and transitions to the canonical
+- 'Mark as different' POSTs to /job-posts/:id/duplicate-decisions/ with choice='not_duplicate'
+
+Reuse on the dedupe path:
+The API's get_or_create dedupe key (title, company) is already used in JobPostExtractor. Reuse the SAME normalizer in the duplicate-candidate query so the in-app banner matches what fingerprint dedupe would have caught had the titles been normalized.
+
+Tags: frontend, dedupe, api
+
+Code touchpoints:
+- api/job_hunting/api/views/job_posts.py: new action duplicate_candidates
+- api/job_hunting/lib/parsers/job_post_extractor.py: factor out title normalizer used by get_or_create
+- api/job_hunting/models/job_post_duplicate_decision.py: new model for not_duplicate dismissals
+- frontend/app/components/job-post/duplicate-banner.{hbs,js}
+- frontend/app/templates/job-posts/show.hbs: insert banner above description
