@@ -5540,3 +5540,16 @@ CLOSED: [2026-05-04 Mon 16:10]
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
 InfinityLoader was wired in the frontend but the API returned no meta/links envelope. Fixed JobApplicationViewSet.list() in api/job_hunting/api/views/jobs.py to emit the same meta + links.next pagination block as JobPostViewSet.
+
+* DONE fix jp.show.score UX bugs
+CLOSED: [2026-05-04 Mon 17:00]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:ARCHIVE_TIME: 2026-05-04 Mon 17:07
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Fixed three bugs on jp.show.scores: (1) PowerSelect ▼ triangle escaped trigger container — app.css position:static→relative on .ember-power-select-trigger; (2) resume relationship not sent to API — was using peekRecord which returned null, switched to pass selectedResume directly; (3) new score row did not appear after submit — was using store.query snapshot (AdapterPopulatedRecordArray), switched route to return jobPost.hasMany(scores).value() after store.query so Ember Data live ManyArray handles createRecord auto-append. Also widened PowerSelect trigger (removed max-w-xs).

@@ -38,12 +38,6 @@ Archive (0)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
-** DONE fix jp.show.score UX bugs
-CLOSED: [2026-05-04 Mon 17:00]
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-04]
-:END:
-Fixed three bugs on jp.show.scores: (1) PowerSelect ▼ triangle escaped trigger container — app.css position:static→relative on .ember-power-select-trigger; (2) resume relationship not sent to API — was using peekRecord which returned null, switched to pass selectedResume directly; (3) new score row did not appear after submit — was using store.query snapshot (AdapterPopulatedRecordArray), switched route to return jobPost.hasMany(scores).value() after store.query so Ember Data live ManyArray handles createRecord auto-append. Also widened PowerSelect trigger (removed max-w-xs).
 ** Idea
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-04]
