@@ -50,11 +50,16 @@ Archive (0)
 ** Bug
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
-*** TODO cc_auto creates JobPost with mismatched link/title/company (multi-job digest hallucination)
+*** STRT cc_auto creates JobPost with mismatched link/title/company (multi-job digest hallucination)
 Repro:
 - jp 1724 stored as title='Junior to Mid Level Full Stack Developer', company='Web Connectivity LLC', link=ziprecruiter.com/km/AAGj-... (per-recipient tracking token), description='This remote position offers a salary range of $50K - $85K per year.'
 - Following the link in a browser lands on the SNBL bilingual BD/PM job at SNBL USA -- a totally different job (different title, different company, different role).
 - Extension push from that page correctly extracted SNBL content and deduped to existing jp 1428 (the real SNBL post). jp 1724 stayed as garbage data.
+
+Progress [2026-05-04]:
+- [X] Leg 3 (ops cleanup) shipped: =python manage.py scan_cc_auto_hallucinations= walks cc_auto-sourced JobPosts (source in email/email_direct), GETs each link, parses page <title>, classifies match/mismatch/indeterminate via Jaccard + SequenceMatcher. Read-only, markdown table to stdout + optional --json sidecar. 11 unit tests cover similarity helpers, --source / --include-thin-only filters, fetch failure bucket, JSON sidecar shape.
+- [ ] Leg 1 (cc_auto side, span-atomic MCP calls) -- NEXT.
+- [ ] Leg 2 (api 422 incoherent_job_post defense) -- after leg 1 lands.
 
 Root cause:
 cc_auto's email->JobPost path uses the LLM via MCP tool create_job_post_with_company_check (in mcp.careercaddy.online/mcp). When the source email is a multi-job digest, the LLM can lose cross-row alignment and pass title/company from one row with the link from another. The API endpoint accepts whatever the agent passes -- no coherence check.
