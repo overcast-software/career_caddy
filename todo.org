@@ -56,10 +56,11 @@ Repro:
 - Following the link in a browser lands on the SNBL bilingual BD/PM job at SNBL USA -- a totally different job (different title, different company, different role).
 - Extension push from that page correctly extracted SNBL content and deduped to existing jp 1428 (the real SNBL post). jp 1724 stayed as garbage data.
 
-Progress [2026-05-04]:
-- [X] Leg 3 (ops cleanup) shipped: =python manage.py scan_cc_auto_hallucinations= walks cc_auto-sourced JobPosts (source in email/email_direct), GETs each link, parses page <title>, classifies match/mismatch/indeterminate via Jaccard + SequenceMatcher. Read-only, markdown table to stdout + optional --json sidecar. 11 unit tests cover similarity helpers, --source / --include-thin-only filters, fetch failure bucket, JSON sidecar shape.
-- [ ] Leg 1 (cc_auto side, span-atomic MCP calls) -- NEXT.
-- [ ] Leg 2 (api 422 incoherent_job_post defense) -- after leg 1 lands.
+Progress [2026-05-05]:
+- [X] Leg 3 (ops cleanup) shipped: =python manage.py scan_cc_auto_hallucinations= walks cc_auto-sourced JobPosts (source in email/email_direct), GETs each link, parses page <title>, classifies match/mismatch/indeterminate via Jaccard + SequenceMatcher. Read-only, markdown table to stdout + optional --json sidecar. Auth-wall guard (LinkedIn / Cloudflare login pages → indeterminate) shipped after the false-positive on jp 1730 in prod.
+- [X] Leg 4 (extension as source-of-truth, self-heal) shipped: trust ranking SOURCE_TRUST in models/job_post_dedupe.py (extension > paste > scrape > redirect > manual > email). When parse_scrape's dedupe finds an existing post AND the new source outranks the existing source, all overwritable fields are replaced in-place, source flips to new, JobPostOverwriteDecision audit row records the diff. Symmetric across link-hit and fingerprint-hit branches. The scrapes/from-text 409 short-circuit is now trust-aware too. 11 new tests + 3 existing tests adjusted to same-trust setups for the no-flip invariant. The cc_auto self-heal path: an extension push that canonical-link-collides with a hallucinated email post fixes it on the spot.
+- [ ] Leg 1 (cc_auto side, span-atomic MCP calls) -- still useful even after leg 4: leg 4 self-heals AFTER user pushes; leg 1 prevents the hallucination from landing in the first place. Lower priority now that leg 4 covers the worst case.
+- [ ] Leg 2 (api 422 incoherent_job_post defense) -- after leg 1 lands. Same priority drop as leg 1.
 
 Root cause:
 cc_auto's email->JobPost path uses the LLM via MCP tool create_job_post_with_company_check (in mcp.careercaddy.online/mcp). When the source email is a multi-job digest, the LLM can lose cross-row alignment and pass title/company from one row with the link from another. The API endpoint accepts whatever the agent passes -- no coherence check.
