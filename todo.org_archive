@@ -5619,3 +5619,102 @@ Code touchpoints:
 - api/job_hunting/models/job_post_duplicate_decision.py: new model for not_duplicate dismissals
 - frontend/app/components/job-post/duplicate-banner.{hbs,js}
 - frontend/app/templates/job-posts/show.hbs: insert banner above description
+
+* DONE Extension push: no feedback path -- closed, wrong root cause
+CLOSED: [2026-05-04]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:ARCHIVE_TIME: 2026-05-04 Mon 19:29
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Bug
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+Filed earlier today when the symptom was misread as "extension push provides no UI feedback." Investigation confirmed the extension actually does fire an OS notification ("scored N ✓ TITLE") and the underlying scrape was correctly linked to jp 1428 via fingerprint dedupe (Score 143 attached to jp 1428, top_score=15 confirms). The user's real concern was twofold and both branches are tracked separately:
+- The =/jp.show/= duplicate-candidate banner shipped on branch =feat/jp-duplicate-candidates= (parent commit 423f652).
+- cc_auto hallucination producing jp 1724 with mismatched link/title/company is open as a sibling Inbox/Bug entry above.
+
+Closing to keep the Inbox honest. Original brief follows for forensic context.
+
+Repro (production, 2026-05-04 -> 2026-05-05):
+- jp 1724 (Junior to Mid Level Full Stack Developer, source=email) created by cc_auto at 23:04 UTC.
+- User opened jp 1724 in browser; the source URL is a ZipRecruiter /km/AAGj-... tracking link that (when followed) lands on a /jobs/snbl-usa-...?expired_link=1 page (a different job).
+- User clicked the extension popup. Extension grabbed body.innerText + location.href and POSTed /api/v1/scrapes/from-text/ (source=extension, link=resolved /jobs/snbl-usa-...).
+- API: created Scrape 323 (status=pending), called parse_scrape sync. parse() ran the LLM, extracted SNBL bilingual BD job. Cold-create get_or_create(title, company) matched the EXISTING jp 1428 (cc_auto-stub from 2026-04-29, same title+company). last_outcome=duplicate_via_fingerprint. Scrape 323 linked to jp 1428.
+- Auto-score fired against jp 1428: Score 143, value=15. (jp1428.top_score is 15 -- matches.)
+- Extension background.js polled scrape 323 -> terminal completed -> POST score (already done by from_text but extension does it again? to confirm) -> OS notification fires "Career Caddy -- scored 15 ✓ START UP BUS DEV & PROG MGR ...".
+
+User outcome: viewed /job-posts/1724, saw no scrape, reported "didn't land." The scrape DID land -- on jp 1428. The user has no path to discover that.
+
+Verified state via MCP:
+- find_job_post_by_link(scrape 323's url) -> [] (jp 1428 still holds its old /km/AAH... tracking link, never updated to the canonical /jobs/snbl-usa-... URL the new scrape resolved).
+- get_scores(job_post_id=1428) -> Score 143 (the one auto-fired by from_text). Confirms scrape 323 -> jp 1428.
+- search_job_posts("START UP BUS DEV") -> jp 999 + jp 1428 (two existing dupes of the SNBL job from earlier email scrapes; their /km/ links differ per-recipient so canonical_link dedupe could never collapse them).
+
+Premier-feature gaps to close (from_text is the extension's selling point):
+
+A. Response payload contract -- /scrapes/from-text/ returns ONLY the Scrape resource. The extension has to do a follow-up GET include=job-post to learn where it landed. Make the response include the JobPost id + title + outcome (created / duplicate_via_link / duplicate_via_fingerprint / updated_stub / updated_stub_via_fingerprint) inline, e.g.
+  {data: <scrape>, meta: {job_post: {id, title, frontend_url, outcome}}}
+
+B. Extension popup feedback -- popup currently shows fire-and-forget "Sent ✓ -- watch for a notification." before closing. Should display a result card with the resolved JobPost title + clickable link (target=_blank to the jp frontend_url), and surface dedupe outcome ("linked to existing post" vs "created new").
+
+C. Notification click action -- background.js fires a plain notification with the title. Add a click handler that opens the resulting jp's frontend URL. MV3 supports api.notifications.onClicked.
+
+D. Data-hygiene: when parse_scrape hits duplicate_via_fingerprint and the new scrape.url is more canonical than the existing job_post.link (e.g. existing has /km/<token> tracking URL, new has /jobs/<slug> resolved URL), upgrade JobPost.link + canonical_link. Tests exist for stub-merging but not for link-canonicalization on dupe.
+
+E. Pre-existing fingerprint-dedupe gap -- jp 999 and jp 1428 are dupes of the same job that fingerprint dedupe never collapsed because their titles differ by a trailing suffix ("75-100% FTE"). Worth a normalizer: lowercase + strip trailing FTE/percentage/parens for the get_or_create lookup, while preserving the original on display.
+
+Tags: extension, dedupe, api, frontend, bugs
+
+Code touchpoints:
+- api/job_hunting/api/views/scrapes.py from_text (lines 582-711): build the meta block on the response.
+- api/job_hunting/lib/parsers/job_post_extractor.py process_evaluation duplicate_via_fingerprint branch (lines 451-467): add link-canonicalization upgrade.
+- frontend/public/extensions/career-caddy-sender/popup.js (sendBtn handler 344-460): show result card before window.close.
+- frontend/public/extensions/career-caddy-sender/background.js (notify, pollScrapeOnce, pollScoreOnce): add notifications.onClicked handler with stored frontendUrl.
+
+Tests to add:
+- test_from_text_response_includes_resolved_job_post (no mock; parse_scrape stubbed to set scrape.job_post_id)
+- test_from_text_response_meta_outcome_for_duplicate_via_fingerprint
+- test_duplicate_via_fingerprint_upgrades_link_when_more_canonical
+
+* DONE from-text endpoint creates orphan scrape -- closed, not orphan
+CLOSED: [2026-05-04]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:ARCHIVE_TIME: 2026-05-04 Mon 19:29
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Bug
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+Filed as the very first read on the symptom; verified wrong. Scrape 323 was correctly linked to jp 1428 via the =duplicate_via_fingerprint= path in JobPostExtractor (matched on title + company). The auto-score in =from_text= subsequently fired against jp 1428 (Score 143, value 15 = jp 1428.top_score). No orphan. The actual root cause was upstream cc_auto hallucination on jp 1724 (sibling Inbox/Bug entry). Closing.
+
+Original brief follows for forensic context.
+
+Repro: extension v0.3.6 pushed page text from a ZipRecruiter listing on 2026-05-05 01:08:38 UTC.
+
+Result:
+- POST /api/v1/scrapes/from-text/ -> 202
+- Scrape 323 created (SNBL bilingual BD job, full content extracted)
+- Score 143 created
+- NO JobPost created; scrape not attached to any existing JobPost
+- search_job_posts "SNBL Japanese" returns 0; latest JobPost ids unchanged after the push
+
+User symptom: opened /job-posts/1724 expecting to see the scrape; jp 1724 is an unrelated email-sourced Junior Full Stack Developer post created by cc_auto an hour earlier. Frontend GET /api/v1/job-posts/1724/?include=scrapes returns no scrapes (correct -- they are not linked).
+
+Root cause hypotheses (need to read api views/scrapes.py from-text action):
+1. from-text view writes Scrape + Score but never creates/links a JobPost.
+2. Even if it tried to dedupe by canonical_link, the email path stores tracking links (ziprecruiter.com/km/AAGj-...) while the extension push has the resolved canonical (ziprecruiter.com/jobs/snbl-usa-...). Different strings -> no canonical match. Need fingerprint-based dedupe per Architecture/URL storage + dedupe pipeline; see feedback memory dedupe-first-on-new-write-paths.
+
+Logfire trace: 2026-05-05T01:08:38Z, span POST /api/v1/scrapes/from-text/, Firefox UA on Linux.
+
+Fix scope:
+- from-text must either (a) create a JobPost and link the scrape, or (b) dedupe to existing jp via fingerprint + canonical and link to that.
+- Decide: does extension push always create a new jp, or look up first? Probably look up by canonical_link after url_rewrites normalization, fall back to fingerprint, only create if neither matches.
+- Score 143 also dangles -- needs same job_post linkage.
+
+Tags: extension, dedupe, api, bugs, scrape
