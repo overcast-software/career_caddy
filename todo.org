@@ -109,10 +109,35 @@ what jp.show.job-application.show
 :PROPERTIES:
 :TRIAGE_NOTE: candidate=infra conf=0.75
 :END:
-** TODO caddy-web cannont get screenshots
+** STRT caddy-web cannont get screenshots
 :PROPERTIES:
 :TRIAGE_NOTE: candidate=infra conf=0.75
+:LAST_TOUCHED: [2026-05-05]
 :END:
+Root cause [2026-05-05]: the happy-path screenshot uploader in
+=agents/scrape_graph/nodes_scrape.py::_screenshot_and_upload= called
+=page.screenshot(path=..., full_page=True)= with no explicit timeout,
+hitting Playwright's 30s "wait for fonts to load" default on every
+LinkedIn login-wall page. Exception caught + logged at WARNING, no
+upload attempted. Failure-path uploader in
+=agents/scrape_graph/_artifacts.py::capture_debug_artifact= already
+used =full_page=False, timeout=5_000= and worked — that's why scrape
+322 (=ziprecruiter.com_obstacle_fail_*=) had a screenshot but 320,
+321, 323, 324, 325 did not. Verified the boundary by listing
+screenshots for each.
+
+Fix [2026-05-05]: extracted =upload_page_screenshot()= shared helper
+in =_artifacts.py= using the safe defaults (viewport-only, 5s
+timeout, in-memory POST — no disk round-trip, no
+=mcp_servers.browser_server.SCREENSHOT_DIR= dependency).
+=_screenshot_and_upload= and =capture_debug_artifact= now both call
+it. 6 new tests in =tests/test_debug_artifact_on_fail.py= cover the
+happy-path filename schema, the safe-defaults regression guard, and
+failure modes.
+
+Stays STRT until parent Deploy lands and a fresh scrape produces a
+=linkedin.com_*= screenshot (no =_obstacle_fail_= segment). Verify
+by hitting =list_scrape_screenshots= on the next post-deploy scrape.
 ** TODO https:  careercaddy.online job-posts 1551
 why two canonical?
 ** boot IP 130.12.180.144
