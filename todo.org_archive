@@ -5718,3 +5718,24 @@ Fix scope:
 - Score 143 also dangles -- needs same job_post linkage.
 
 Tags: extension, dedupe, api, bugs, scrape
+
+* SHIPPED search still disappears :frontend:scrape:
+CLOSED: [2026-04-30 Thu]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-05 Tue 12:33
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+PR #88 only fixed =scrapes/index=. The other six list routes with a
+=search= QP + =refreshModel: true= (=job-posts=, =companies=, =answers=,
+=questions=, =summaries=, =job-applications=) had the same symptom: in-route
+refresh on each keystroke rendered =index-loading.hbs= (or =loading.hbs=),
+which has no =<:subnav>= slot, so the SearchBar was torn down + remounted
+(focus loss + flicker). Mirrored the =scrapes/index.js= =loading()=
+action override into all six routes — return =true= when the transition
+is in-route (=transition.from.name === this.routeName=) so the substate
+is suppressed; cold loads still get the skeleton.
+[[*Search input flicker on /scrapes \[frontend\]][Original PR #88 — only covered /scrapes]]
