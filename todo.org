@@ -13,13 +13,13 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (18)
-  Bug (2)
-  Enhancement (0)
-  Feature (0)
+Inbox (25)
+  Bug (3)
+  Enhancement (2)
+  Feature (2)
   Idea (0)
 Backlog [0/3]
-Active [4/39]
+Active [3/38]
 Icebox [0/4]
 Archive (0)
 #+end_example
@@ -38,18 +38,6 @@ Archive (0)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
-** DONE Extension v1.0.0 store-submission prep
-CLOSED: [2026-05-06 Wed 13:47]
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-06]
-:END:
-Crossed the 1.0.0 line and prepped artifacts for CWS Stable + CWS Beta + AMO Listed + AMO Self-Distributed submissions. Frontend changes: manifest.json bumped 0.3.6 → 1.0.0 (then iterated to 1.0.20); host_permissions narrowed from <all_urls> to api.careercaddy.online + careercaddy.online per security review (activeTab covers body-read on Send); palette-only theme sync restored (importPaletteFromActiveTab) so popup light/dark stays popup-local while palette follows the site; pending-send marker added so popup re-open during fetch shows Sending… instead of a fresh Send button; username persists per keystroke for password-manager copy-paste survival; .gitignore excludes public/extensions/*.zip artifacts. New /docs/extension-privacy/ route + template register the listing privacy URL. Final 1280x800 store-asset PNGs live at frontend/public/extensions/career-caddy-sender/store-assets/. Iframe-embedded ATS expansion (option 2 of the security review) deferred — no field hits yet, friends/family rapport means we can iterate.
-** DONE Landing hero refresh + caddy photo update                                                          :frontend:
-CLOSED: [2026-05-05]
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-06]
-:END:
-New copy (Your job search needs a caddy.) plus tighter sub-line. Hero text moved into a semi-transparent rounded card at bottom-left so it reads against the white shirt area of the new ian_finnis.webp. Pills compressed to four (AI fit scoring & explanations / Cover letters in your voice / Full application tracking / Browser & email capture) for balanced wrap on every viewport. Ships before screenshot capture.
 ** TODO Dedupe miss: email-source posts keep wrapper canonical_link, no ATS click-through :api:agents:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
@@ -65,12 +53,6 @@ Root cause (per user): the scrape pipeline does not click through ATS chains (Se
 Secondary: fingerprint-based dedupe also missed despite ~95% identical description text. Worth checking why.
 
 Fix surfaces: agents scrape graph (ATS click-through), api dedupe pipeline (fingerprint match strength). Not an extension bug.
-** DONE Add nested job-posts.show.scores.show route                                                          :frontend:
-CLOSED: [2026-05-05]
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-05]
-:END:
-Extension popup links to /job-posts/<id>/scores/<scoreId> after Score-this-post; that URL 404d in prod because frontend only had a leaf scores route. Added router.js nested show, route+controller+template under app/{routes,controllers,templates}/job-posts/show/scores/show, and {{outlet}} in scores.hbs so detail renders below the list.
 ** TODO score spinner not standard
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
@@ -82,20 +64,6 @@ job-post.show.delete
 ** TODO answer prompt injection jp.show.questions.show.answers.index
 ** TODO omarchy themer needs to change the background highlight darker.
 /home/oldbones/Pictures/screenshot-2026-05-05_09-16-12.png
-** DONE find the link the user is currently on and if we have a jp. link to it for them. 
-CLOSED: [2026-05-05 Tue 12:39]
-** DONE link to created or duplicate is needed :extension:
-CLOSED: [2026-05-06 Wed 13:47]
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-06]
-:END:
-B2b shipped: popup builds =/job-posts/<id>= link on Send 200/202 and 409
-duplicate paths, surfaces it as a primary CTA below the status line, and
-the OS notification carries the same link via background.js
-=cc-notify-{created,existing}=. Auto-score path links to =/scores=
-subroute (UX5).
-** DONE send... feels like it's frozen without motion :extension:
-CLOSED: [2026-05-05 Tue 12:39]
 ** TODO Verify cookie seeding still works after session-token sharing landed
 ResidentBrowser._ensure_context calls ctx.add_cookies once per domain (resident.py:57-65). Untested since the session-token-sharing changes. Verify by: launch attended poller, point at a known auth-walled site (linkedin.com), confirm logged-in state is reached without manual login. If broken, check whether session_store.load() format still matches what add_cookies expects.
 ** Idea
@@ -410,22 +378,6 @@ Scrape Log entry: =Operations/Scrape Log= → =[2026-05-04 21:30]
 ziprecruiter.com — link-normalization: /jobs/v2/<base64> + /km/<token>
 not recognised as same listing_key=
 ** TODO UI fixes
-*** DONE when the user opens the plugin, begin to look for url in the background
-CLOSED: [2026-05-05 Tue 11:46]
-*** DONE if the it exists then offer to take them there
-CLOSED: [2026-05-05 Tue 11:46]
-*** DONE if it doesn't nothing happens until a job-post is created
-CLOSED: [2026-05-05 Tue 11:46]
-*** DONE when new job post is created offer to take them to job-post via the same mechanisms
-CLOSED: [2026-05-05 Tue 11:46]
-*** DONE if auto score was checked offer to take them to job-posts.show.scores.index instead
-CLOSED: [2026-05-05 Tue 11:46]
-*** DONE system alert when a job post is created.  tell them scoring is in progresss if that's what they selected
-CLOSED: [2026-05-05 Tue 11:46]
-*** DONE make sure a user can see the job-post if they were not the creators
-CLOSED: [2026-05-05 Tue 11:46]
-*** DONE show score
-CLOSED: [2026-05-05 Tue 17:13]
 ** TODO ResolveFinalUrl: bound by wall-clock timeout + soft-fail on tracker hang :scrape:agents:bug:
 :PROPERTIES:
 :CREATED:  2026-05-04
@@ -1054,18 +1006,6 @@ This todo is *only* the data backfill:
 Out of scope: code changes — the prevention fix is already in the
 profile.
 
-** SHIPPED search still disappears :frontend:scrape:
-CLOSED: [2026-04-30 Thu]
-PR #88 only fixed =scrapes/index=. The other six list routes with a
-=search= QP + =refreshModel: true= (=job-posts=, =companies=, =answers=,
-=questions=, =summaries=, =job-applications=) had the same symptom: in-route
-refresh on each keystroke rendered =index-loading.hbs= (or =loading.hbs=),
-which has no =<:subnav>= slot, so the SearchBar was torn down + remounted
-(focus loss + flicker). Mirrored the =scrapes/index.js= =loading()=
-action override into all six routes — return =true= when the transition
-is in-route (=transition.from.name === this.routeName=) so the substate
-is suppressed; cold loads still get the skeleton.
-[[*Search input flicker on /scrapes \[frontend\]][Original PR #88 — only covered /scrapes]]
 ** STRT a few bugs in this output :important:ai:scrape:
 api PR #81 merged 2026-05-01 21:36 UTC: explicit provider:model prefix
 in JobPostExtractor + IngestResume dispatchers; bare names + unknown

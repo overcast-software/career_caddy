@@ -5739,3 +5739,318 @@ action override into all six routes — return =true= when the transition
 is in-route (=transition.from.name === this.routeName=) so the substate
 is suppressed; cold loads still get the skeleton.
 [[*Search input flicker on /scrapes \[frontend\]][Original PR #88 — only covered /scrapes]]
+
+* SHIPPED caddy-web cannont get screenshots
+CLOSED: [2026-05-05 Tue 04:20]
+:PROPERTIES:
+:TRIAGE_NOTE: candidate=infra conf=0.75
+:LAST_TOUCHED: [2026-05-05]
+:ARCHIVE_TIME: 2026-05-05 Tue 12:40
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Root cause [2026-05-05]: the happy-path screenshot uploader in
+=agents/scrape_graph/nodes_scrape.py::_screenshot_and_upload= called
+=page.screenshot(path=..., full_page=True)= with no explicit timeout,
+hitting Playwright's 30s "wait for fonts to load" default on every
+LinkedIn login-wall page. Exception caught + logged at WARNING, no
+upload attempted. Failure-path uploader in
+=agents/scrape_graph/_artifacts.py::capture_debug_artifact= already
+used =full_page=False, timeout=5_000= and worked — that's why scrape
+322 (=ziprecruiter.com_obstacle_fail_*=) had a screenshot but 320,
+321, 323, 324, 325 did not. Verified the boundary by listing
+screenshots for each.
+
+Fix [2026-05-05]: extracted =upload_page_screenshot()= shared helper
+in =_artifacts.py= using the safe defaults (viewport-only, 5s
+timeout, in-memory POST — no disk round-trip, no
+=mcp_servers.browser_server.SCREENSHOT_DIR= dependency).
+=_screenshot_and_upload= and =capture_debug_artifact= now both call
+it. 6 new tests in =tests/test_debug_artifact_on_fail.py= cover the
+happy-path filename schema, the safe-defaults regression guard, and
+failure modes.
+
+Stays STRT until parent Deploy lands and a fresh scrape produces a
+=linkedin.com_*= screenshot (no =_obstacle_fail_= segment). Verify
+by hitting =list_scrape_screenshots= on the next post-deploy scrape.
+
+* TODO sundaay :scrape:linkedin:
+:PROPERTIES:
+:CREATED:  2026-05-04
+:ARCHIVE_TIME: 2026-05-05 Tue 17:12
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: TODO
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+/home/oldbones/Pictures/screenshot-2026-05-04_11-27-40.png
+
+Diagnosis [2026-05-04 scrape-profile-enhancer]: scrape 311 (parent
+of /uas/login redirect → /jobs/view/4409851681, Sundayy / Full
+Stack Engineer). Same SDUI partial-render failure as scrape 298 —
+no profile mutation will fix it. The user's screenshot proves the
+=h2 "About the job"= and Infisical About-The-Company prose render
+in a real browser, but the poller's WaitReadySelector ran 4 passes
+/ 30s with all 19 selectors timing out. Captured =job_content=
+also stacks every flagship-web off-nominal signal: =Promoted by
+hirer=, =Responses managed off LinkedIn=, =No longer accepting
+applications=, =Use AI to assess how you fit= / =Looking for
+talent?=.
+
+Resolution path is the existing STRT escape-hatch ([[*Linkedin: SDUI partial-render escape hatch — accept placeholder description][SDUI escape
+hatch]]) — when it ships, scrape 311 should retry into a JobPost
+with the placeholder description. Use the persisted job_content
+on scrape 311 as a *second* test fixture (alongside scrape 298) so
+the closed-state guard, the off-platform-managed guard, and the
+SDUI placeholder guard all light up on a single input.
+
+Scrape Log entry: =Operations/Scrape Log= → =[2026-05-04 19:50]
+linkedin.com — graph/timing: SDUI partial-render (Sundayy ...)=
+
+Verification [2026-05-04 21:30 scrape-profile-enhancer]: SDUI
+escape-hatch SHIPPED today (agents =7d3acca=) yet scrape 311 *still*
+ends at =ExtractFail= and no JobPost was created. Re-pulled the
+scrape and walked the trace:
+
+- =WaitReadySelector=: 4 passes / 30s / 19 selectors, all timeout —
+  expected for partial-render and harmless given the new escape-hatch.
+- =Tier1Mini=: 2152ms (real LLM call).
+- =EvaluateExtraction= → =Tier2Haiku=: 183ms (suspiciously short —
+  likely =llm-extract endpoint not deployed yet= 404 soft-fail; see
+  =_call_llm_extract= in =nodes_extract.py=).
+- =EvaluateExtraction= → =ExtractFail=: 0ms; tier3 disabled.
+
+So the placeholder path is *eligible* (=_is_partial_render_placeholder=
+landed in EvaluateExtraction) but never *triggered* — neither tier
+emitted a description starting with =[DESCRIPTION NOT CAPTURED=.
+Most likely: Tier1 with =gpt-4o-mini= is not following the
+=extraction_hints= "DO NOT HALLUCINATE / set to exactly:..."
+instruction reliably enough on this input shape (the captured
+=job_content= for 311 is even sparser than 298 — it has =No longer
+accepting applications=, =Use AI to assess how you fit=, =Looking
+for talent?= but never shows =About the job= as a string anchor).
+
+Updated diagnosis category: not =selector-stale=, not
+=hydration-race= — this is =llm-hallucination= adjacent:
+=llm-instruction-miss=. The escape-hatch ship gives the *runtime
+graph* permission to accept the placeholder; it does not coerce the
+LLM into emitting it.
+
+Concrete next steps (none of which is a profile mutation):
+1. *Validator-side coercion.* Add a deterministic pre-check inside
+   =EvaluateExtraction= (or =Tier0CSS=): if =job_content= matches the
+   SDUI partial-render fingerprint (=Use AI to assess how you fit= +
+   =Looking for talent?= + no =About the job=), force
+   =parsed["description"] = _PARTIAL_RENDER_DESCRIPTION_PREFIX + "..."=
+   *before* running EvaluateExtraction. Then the placeholder lights
+   up regardless of which tier the LLM is on. That is a small
+   self-contained PR — pure-Python check, no schema changes.
+2. *Test fixture.* Persist scrape 311's =job_content= as a second
+   fixture beside scrape 298 in the validate/evaluate tests. The
+   ship referenced 298 only; 311 catches the case where even the
+   =About the job= heading is missing from the captured text.
+3. *Tier upgrade as fallback.* Set =SCRAPE_GRAPH_ENABLE_TIER3=1=
+   and observe whether sonnet emits the placeholder reliably; if
+   yes, document but do not rely on it (tier3 cost matters).
+
+Action: NOT moving to SHIPPED. Re-state to STRT and add a child
+todo for the validator-side coercion (#1 above) as the smallest
+change that closes scrape 311 cleanly. Two-line summary in the
+Scrape Log appended below this todo.
+
+Refined Scrape Log entry: =Operations/Scrape Log= → =[2026-05-04
+21:30] linkedin.com — llm-hallucination: SDUI escape-hatch shipped
+but Tier1/Tier2 still don't emit the placeholder; needs validator-
+side coercion (scrape 311)=
+
+
+* DONE Extension v1.0.0 store-submission prep
+CLOSED: [2026-05-06 Wed 13:47]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Crossed the 1.0.0 line and prepped artifacts for CWS Stable + CWS Beta + AMO Listed + AMO Self-Distributed submissions. Frontend changes: manifest.json bumped 0.3.6 → 1.0.0 (then iterated to 1.0.20); host_permissions narrowed from <all_urls> to api.careercaddy.online + careercaddy.online per security review (activeTab covers body-read on Send); palette-only theme sync restored (importPaletteFromActiveTab) so popup light/dark stays popup-local while palette follows the site; pending-send marker added so popup re-open during fetch shows Sending… instead of a fresh Send button; username persists per keystroke for password-manager copy-paste survival; .gitignore excludes public/extensions/*.zip artifacts. New /docs/extension-privacy/ route + template register the listing privacy URL. Final 1280x800 store-asset PNGs live at frontend/public/extensions/career-caddy-sender/store-assets/. Iframe-embedded ATS expansion (option 2 of the security review) deferred — no field hits yet, friends/family rapport means we can iterate.
+
+* DONE link to created or duplicate is needed :extension:
+CLOSED: [2026-05-06 Wed 13:47]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+B2b shipped: popup builds =/job-posts/<id>= link on Send 200/202 and 409
+duplicate paths, surfaces it as a primary CTA below the status line, and
+the OS notification carries the same link via background.js
+=cc-notify-{created,existing}=. Auto-score path links to =/scores=
+subroute (UX5).
+
+* SHIPPED search still disappears :frontend:scrape:
+CLOSED: [2026-04-30 Thu]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+PR #88 only fixed =scrapes/index=. The other six list routes with a
+=search= QP + =refreshModel: true= (=job-posts=, =companies=, =answers=,
+=questions=, =summaries=, =job-applications=) had the same symptom: in-route
+refresh on each keystroke rendered =index-loading.hbs= (or =loading.hbs=),
+which has no =<:subnav>= slot, so the SearchBar was torn down + remounted
+(focus loss + flicker). Mirrored the =scrapes/index.js= =loading()=
+action override into all six routes — return =true= when the transition
+is in-route (=transition.from.name === this.routeName=) so the substate
+is suppressed; cold loads still get the skeleton.
+[[*Search input flicker on /scrapes \[frontend\]][Original PR #88 — only covered /scrapes]]
+
+* DONE Landing hero refresh + caddy photo update :frontend:
+CLOSED: [2026-05-05]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+New copy (Your job search needs a caddy.) plus tighter sub-line. Hero text moved into a semi-transparent rounded card at bottom-left so it reads against the white shirt area of the new ian_finnis.webp. Pills compressed to four (AI fit scoring & explanations / Cover letters in your voice / Full application tracking / Browser & email capture) for balanced wrap on every viewport. Ships before screenshot capture.
+
+* DONE Add nested job-posts.show.scores.show route :frontend:
+CLOSED: [2026-05-05]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-05]
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Extension popup links to /job-posts/<id>/scores/<scoreId> after Score-this-post; that URL 404d in prod because frontend only had a leaf scores route. Added router.js nested show, route+controller+template under app/{routes,controllers,templates}/job-posts/show/scores/show, and {{outlet}} in scores.hbs so detail renders below the list.
+
+* DONE find the link the user is currently on and if we have a jp. link to it for them. 
+CLOSED: [2026-05-05 Tue 12:39]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+* DONE send... feels like it's frozen without motion :extension:
+CLOSED: [2026-05-05 Tue 12:39]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+* DONE when the user opens the plugin, begin to look for url in the background
+CLOSED: [2026-05-05 Tue 11:46]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/UI fixes
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+* DONE if the it exists then offer to take them there
+CLOSED: [2026-05-05 Tue 11:46]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/UI fixes
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+* DONE if it doesn't nothing happens until a job-post is created
+CLOSED: [2026-05-05 Tue 11:46]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/UI fixes
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+* DONE when new job post is created offer to take them to job-post via the same mechanisms
+CLOSED: [2026-05-05 Tue 11:46]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/UI fixes
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+* DONE if auto score was checked offer to take them to job-posts.show.scores.index instead
+CLOSED: [2026-05-05 Tue 11:46]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/UI fixes
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+* DONE system alert when a job post is created.  tell them scoring is in progresss if that's what they selected
+CLOSED: [2026-05-05 Tue 11:46]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/UI fixes
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+* DONE make sure a user can see the job-post if they were not the creators
+CLOSED: [2026-05-05 Tue 11:46]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/UI fixes
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+* DONE show score
+CLOSED: [2026-05-05 Tue 17:13]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-06 Wed 13:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active/UI fixes
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
