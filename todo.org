@@ -38,8 +38,29 @@ Archive (0)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** DONE Landing hero refresh + caddy photo update                                                          :frontend:
+CLOSED: [2026-05-05]
+New copy (Your job search needs a caddy.) plus tighter sub-line. Hero text moved into a semi-transparent rounded card at bottom-left so it reads against the white shirt area of the new ian_finnis.webp. Pills compressed to four (AI fit scoring & explanations / Cover letters in your voice / Full application tracking / Browser & email capture) for balanced wrap on every viewport. Ships before screenshot capture.
+** TODO Dedupe miss: email-source posts keep wrapper canonical_link, no ATS click-through :api:agents:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-05]
+:END:
+Repro: jp 1409 (source=email) and jp 1782 (source=extension) are the same Talkdesk Senior Security Engineer post. duplicate_of_id null on both.
+
+1409 canonical_link = SendGrid click-tracking URL (u52508838.ct.sendgrid.net/ls/click?...). Never resolved to careers.talkdesk.com.
+
+1782 canonical_link = careers.talkdesk.com/jobs?id=7858488 — extension correctly normalized the greenhouse embed URL.
+
+Root cause (per user): the scrape pipeline does not click through ATS chains (SendGrid -> talkdesk careers -> greenhouse embed -> final). With no follow-through, email-ingested posts keep their wrapper as canonical_link and any future post on the real URL cant match.
+
+Secondary: fingerprint-based dedupe also missed despite ~95% identical description text. Worth checking why.
+
+Fix surfaces: agents scrape graph (ATS click-through), api dedupe pipeline (fingerprint match strength). Not an extension bug.
 ** DONE Add nested job-posts.show.scores.show route                                                          :frontend:
 CLOSED: [2026-05-05]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-05]
+:END:
 Extension popup links to /job-posts/<id>/scores/<scoreId> after Score-this-post; that URL 404d in prod because frontend only had a leaf scores route. Added router.js nested show, route+controller+template under app/{routes,controllers,templates}/job-posts/show/scores/show, and {{outlet}} in scores.hbs so detail renders below the list.
 ** TODO score spinner not standard
 :PROPERTIES:
@@ -385,91 +406,8 @@ CLOSED: [2026-05-05 Tue 11:46]
 CLOSED: [2026-05-05 Tue 11:46]
 *** DONE make sure a user can see the job-post if they were not the creators
 CLOSED: [2026-05-05 Tue 11:46]
-*** TODO show score
-** TODO sundaay :scrape:linkedin:
-:PROPERTIES:
-:CREATED:  2026-05-04
-:END:
-/home/oldbones/Pictures/screenshot-2026-05-04_11-27-40.png
-
-Diagnosis [2026-05-04 scrape-profile-enhancer]: scrape 311 (parent
-of /uas/login redirect → /jobs/view/4409851681, Sundayy / Full
-Stack Engineer). Same SDUI partial-render failure as scrape 298 —
-no profile mutation will fix it. The user's screenshot proves the
-=h2 "About the job"= and Infisical About-The-Company prose render
-in a real browser, but the poller's WaitReadySelector ran 4 passes
-/ 30s with all 19 selectors timing out. Captured =job_content=
-also stacks every flagship-web off-nominal signal: =Promoted by
-hirer=, =Responses managed off LinkedIn=, =No longer accepting
-applications=, =Use AI to assess how you fit= / =Looking for
-talent?=.
-
-Resolution path is the existing STRT escape-hatch ([[*Linkedin: SDUI partial-render escape hatch — accept placeholder description][SDUI escape
-hatch]]) — when it ships, scrape 311 should retry into a JobPost
-with the placeholder description. Use the persisted job_content
-on scrape 311 as a *second* test fixture (alongside scrape 298) so
-the closed-state guard, the off-platform-managed guard, and the
-SDUI placeholder guard all light up on a single input.
-
-Scrape Log entry: =Operations/Scrape Log= → =[2026-05-04 19:50]
-linkedin.com — graph/timing: SDUI partial-render (Sundayy ...)=
-
-Verification [2026-05-04 21:30 scrape-profile-enhancer]: SDUI
-escape-hatch SHIPPED today (agents =7d3acca=) yet scrape 311 *still*
-ends at =ExtractFail= and no JobPost was created. Re-pulled the
-scrape and walked the trace:
-
-- =WaitReadySelector=: 4 passes / 30s / 19 selectors, all timeout —
-  expected for partial-render and harmless given the new escape-hatch.
-- =Tier1Mini=: 2152ms (real LLM call).
-- =EvaluateExtraction= → =Tier2Haiku=: 183ms (suspiciously short —
-  likely =llm-extract endpoint not deployed yet= 404 soft-fail; see
-  =_call_llm_extract= in =nodes_extract.py=).
-- =EvaluateExtraction= → =ExtractFail=: 0ms; tier3 disabled.
-
-So the placeholder path is *eligible* (=_is_partial_render_placeholder=
-landed in EvaluateExtraction) but never *triggered* — neither tier
-emitted a description starting with =[DESCRIPTION NOT CAPTURED=.
-Most likely: Tier1 with =gpt-4o-mini= is not following the
-=extraction_hints= "DO NOT HALLUCINATE / set to exactly:..."
-instruction reliably enough on this input shape (the captured
-=job_content= for 311 is even sparser than 298 — it has =No longer
-accepting applications=, =Use AI to assess how you fit=, =Looking
-for talent?= but never shows =About the job= as a string anchor).
-
-Updated diagnosis category: not =selector-stale=, not
-=hydration-race= — this is =llm-hallucination= adjacent:
-=llm-instruction-miss=. The escape-hatch ship gives the *runtime
-graph* permission to accept the placeholder; it does not coerce the
-LLM into emitting it.
-
-Concrete next steps (none of which is a profile mutation):
-1. *Validator-side coercion.* Add a deterministic pre-check inside
-   =EvaluateExtraction= (or =Tier0CSS=): if =job_content= matches the
-   SDUI partial-render fingerprint (=Use AI to assess how you fit= +
-   =Looking for talent?= + no =About the job=), force
-   =parsed["description"] = _PARTIAL_RENDER_DESCRIPTION_PREFIX + "..."=
-   *before* running EvaluateExtraction. Then the placeholder lights
-   up regardless of which tier the LLM is on. That is a small
-   self-contained PR — pure-Python check, no schema changes.
-2. *Test fixture.* Persist scrape 311's =job_content= as a second
-   fixture beside scrape 298 in the validate/evaluate tests. The
-   ship referenced 298 only; 311 catches the case where even the
-   =About the job= heading is missing from the captured text.
-3. *Tier upgrade as fallback.* Set =SCRAPE_GRAPH_ENABLE_TIER3=1=
-   and observe whether sonnet emits the placeholder reliably; if
-   yes, document but do not rely on it (tier3 cost matters).
-
-Action: NOT moving to SHIPPED. Re-state to STRT and add a child
-todo for the validator-side coercion (#1 above) as the smallest
-change that closes scrape 311 cleanly. Two-line summary in the
-Scrape Log appended below this todo.
-
-Refined Scrape Log entry: =Operations/Scrape Log= → =[2026-05-04
-21:30] linkedin.com — llm-hallucination: SDUI escape-hatch shipped
-but Tier1/Tier2 still don't emit the placeholder; needs validator-
-side coercion (scrape 311)=
-
+*** DONE show score
+CLOSED: [2026-05-05 Tue 17:13]
 ** TODO ResolveFinalUrl: bound by wall-clock timeout + soft-fail on tracker hang :scrape:agents:bug:
 :PROPERTIES:
 :CREATED:  2026-05-04
