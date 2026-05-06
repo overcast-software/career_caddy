@@ -38,9 +38,17 @@ Archive (0)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** TODO Extension API-key sprawl: dedupe on Connect or auto-expire server-side
+Each popup Connect mints a fresh =Career Caddy Sender — YYYY-MM-DD= key; Disconnect best-effort revokes. Leaks happen on uninstall, profile reset, or offline disconnect. Severity is low — keys are scoped to the minting user — but the API-keys list grows unbounded.
+
+Two paths, in order of cheapness:
+1. Popup-side: before POST /api/v1/api-keys/, GET /api/v1/api-keys/?filter[name]= and reuse the existing key (or revoke-then-mint). Two requests on Connect instead of one. No server change.
+2. Server-side: cap active keys per (user, name-prefix) to 1 — newer mint auto-revokes prior. Or expire keys with =last_used_at IS NULL= AND =created > 30d=.
+
+Neither blocks store submission. Revisit when there are paid users.
 ** TODO Dedupe miss: email-source posts keep wrapper canonical_link, no ATS click-through :api:agents:
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-05]
+:LAST_TOUCHED: [2026-05-06]
 :END:
 Repro: jp 1409 (source=email) and jp 1782 (source=extension) are the same Talkdesk Senior Security Engineer post. duplicate_of_id null on both.
 
@@ -117,7 +125,12 @@ Tags: docs, infra
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
+*** TODO Link extension-privacy from /docs index
+/docs/extension-privacy/ exists and is reachable but not surfaced from the /docs index page. Add a card/link entry alongside career-data, scrapes, etc. so users can discover the extension privacy doc without typing the URL.
 *** TODO Show top score on extension tracked panel
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:END:
 When the popup-open lookup or 409 response surfaces an existing JobPost, render the top score (highest non-archived Score for that JobPost) on the tracked card. Keep title + company as-is; add the score as a badge in the upper-right of the card (the empty slot the user marked with an arrow on the v1.0.3 screenshot 2026-05-05_12-52-24.png — top-right of =.tracked-card=, vertically aligned with =tracked-title=).
 
 Two surfaces:
@@ -148,7 +161,26 @@ Lives in =~/.config/doom/config.org=.
 :END:
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
+*** SHIPPED JobPost.top_score leaks across users via filter[link]
+CLOSED: [2026-05-06 Wed 15:42]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:END:
+Extension popup-open lookup hits /api/v1/job-posts/?filter[link]=<url>, which UX7 made cross-user-visible. Response includes top_score, which is computed as max(all scores on this JobPost across all users) — not max(scores by request.user). After logout + login, popup shows the previous user's score number to the new user. Fix: scope top_score to request.user in the JobPost serializer (annotate per-request: max of Score where job_post=self AND created_by=request.user, default null). Web app is unaffected because it scopes scores per-user before render. PRIORITY: privacy bug, blocks promoting unlisted CWS to Public.
+*** TODO Logout/login shows another user's score
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:END:
+After logout + login as the same user, the popup (or app?) displayed a score belonging to a different user. Possible causes: (1) frontend Ember Data store not cleared on logout — stale records from previous session leak into new one; (2) UX7 made filter[link] visible across users — popup-open lookup may resolve to another user's JobPost id, then pull THAT user's score; (3) backend score endpoint not properly user-scoped. Repro: log out, log in, observe score visible that does not belong to current user. PRIORITY: privacy / auth bug. Investigate before promoting CWS Unlisted listing.
+*** TODO Change support@careercaddy.online to webmaster@careercaddy.online in docs
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:END:
+All docs pages currently reference support@careercaddy.online; webmaster@ is the actual mailbox. Sweep frontend/app/templates/docs/*.hbs and any other public-facing copy.
 *** TODO [#A] frontend scrapes.show does not follow redirect chain to surface canonical JobPost
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:END:
 On scrapes/:id (e.g. /scrapes/334), when the scrape redirected to a canonical child (e.g. 335), the show page renders no job-post or company even though JobPost 1735 was successfully created from 335. The graph-trace endpoint already walks meta.chain across source_scrape; scrapes.show frontend does not. Two reasonable fixes: (a) on the api side, when PersistJobPost runs on the canonical scrape, also set the parent tracker scrapes job_post FK so both ids resolve the same JobPost; (b) on the frontend, when scrape model carries a redirected_to_id (or the latest_status_note matches /redirected to scrape (\d+)/), follow the chain in the scrapes.show route and render the canonical scrapes JobPost. Repro: scrape 334 (governmentjobs.com tracker) → forks scrape 335 (canonical with jobId param) → JobPost 1735 created. /scrapes/334 shows no JobPost; /scrapes/335 should and presumably does.
 *** STRT cc_auto creates JobPost with mismatched link/title/company (multi-job digest hallucination)
 :PROPERTIES:
