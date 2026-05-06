@@ -125,7 +125,8 @@ Tags: docs, infra
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
-*** TODO Link extension-privacy from /docs index
+*** SHIPPED Link extension-privacy from docs index
+CLOSED: [2026-05-06]
 /docs/extension-privacy/ exists and is reachable but not surfaced from the /docs index page. Add a card/link entry alongside career-data, scrapes, etc. so users can discover the extension privacy doc without typing the URL.
 *** TODO Show top score on extension tracked panel
 :PROPERTIES:
@@ -166,7 +167,8 @@ Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-conf
 :LAST_TOUCHED: [2026-05-06]
 :END:
 After logout + login as the same user, the popup (or app?) displayed a score belonging to a different user. Possible causes: (1) frontend Ember Data store not cleared on logout — stale records from previous session leak into new one; (2) UX7 made filter[link] visible across users — popup-open lookup may resolve to another user's JobPost id, then pull THAT user's score; (3) backend score endpoint not properly user-scoped. Repro: log out, log in, observe score visible that does not belong to current user. PRIORITY: privacy / auth bug. Investigate before promoting CWS Unlisted listing.
-*** TODO Change support@careercaddy.online to webmaster@careercaddy.online in docs
+*** SHIPPED Change support@careercaddy.online to webmaster@careercaddy.online in docs
+CLOSED: [2026-05-06 Wed 16:17]
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-06]
 :END:
