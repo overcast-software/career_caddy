@@ -6067,3 +6067,28 @@ CLOSED: [2026-05-06 Wed 15:42]
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
 Extension popup-open lookup hits /api/v1/job-posts/?filter[link]=<url>, which UX7 made cross-user-visible. Response includes top_score, which is computed as max(all scores on this JobPost across all users) — not max(scores by request.user). After logout + login, popup shows the previous user's score number to the new user. Fix: scope top_score to request.user in the JobPost serializer (annotate per-request: max of Score where job_post=self AND created_by=request.user, default null). Web app is unaffected because it scopes scores per-user before render. PRIORITY: privacy bug, blocks promoting unlisted CWS to Public.
+
+* SHIPPED Change support@careercaddy.online to webmaster@careercaddy.online in docs
+CLOSED: [2026-05-06 Wed 16:17]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:ARCHIVE_TIME: 2026-05-06 Wed 16:20
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Bug
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+All docs pages currently reference support@careercaddy.online; webmaster@ is the actual mailbox. Sweep frontend/app/templates/docs/*.hbs and any other public-facing copy.
+
+* SHIPPED Link extension-privacy from docs index
+CLOSED: [2026-05-06]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-06 Wed 16:20
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+/docs/extension-privacy/ exists and is reachable but not surfaced from the /docs index page. Add a card/link entry alongside career-data, scrapes, etc. so users can discover the extension privacy doc without typing the URL.
