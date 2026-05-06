@@ -3,4 +3,6 @@ __pycache__/
 .claude/
 todo_archive.org
 notes.org
+notes.org_archive
+secrets.yml
 .envrc
