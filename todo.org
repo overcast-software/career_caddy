@@ -38,8 +38,17 @@ Archive (0)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** DONE Extension v1.0.0 store-submission prep
+CLOSED: [2026-05-06 Wed 13:47]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:END:
+Crossed the 1.0.0 line and prepped artifacts for CWS Stable + CWS Beta + AMO Listed + AMO Self-Distributed submissions. Frontend changes: manifest.json bumped 0.3.6 → 1.0.0 (then iterated to 1.0.20); host_permissions narrowed from <all_urls> to api.careercaddy.online + careercaddy.online per security review (activeTab covers body-read on Send); palette-only theme sync restored (importPaletteFromActiveTab) so popup light/dark stays popup-local while palette follows the site; pending-send marker added so popup re-open during fetch shows Sending… instead of a fresh Send button; username persists per keystroke for password-manager copy-paste survival; .gitignore excludes public/extensions/*.zip artifacts. New /docs/extension-privacy/ route + template register the listing privacy URL. Final 1280x800 store-asset PNGs live at frontend/public/extensions/career-caddy-sender/store-assets/. Iframe-embedded ATS expansion (option 2 of the security review) deferred — no field hits yet, friends/family rapport means we can iterate.
 ** DONE Landing hero refresh + caddy photo update                                                          :frontend:
 CLOSED: [2026-05-05]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:END:
 New copy (Your job search needs a caddy.) plus tighter sub-line. Hero text moved into a semi-transparent rounded card at bottom-left so it reads against the white shirt area of the new ian_finnis.webp. Pills compressed to four (AI fit scoring & explanations / Cover letters in your voice / Full application tracking / Browser & email capture) for balanced wrap on every viewport. Ships before screenshot capture.
 ** TODO Dedupe miss: email-source posts keep wrapper canonical_link, no ATS click-through :api:agents:
 :PROPERTIES:
@@ -75,7 +84,16 @@ job-post.show.delete
 /home/oldbones/Pictures/screenshot-2026-05-05_09-16-12.png
 ** DONE find the link the user is currently on and if we have a jp. link to it for them. 
 CLOSED: [2026-05-05 Tue 12:39]
-** TODO link to created or duplicate is needed :extension:
+** DONE link to created or duplicate is needed :extension:
+CLOSED: [2026-05-06 Wed 13:47]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:END:
+B2b shipped: popup builds =/job-posts/<id>= link on Send 200/202 and 409
+duplicate paths, surfaces it as a primary CTA below the status line, and
+the OS notification carries the same link via background.js
+=cc-notify-{created,existing}=. Auto-score path links to =/scores=
+subroute (UX5).
 ** DONE send... feels like it's frozen without motion :extension:
 CLOSED: [2026-05-05 Tue 12:39]
 ** TODO Verify cookie seeding still works after session-token sharing landed
