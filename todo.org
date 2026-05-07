@@ -19,7 +19,7 @@ Inbox (26)
   Feature (2)
   Idea (0)
 Backlog [0/3]
-Active [3/38]
+Active [1/36]
 Icebox [0/4]
 Archive (0)
 #+end_example
@@ -1191,43 +1191,6 @@ Queue sequential display instead of stacking. First flash finishes its time, sli
 ** TODO make pills so flex can stack nicely on mobile :frontend:
 https://www.hyperui.dev/components/application/tabs/#component-5-dark
 ** TODO tiny button to go to  companies <id> :frontend:
-** SHIPPED [#A] Harden =make ci= so it cannot return green-but-broken [dagger] :frontend:
-CLOSED: [2026-05-02]
-[2026-04-29] Tally #9/#13/#14/#19 are all the same shape: Dagger
-=call build-api= / =call build-frontend= summarize a successful build
-as a single =Container!= line and hide the per-step output. =make ci=
-exits 0 the moment every =with_exec= in the chain exits 0 — but
-=npm test= / =python manage.py test= can produce a failing TAP/Django
-report and STILL exit 0 in some configurations (e.g. xfail-marked
-runtime errors, test runner config that swallows certain failures,
-abbreviated output the agent can't grep for pass counts). Today the
-canonical local gate is "did Dagger print Container!" — that is not
-the same as "did the tests actually pass."
-
-Concrete fix: bake the assertion into the pipeline itself, not the
-caller. In =dagger/src/career_caddy_pipeline.py= the
-=build_frontend= chain currently ends with
-=.with_exec(["xvfb-run", "-a", "npm", "run", "test:ember"])=. Tee the
-output to a file inside the container and add a final
-=.with_exec(["sh", "-c", "grep -qE '^# fail 0$' /tap.log && grep -qE '^# pass [1-9]' /tap.log"])=
-that fails the build if the TAP doesn't show non-zero passes and zero
-failures. Same shape on =build_api= against Django's =Ran N tests= +
-=OK= line. After landing, =make ci= exit 0 *means* something — the
-trust gap closes at the pipeline level instead of relying on every
-agent/dev remembering to grep summarized output.
-
-Why it matters: every parent Deploy that fails after a green local
-=make ci= burns user attention AND freezes parent main per the
-"failed Deploy freezes main" rule. The cost of one missed TAP fail
-is a backlog amplifier.
-
-Acceptance:
-- Pipeline asserts both per-step. Removing the assertion (proving
-  it's load-bearing) makes a deliberately-failing test still produce
-  exit 0 from the wrapping =make ci=.
-- README / agent guidance updates to drop the "grep for # pass N
-  yourself" workaround — the tally rules can stop chasing it.
-- New tally entry retiring tally #9/#13/#14/#19 as superseded.
 ** TODO Reports: applies-by-hostname cut on sources sankey :tier6:frontend:
 Add an "applies-by-hostname" cut on the sources sankey distinct
 from the entry-URL hostname — postings often live on a tracker but
@@ -1365,32 +1328,6 @@ the existing stub has a NULL company (Microsoft regression #22 in the
 =stage5.fingerprint_null_risk= warnings once the introspection PR
 (E+F+H) ships, so we'll have data on how often the precondition fires
 before designing the fix.
-** SHIPPED Extension: dark-mode + palette-aware popup, Enter-to-submit :frontend:extension:
-CLOSED: [2026-05-02]
-v0.3.3 → v0.3.5. Visual rewrite of =popup.html= around CSS custom
-properties driven by =data-theme=dark= and =data-palette=jade|rose|amber|violet|blue=
-on =<html>=. Mirrors the app's six palette names; dark variants only
-override =--accent-50= and =--accent-100= so the brighter accent stays
-consistent.
-
-Theme storage in =chrome.storage.local= as =ccTheme= ('system'/'light'/'dark')
-+ =ccPalette=. Best-effort import: =scripting.executeScript= runs against
-the active CC tab and slurps =theme-mode= / =theme-palette= from its
-=localStorage=, then writes through to extension storage. Runs on every
-popup open (=loadSaved()=), not just on Connect — so users who upgraded
-after their first connect pick up the app's theme without
-disconnect/reconnect, and theme changes in the app surface on next popup.
-
-Footer sun/moon button manually overrides the saved mode. =matchMedia=
-listener re-renders when system pref flips while popup is open.
-
-v0.3.5 also: Enter in username or password triggers Connect.
-
-Local-build XPI for the user lives in =~/Sandbox/cc-ext-local/= and
-=~/Sandbox/career-caddy-sender-local-0.3.5.xpi= — distinct gecko id
-(=career-caddy-sender-local@careercaddy.online=) so it coexists with the
-prod extension in one Firefox profile.
-
 * Backlog
 ** PROJ [#C] Electron desktop app feasibility :PENDING_APPROVAL:
 :PROPERTIES:
