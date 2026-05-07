@@ -15,7 +15,7 @@ TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
 Inbox (27)
   Bug (4)
-  Enhancement (6)
+  Enhancement (11)
   Feature (2)
   Idea (0)
 Backlog [0/3]
@@ -126,7 +126,34 @@ Tags: docs, infra
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
+*** TODO Profile-as-resource: split User/Profile JSON:API conformity :api:frontend:chore:
+Currently Profile fields (phone, linkedin, github, address, links, auto_score) are flattened into the User serializer's attributes and PATCHed via /api/v1/users/:id/. Backend has a Profile model; wire and Ember Data both treat them as one merged blob.
+
+*** Decided shape
+Option A: Profile and Onboarding are *peer* resources, not nested.
+- /api/v1/profile/ — GET / PATCH the authenticated user's profile (singleton). JSON:API shape with type=profile, id=<user_id>.
+- /api/v1/onboarding/ — already a peer resource (shipped Phase 3a).
+- User keeps identity-only fields (first_name, last_name, username, email, password, is_staff).
+- ProfileModel on the frontend with belongsTo user (or matching the user's id directly as a singleton).
+
+*** Why peers, not nested
+Profile holds personal contact stuff; Onboarding is a wizard-state machine. Treating them as peers means either can evolve without cascading. Nesting onboarding inside profile would force two-step fetches and tie the wizard's lifecycle to profile mutations.
+
+*** Scope
+- API: split user serializer; new ProfileViewSet/endpoint; update PATCH /users/:id/ to reject profile fields (or keep permissive for compat).
+- Frontend: new app/models/profile.js, new app/adapters/profile.js (singleton), update settings/profile/edit to use store.queryRecord("profile", {}).
+- Migration: every template that reads user.linkedin / user.phone / etc. → user.profile.linkedin.
+- Tests: profile-edit, settings page, user serializer.
+
+*** Punt
+Deferred — touches every settings page, dozens of templates, the user serializer, and a chunk of tests. Not blocking AW or any current customer flow. Onboarding-as-resource (Phase 3a) ships independently because Option A keeps them decoupled.
+
+Tag: =:api:= =:frontend:= =:chore:=.
+Related: notes.org Plans/ccsender as the gateway/Phase 3a — ships onboarding-as-resource on the same JSON:API path; this enhancement extends the same conformity to Profile.
 *** TODO DOCX export — archetype-specific resume templates
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-07]
+:END:
 Deferred from M4 of audience-aware resume work. M4 ships dynamic section ordering for markdown export and frontend preview, but the binary DOCX template at api/templates/resume_export.docx still has sections in fixed order (summary, skills, experience, projects, education, certifications) and docxtpl cannot reorder paragraphs.
 
 Result: a PM picks Product Management profession, sees experience-before-skills order in /resumes/show preview and downloaded markdown, but downloaded DOCX still renders skills-before-experience.
