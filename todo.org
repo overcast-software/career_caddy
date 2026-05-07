@@ -13,9 +13,9 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (26)
+Inbox (27)
   Bug (4)
-  Enhancement (2)
+  Enhancement (6)
   Feature (2)
   Idea (0)
 Backlog [0/3]
@@ -38,6 +38,7 @@ Archive (0)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** TODO https://chromewebstore.google.com/detail/career-caddy-sender/pjdajamkhjkemoaogohehcdpfkocofhd
 ** TODO Extension API-key sprawl: dedupe on Connect or auto-expire server-side
 Each popup Connect mints a fresh =Career Caddy Sender — YYYY-MM-DD= key; Disconnect best-effort revokes. Leaks happen on uninstall, profile reset, or offline disconnect. Severity is low — keys are scoped to the minting user — but the API-keys list grows unbounded.
 
@@ -125,9 +126,64 @@ Tags: docs, infra
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
+*** TODO DOCX export — archetype-specific resume templates
+Deferred from M4 of audience-aware resume work. M4 ships dynamic section ordering for markdown export and frontend preview, but the binary DOCX template at api/templates/resume_export.docx still has sections in fixed order (summary, skills, experience, projects, education, certifications) and docxtpl cannot reorder paragraphs.
+
+Result: a PM picks Product Management profession, sees experience-before-skills order in /resumes/show preview and downloaded markdown, but downloaded DOCX still renders skills-before-experience.
+
+Plan option (a) — recommended: maintain 2-3 archetype-flavored .docx templates (resume_export_se.docx, resume_export_experience_first.docx) and select one in resume_export_service via Resume.profession with fallback to the existing template.
+
+Plan option (b): rewrite render_docx to use python-docx directly so order is data-driven. More code; more flexible long-term. Revisit only if (a) becomes painful.
+
+Not blocking: SE resumes (the bulk of users right now) keep rendering correctly with the existing template.
+*** TODO Profile.preferred_profession default to pre-fill new resumes
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-07]
+:END:
+Out of scope from the audience-aware resume import ship. Small UX win: most users target one field across all their resumes, so requiring them to pick profession every time they create a new resume is friction.
+
+Proposal:
+- Add Profile.preferred_profession CharField mirroring Resume.profession
+- /settings (or /resumes/new on first visit) lets the user pick once
+- New Resume creation pre-fills profession from Profile.preferred_profession
+- Per-resume override still works (some users target multiple fields)
+
+Not blocking M4. Easy follow-up; one migration + one form field on settings + one default in resume create.
+*** TODO Audit cover-letter / summary / orgmode-export prompts for dev-leaning copy
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-07]
+:END:
+Out of scope from the audience-aware resume import ship. M3 only touched RESUME_EXTRACTION_PROMPT. Three sibling prompts still bake in software-engineering assumptions and should be audited the same way once we have real non-dev test users:
+
+- api/templates/cover_letter_prompt.j2 — tone, examples, jargon
+- api/templates/summary_service_prompt.j2 — what makes a good summary varies wildly between SE and PR / PM / sales
+- api/templates/orgmode_export_prompt.j2 — section ordering and category labels
+
+Likely fix shape mirrors M3: build_*_prompt(profession) function, archetype-specific tone/examples appended when profession is known, free-form rule still applies.
+
+Defer until a non-dev user reports a generated cover letter or summary that misses the mark for their field.
+*** TODO Resume archetype-specific section types — Publications, Volunteer, Awards
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-07]
+:END:
+Out of scope from the audience-aware resume import ship (notes.org Plans/Audience-aware resume — non-dev career paths). M4 added section_order machinery that can accommodate these without a schema change once a real user asks for them.
+
+What to add:
+- Publications section for academia / PR — title, venue, date, URL, contributors
+- Volunteer Work for non-profit, mission-driven, or career-changer resumes
+- Awards / Honors for sales, design, or recognition-heavy fields
+
+Wiring needed:
+- Models + serializers for each
+- ParsedResume + IngestResume extraction
+- Frontend item.hbs dispatch entries
+- resume_markdown.j2 dispatch entries
+- Per-archetype defaults in SECTION_ORDER_DEFAULTS
+
+Defer until a user actually asks. The M4 dispatch shape (each section type has its own renderer) means each addition is local to its section, not architectural.
 *** TODO Show top score on extension tracked panel
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-06]
+:LAST_TOUCHED: [2026-05-07]
 :END:
 When the popup-open lookup or 409 response surfaces an existing JobPost, render the top score (highest non-archived Score for that JobPost) on the tracked card. Keep title + company as-is; add the score as a badge in the upper-right of the card (the empty slot the user marked with an arrow on the v1.0.3 screenshot 2026-05-05_12-52-24.png — top-right of =.tracked-card=, vertically aligned with =tracked-title=).
 
