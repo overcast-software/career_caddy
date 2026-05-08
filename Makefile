@@ -60,8 +60,8 @@ demo-data: ## Seed guest user (Danny Noonan) and demo data — run after migrate
 
 # ── Tests ──────────────────────────────────────────────────────────────────
 
-test-api: ## Run Django test suite (requires running db service)
-	docker compose exec api python manage.py test -v 2
+test-api: ## Run Django tests (PATHS="<module|class|method>" for a subset; defaults to whole job_hunting suite). Use this as the iteration loop; reserve make ci for the final pre-push gate.
+	docker compose exec api python manage.py test -v 2 $(if $(PATHS),$(PATHS),job_hunting)
 
 test-frontend: ## Run Ember QUnit tests
 	docker compose exec frontend npm run test:ember
