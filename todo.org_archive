@@ -6207,3 +6207,33 @@ Shipped 2026-05-08 in extension v1.1.0 (Chrome Web Store). The popup's =loadSave
 
 Current extension flow asks the user for username/password the first time they click its icon, then mints an API key from the resulting JWT. That's a *second* login the user already did on the SPA. With the extension's host permission on careercaddy.online, it can read the SPA's active session straight from =window.localStorage= (=ember_simple_auth-session=) and mint its own =jh_*= API key without a popup form.
 
+
+* SHIPPED JobPost.complete boolean — explicit incomplete flag replaces word-count heuristic :api:
+CLOSED: [2026-05-08]
+:PROPERTIES:
+:CREATED: [2026-05-08]
+:LAST_TOUCHED: [2026-05-08]
+:ARCHIVE_TIME: 2026-05-08 Fri 14:47
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Shipped 2026-05-08 in =api/= as M0 of the ccsender-as-the-gateway plan's "complete bool" branch (notes.org Plans/ccsender as the gateway).
+
+Single boolean replaces the old =_is_thin_description= word-count heuristic everywhere it gated behavior:
+- =models/job_post.py= adds =complete = BooleanField(default=True, db_index=True)=.
+- Migration 0071 backfills =complete=False= for all rows where description was empty or <60 words (one-time use of the old heuristic, then the heuristic dies).
+- =api/views/scrapes.py:687= from-text dedup bypass now reads =existing.complete= instead of =not _is_thin_description(existing)=. Same trust-aware semantics, single explicit gate.
+- =lib/parsers/job_post_extractor.py= upgrade branches (=updated_stub=, =updated_stub_via_fingerprint=, =force_updated=, =force_noop=) flip =complete=True= after a successful field merge so the next scrape on that link 409s as expected. Arbiter gate also reads =not job.complete=.
+- =lib/scraper.py= "run scrape on a stub to enrich it" branch reads =linked.complete= instead of word-counting the description.
+- =api/views/jobs.py= adds canonical =filter[complete]=true|false=; legacy =filter[stub]= stays as alias.
+- =api/views/reports.py= =exclude_stubs= param filters on =complete=True=.
+- =lib/services/application_flow.py= Sankey =BUCKET_STUB= gates on =not post.complete=. =_is_thin_description= deleted; =STUB_MIN_WORDS=60= kept (still the upgrade-quality threshold inside the merge logic).
+- Test fixtures updated: stub-upgrade tests pass =complete=False= explicitly. Renamed =test_stub_duplicate_passes_through_for_upgrade= → =test_incomplete_duplicate_passes_through_for_upgrade= and asserts a long-description-but-=complete=False= JP still bypasses the 409 (the new contract: bool is the gate, not text length).
+
+API tests: 813/813 OK. Lint: ruff clean on touched files.
+
+Unblocks M1 (scrape-graph =ReviewCompleteness= node), M2 (frontend "Mark incomplete" button + extension popup branching), M3 (cc_auto sets =complete=False= on email-stub creation directly).
+
