@@ -13,7 +13,7 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (29)
+Inbox (28)
   Bug (4)
   Enhancement (22)
   Feature (2)
@@ -38,30 +38,6 @@ Archive (0)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
-** SHIPPED Completeness review on persisted JobPost (M1) :api:agents:
-CLOSED: [2026-05-08]
-:PROPERTIES:
-:CREATED: [2026-05-08]
-:LAST_TOUCHED: [2026-05-08]
-:END:
-Shipped 2026-05-08 as M1 of the ccsender-as-the-gateway plan's "complete bool" branch. Final-gate LLM review on persisted JobPosts: cheap Haiku-class agent answers "does this look like a real job description?" Pass → leave =JobPost.complete=True= (parse_scrape just flipped it on attach); fail → flip =JobPost.complete=False= AND log =scrape.status="failed"= with =incomplete_output: <reason>= so the hold-poller fires the right notification and the extension popup will offer Send next time the user lands on the URL.
-
-api/:
-- New =lib/parsers/completeness_reviewer.py= modeled on =description_arbiter.py=. Uses pydantic-ai with structured =ReviewDecision{looks_like_job_description, confidence, reasoning}= output. Env vars =COMPLETENESS_REVIEWER_ENABLED= (default on) and =COMPLETENESS_REVIEWER_MODEL= (default =anthropic:claude-haiku-4-5=).
-- =lib/parsers/job_post_extractor.parse_scrape= calls =maybe_review_and_persist= after successful attach. Reviewable outcomes only (=created= / =updated_stub= / =updated_stub_via_fingerprint= / =force_updated=); pure dedup hits skip the LLM. On rejection, scrape logs =failed= instead of =completed=.
-- =api/views/scrapes.persist_extraction= calls the same hook so the agents/ scrape-graph's PersistJobPost path gets the same gate.
-- 8 new tests in =tests/test_completeness_reviewer.py=; api 813 → 821 tests OK.
-
-agents/ (scrape-graph):
-- New =ReviewCompleteness= node in =scrape_graph/nodes_extract.py= between =PersistJobPost= and =UpdateProfile=. Today the review fires upstream as a side effect inside =/persist-extraction/=; this node is a structural placeholder so the graph visualization shows the gate. Phase 1d will promote it to a real dedicated POST against =/api/v1/job-posts/<id>/review-completeness/=.
-- =scrape_graph/graph.py= NODE_META updated; =api/views/graph_static.json= regenerated via =uv run caddy-export-graph= (29 nodes, 39 edges).
-- agents tests: 298/298 pass. =dagger call test-ai= exit 0.
-
-Workflow:
-- Memory: =feedback_test_focused_before_ci.md= + Makefile gains =make test-api PATHS=...= wrapper. Sibling to =feedback_lint_before_ci=. Use focused tests as the iteration loop; reserve =make ci= for the final pre-push gate.
-
-Unblocks M2 (frontend "Mark incomplete" button + extension popup branching) and M3 (cc_auto sets =complete=False= on email-stub creation directly).
-
 ** TODO skeleton pages in reports
 ** TODO https://chromewebstore.google.com/detail/career-caddy-sender/pjdajamkhjkemoaogohehcdpfkocofhd
 ** TODO Extension API-key sprawl: dedupe on Connect or auto-expire server-side
