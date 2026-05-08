@@ -15,7 +15,7 @@ TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
 Inbox (27)
   Bug (4)
-  Enhancement (11)
+  Enhancement (29)
   Feature (2)
   Idea (0)
 Backlog [0/3]
