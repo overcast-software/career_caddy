@@ -13,7 +13,7 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (27)
+Inbox (29)
   Bug (4)
   Enhancement (22)
   Feature (2)
@@ -38,6 +38,30 @@ Archive (0)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** SHIPPED JobPost.complete boolean — explicit incomplete flag replaces word-count heuristic :api:
+CLOSED: [2026-05-08]
+:PROPERTIES:
+:CREATED: [2026-05-08]
+:LAST_TOUCHED: [2026-05-08]
+:END:
+Shipped 2026-05-08 in =api/= as M0 of the ccsender-as-the-gateway plan's "complete bool" branch (notes.org Plans/ccsender as the gateway).
+
+Single boolean replaces the old =_is_thin_description= word-count heuristic everywhere it gated behavior:
+- =models/job_post.py= adds =complete = BooleanField(default=True, db_index=True)=.
+- Migration 0071 backfills =complete=False= for all rows where description was empty or <60 words (one-time use of the old heuristic, then the heuristic dies).
+- =api/views/scrapes.py:687= from-text dedup bypass now reads =existing.complete= instead of =not _is_thin_description(existing)=. Same trust-aware semantics, single explicit gate.
+- =lib/parsers/job_post_extractor.py= upgrade branches (=updated_stub=, =updated_stub_via_fingerprint=, =force_updated=, =force_noop=) flip =complete=True= after a successful field merge so the next scrape on that link 409s as expected. Arbiter gate also reads =not job.complete=.
+- =lib/scraper.py= "run scrape on a stub to enrich it" branch reads =linked.complete= instead of word-counting the description.
+- =api/views/jobs.py= adds canonical =filter[complete]=true|false=; legacy =filter[stub]= stays as alias.
+- =api/views/reports.py= =exclude_stubs= param filters on =complete=True=.
+- =lib/services/application_flow.py= Sankey =BUCKET_STUB= gates on =not post.complete=. =_is_thin_description= deleted; =STUB_MIN_WORDS=60= kept (still the upgrade-quality threshold inside the merge logic).
+- Test fixtures updated: stub-upgrade tests pass =complete=False= explicitly. Renamed =test_stub_duplicate_passes_through_for_upgrade= → =test_incomplete_duplicate_passes_through_for_upgrade= and asserts a long-description-but-=complete=False= JP still bypasses the 409 (the new contract: bool is the gate, not text length).
+
+API tests: 813/813 OK. Lint: ruff clean on touched files.
+
+Unblocks M1 (scrape-graph =ReviewCompleteness= node), M2 (frontend "Mark incomplete" button + extension popup branching), M3 (cc_auto sets =complete=False= on email-stub creation directly).
+
+** TODO skeleton pages in reports
 ** TODO https://chromewebstore.google.com/detail/career-caddy-sender/pjdajamkhjkemoaogohehcdpfkocofhd
 ** TODO Extension API-key sprawl: dedupe on Connect or auto-expire server-side
 Each popup Connect mints a fresh =Career Caddy Sender — YYYY-MM-DD= key; Disconnect best-effort revokes. Leaks happen on uninstall, profile reset, or offline disconnect. Severity is low — keys are scoped to the minting user — but the API-keys list grows unbounded.
