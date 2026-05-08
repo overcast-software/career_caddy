@@ -15,12 +15,12 @@ TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
 Inbox (27)
   Bug (4)
-  Enhancement (29)
+  Enhancement (24)
   Feature (2)
   Idea (0)
 Backlog [0/3]
 Active [1/36]
-Icebox [0/4]
+Icebox [0/6]
 Archive (0)
 #+end_example
 * Inbox                                              :IMPORTANT:
@@ -156,28 +156,32 @@ Related: notes.org Plans/ccsender as the gateway/Phase 3a — ships onboarding-a
 :CREATED: [2026-05-08]
 :LAST_TOUCHED: [2026-05-08]
 :END:
-The extension's =cc-extension-present= postMessage appears to only fire once the extension is logged in (has an API key). That collapses two distinct states into one — the SPA can't tell "extension not installed" from "extension installed but not signed in" — so the wizard's score step shows "Install the extension" to users who already have it but never logged in.
+*Reduced scope after SSO ship (2026-05-08).* SSO closes the not-authed window the moment the user opens the popup once on a careercaddy.online tab — auth happens automatically. The remaining gap is users who installed the extension but haven't yet popped it open, or who installed it before they had a SPA session. In that small window the SPA still can't distinguish "not installed" from "installed but never popped open."
 
-*** Fix
+The =cc-extension-present= postMessage today fires from a content script regardless of API key (it should — the script has no key dependency). Verify before doing more: this entry was filed assuming the present-signal was auth-gated, which may have been wrong.
+
+*** Fix (if still needed after verification)
 Two postMessage signals from the extension content script:
-- =cc-extension-present= — fires on *every* page load, regardless of auth state. Tells the SPA the extension is installed.
-- =cc-extension-authed= — fires once the extension has a valid API key. Tells the SPA the extension is fully wired up and capture-ready.
+- =cc-extension-present= — fires on *every* page load. Confirms install.
+- =cc-extension-authed= — fires once the extension has a valid =jh_*= key in =chrome.storage.local=. Confirms capture-ready.
 
 The SPA's application.js =_handleExtensionPresent= handler already mirrors the present flag onto =currentUser.extensionPresent= (tracked). Add a =currentUser.extensionAuthed= tracked flag fed by the new auth signal. Wizard score step copy branches on three states:
 - Neither → "Install the extension"
-- Present, not authed → "Sign in to the extension — click its icon and use your Career Caddy credentials."
+- Present, not authed → "Click its icon — it'll sign in using your Career Caddy session."
 - Both → "Click the extension icon on any job posting to capture it."
 
 *** Related
-This pairs naturally with =Extension SSO via SPA localStorage — no login dialog= (above): once SSO ships, the present-but-not-authed gap closes the moment the user lands on careercaddy.online with the extension installed. Until then, this two-signal split is the right interim.
+Paired with =Extension SSO via SPA localStorage — no login dialog= (now SHIPPED): SSO makes the not-authed state self-healing on first popup-open, so this two-signal split is no longer urgent. Likely Icebox unless real users complain.
 
 Tag: =:extension:= =:auth:=.
 
-*** TODO Sidebar background lost on scroll when content overflows :frontend:bug:
+*** SHIPPED Sidebar background lost on scroll when content overflows :frontend:bug:
+CLOSED: [2026-05-08]
 :PROPERTIES:
 :CREATED: [2026-05-08]
 :LAST_TOUCHED: [2026-05-08]
 :END:
+Shipped 2026-05-08 in =frontend/app/components/sidebar.hbs=. Root cause: =<aside>= was sized =w-full h-full min-h-full bg-white …= — the =h-full= locked the aside to 100dvh while its child =<ul>= overflowed it. The =.mobile-drawer= (=overflow-y: auto=) scrolled, but the aside's =bg-white= only painted the locked 100dvh, so scrolling past that revealed the page background through the children. Fix: drop =h-full=, keep =min-h-full= so the aside grows to its content's natural height and the bg paints the whole scroll length. Same hygiene push also fixed the wizard SSO copy at =frontend/app/templates/wizard/score.hbs= ("Click its icon — it'\''ll sign itself in using your Career Caddy session" replaces the now-obsolete "sign in with credentials" line) and patched =tests/acceptance/login-flow-test.js= with =StoreStub= + =InfinityStub= so the post-login redirect to =/job-posts.index= no longer 404s back to /login under tests (the previous Phase 3b.1 ship updated the redirect target + test assertion but never gated the test pass).
 When the sidebar has more entries than fit the viewport (Documentation expanded with all its sub-links, plus everything below it — Admin, Settings, Quick Copy, theme switcher), the inner content scrolls but the sidebar's background only paints the visible window. Past the scroll boundary the page background bleeds through, leaving the bottom rows visually "floating" over the dashboard.
 
 *** Reproduce
@@ -193,36 +197,15 @@ Either move the bg color onto the scrolling container, or make the aside =h-scre
 
 Tag: =:frontend:= =:bug:=.
 
-*** TODO Wizard assistance — contextual flash messages or chat surface :frontend:wizard:
+*** SHIPPED Extension SSO via SPA localStorage — no login dialog :extension:auth:
+CLOSED: [2026-05-08]
 :PROPERTIES:
 :CREATED: [2026-05-07]
-:LAST_TOUCHED: [2026-05-07]
+:LAST_TOUCHED: [2026-05-08]
 :END:
-The 3b.1 wizard skeleton ships static instructional copy on each card. New users hit edge cases the static copy can't anticipate — uploaded a corrupt PDF, picked a profession that surprises them after extraction, sat on a step for two minutes without acting. Two assistive options worth weighing:
+Shipped 2026-05-08 in extension v1.1.0 (Chrome Web Store). The popup's =loadSaved= now calls =attemptSsoFromActiveTab= — reads =ember_simple_auth-session= via =chrome.scripting.executeScript= against the active careercaddy.online tab, refreshes the JWT if needed, mints a =Career Caddy Sender — YYYY-MM-DD= API key. The username/password connect form is gone; the only fallback is a "Sign in to Career Caddy" link to =/login= when no SPA session exists. README's version-history section documents the visible UX change.
 
-*** Option A — contextual flash messages
-Cheap to ship. Each step's controller fires =flashMessages.info= on activate with a tip ("Pasting works too — drop your resume markdown into the chat panel after upload"). Step-aware nudges on errors ("That looked thin — try uploading a richer doc"). Stays inside the existing flash plumbing; no new surface area. Risk: flash messages are transient and easy to miss; shouting at every page load gets annoying fast.
 
-*** Option B — AI chat surface in the wizard
-The Phase 3b.2 plan node. Embed the existing chat surface inside the wizard card so the onboarding agent can converse — "Need help picking a profession? Tell me about your last role." Agent already exists (=agents/agents/onboarding_agent.py=); chat-server already proxies. The architectural lift is bigger, but the UX win is real.
-
-*** Recommendation
-Ship A as a follow-up to 3b.1 (~hour of work) so the wizard isn't naked between 3b.1 and 3b.2 landing. B is the proper fix and the existing plan node — don't reduce its scope by cramming flashes in pretending they're the answer.
-
-*** Scope of A
-- =services/onboarding.js= gets a =stepHints= map (step → array of hint strings).
-- Each wizard step controller =activate()= fires the first hint.
-- Errors (upload failed, no resume after step 2) trigger a different hint via =flashMessages.danger=.
-- Hints are dismissable; once dismissed within a session they don't re-fire on revisit (sessionStorage key per hint).
-
-Tag: =:frontend:= =:wizard:=.
-Related: notes.org Plans/ccsender as the gateway/Phase 3b — this is a cheaper alternative to embedding the agent surface.
-
-*** TODO Extension SSO via SPA localStorage — no login dialog :extension:auth:
-:PROPERTIES:
-:CREATED: [2026-05-07]
-:LAST_TOUCHED: [2026-05-07]
-:END:
 Current extension flow asks the user for username/password the first time they click its icon, then mints an API key from the resulting JWT. That's a *second* login the user already did on the SPA. With the extension's host permission on careercaddy.online, it can read the SPA's active session straight from =window.localStorage= (=ember_simple_auth-session=) and mint its own =jh_*= API key without a popup form.
 
 *** Flow
@@ -1568,5 +1551,19 @@ Deferred but not dead. Same category layout.
 ** TODO decide on user roles and be able to manage them as admin :infra:
 
 ** TODO scrape icon better than paperclip ? :extension:
+
+** TODO Wizard assistance — contextual flash messages or chat surface :frontend:wizard:
+:PROPERTIES:
+:CREATED: [2026-05-07]
+:LAST_TOUCHED: [2026-05-08]
+:END:
+Iceboxed 2026-05-08. No evidence users get stuck mid-wizard; static copy + sidebar-visible "Setup wizard" link covers the surface. Reopen if real users report confusion. Option A (flash hints, ~1hr) is the cheap revival path; Option B (chat-embed in wizard) is dead — see =:dead:= notes.org Phase 3b.2 mention if it exists, otherwise the chat-embed surface is not getting built without a different reason than onboarding-help.
+
+** TODO Extension help button — context-passing /help route :extension:
+:PROPERTIES:
+:CREATED: [2026-05-08]
+:LAST_TOUCHED: [2026-05-08]
+:END:
+Iceboxed 2026-05-08. notes.org Phase 4 marked DEAD same date — postMessage-into-careercaddy-sessionStorage mechanism breaks on third-party JD pages where Ember isn't loaded. URL-param fallback collapses into =/docs= which already serves the help role. Reopen only if users ask for in-popup help; even then, =/docs= is probably the answer.
 * Archive                                            :IMPORTANT:
 Auto-populated by =cc-todo-archive-*=. Do not rely on freshness.
