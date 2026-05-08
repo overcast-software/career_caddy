@@ -6173,3 +6173,37 @@ Local-build XPI for the user lives in =~/Sandbox/cc-ext-local/= and
 (=career-caddy-sender-local@careercaddy.online=) so it coexists with the
 prod extension in one Firefox profile.
 
+
+* SHIPPED Sidebar background lost on scroll when content overflows :frontend:bug:
+CLOSED: [2026-05-08]
+:PROPERTIES:
+:CREATED: [2026-05-08]
+:LAST_TOUCHED: [2026-05-08]
+:ARCHIVE_TIME: 2026-05-08 Fri 13:42
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Shipped 2026-05-08 in =frontend/app/components/sidebar.hbs=. Root cause: =<aside>= was sized =w-full h-full min-h-full bg-white …= — the =h-full= locked the aside to 100dvh while its child =<ul>= overflowed it. The =.mobile-drawer= (=overflow-y: auto=) scrolled, but the aside's =bg-white= only painted the locked 100dvh, so scrolling past that revealed the page background through the children. Fix: drop =h-full=, keep =min-h-full= so the aside grows to its content's natural height and the bg paints the whole scroll length. Same hygiene push also fixed the wizard SSO copy at =frontend/app/templates/wizard/score.hbs= ("Click its icon — it'\''ll sign itself in using your Career Caddy session" replaces the now-obsolete "sign in with credentials" line) and patched =tests/acceptance/login-flow-test.js= with =StoreStub= + =InfinityStub= so the post-login redirect to =/job-posts.index= no longer 404s back to /login under tests (the previous Phase 3b.1 ship updated the redirect target + test assertion but never gated the test pass).
+When the sidebar has more entries than fit the viewport (Documentation expanded with all its sub-links, plus everything below it — Admin, Settings, Quick Copy, theme switcher), the inner content scrolls but the sidebar's background only paints the visible window. Past the scroll boundary the page background bleeds through, leaving the bottom rows visually "floating" over the dashboard.
+
+
+* SHIPPED Extension SSO via SPA localStorage — no login dialog :extension:auth:
+CLOSED: [2026-05-08]
+:PROPERTIES:
+:CREATED: [2026-05-07]
+:LAST_TOUCHED: [2026-05-08]
+:ARCHIVE_TIME: 2026-05-08 Fri 13:42
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Shipped 2026-05-08 in extension v1.1.0 (Chrome Web Store). The popup's =loadSaved= now calls =attemptSsoFromActiveTab= — reads =ember_simple_auth-session= via =chrome.scripting.executeScript= against the active careercaddy.online tab, refreshes the JWT if needed, mints a =Career Caddy Sender — YYYY-MM-DD= API key. The username/password connect form is gone; the only fallback is a "Sign in to Career Caddy" link to =/login= when no SPA session exists. README's version-history section documents the visible UX change.
+
+
+Current extension flow asks the user for username/password the first time they click its icon, then mints an API key from the resulting JWT. That's a *second* login the user already did on the SPA. With the extension's host permission on careercaddy.online, it can read the SPA's active session straight from =window.localStorage= (=ember_simple_auth-session=) and mint its own =jh_*= API key without a popup form.
+
