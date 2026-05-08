@@ -150,6 +150,110 @@ Deferred — touches every settings page, dozens of templates, the user serializ
 
 Tag: =:api:= =:frontend:= =:chore:=.
 Related: notes.org Plans/ccsender as the gateway/Phase 3a — ships onboarding-as-resource on the same JSON:API path; this enhancement extends the same conformity to Profile.
+
+*** TODO Extension presence vs auth — distinguish in postMessage signals :extension:auth:
+:PROPERTIES:
+:CREATED: [2026-05-08]
+:LAST_TOUCHED: [2026-05-08]
+:END:
+The extension's =cc-extension-present= postMessage appears to only fire once the extension is logged in (has an API key). That collapses two distinct states into one — the SPA can't tell "extension not installed" from "extension installed but not signed in" — so the wizard's score step shows "Install the extension" to users who already have it but never logged in.
+
+*** Fix
+Two postMessage signals from the extension content script:
+- =cc-extension-present= — fires on *every* page load, regardless of auth state. Tells the SPA the extension is installed.
+- =cc-extension-authed= — fires once the extension has a valid API key. Tells the SPA the extension is fully wired up and capture-ready.
+
+The SPA's application.js =_handleExtensionPresent= handler already mirrors the present flag onto =currentUser.extensionPresent= (tracked). Add a =currentUser.extensionAuthed= tracked flag fed by the new auth signal. Wizard score step copy branches on three states:
+- Neither → "Install the extension"
+- Present, not authed → "Sign in to the extension — click its icon and use your Career Caddy credentials."
+- Both → "Click the extension icon on any job posting to capture it."
+
+*** Related
+This pairs naturally with =Extension SSO via SPA localStorage — no login dialog= (above): once SSO ships, the present-but-not-authed gap closes the moment the user lands on careercaddy.online with the extension installed. Until then, this two-signal split is the right interim.
+
+Tag: =:extension:= =:auth:=.
+
+*** TODO Sidebar background lost on scroll when content overflows :frontend:bug:
+:PROPERTIES:
+:CREATED: [2026-05-08]
+:LAST_TOUCHED: [2026-05-08]
+:END:
+When the sidebar has more entries than fit the viewport (Documentation expanded with all its sub-links, plus everything below it — Admin, Settings, Quick Copy, theme switcher), the inner content scrolls but the sidebar's background only paints the visible window. Past the scroll boundary the page background bleeds through, leaving the bottom rows visually "floating" over the dashboard.
+
+*** Reproduce
+- Sign in as a staff user, expand the =Documentation= section in the sidebar.
+- Sidebar exceeds viewport height; scroll down.
+- Visible: Admin / Settings / Quick Copy / theme switcher render against the page background instead of the sidebar's surface color.
+
+*** Likely cause
+=app/components/sidebar.hbs= sets the sidebar's =bg-white= / dark-mode equivalent on the outer =<aside>= but not on the inner scrollable container. When the inner div scrolls beyond the aside's painted area, the missing fill is visible.
+
+*** Fix sketch
+Either move the bg color onto the scrolling container, or make the aside =h-screen overflow-y-auto= so its background extends the full scroll length. Verify against both light and dark themes (the existing =theme= service toggles classes on the aside).
+
+Tag: =:frontend:= =:bug:=.
+
+*** TODO Wizard assistance — contextual flash messages or chat surface :frontend:wizard:
+:PROPERTIES:
+:CREATED: [2026-05-07]
+:LAST_TOUCHED: [2026-05-07]
+:END:
+The 3b.1 wizard skeleton ships static instructional copy on each card. New users hit edge cases the static copy can't anticipate — uploaded a corrupt PDF, picked a profession that surprises them after extraction, sat on a step for two minutes without acting. Two assistive options worth weighing:
+
+*** Option A — contextual flash messages
+Cheap to ship. Each step's controller fires =flashMessages.info= on activate with a tip ("Pasting works too — drop your resume markdown into the chat panel after upload"). Step-aware nudges on errors ("That looked thin — try uploading a richer doc"). Stays inside the existing flash plumbing; no new surface area. Risk: flash messages are transient and easy to miss; shouting at every page load gets annoying fast.
+
+*** Option B — AI chat surface in the wizard
+The Phase 3b.2 plan node. Embed the existing chat surface inside the wizard card so the onboarding agent can converse — "Need help picking a profession? Tell me about your last role." Agent already exists (=agents/agents/onboarding_agent.py=); chat-server already proxies. The architectural lift is bigger, but the UX win is real.
+
+*** Recommendation
+Ship A as a follow-up to 3b.1 (~hour of work) so the wizard isn't naked between 3b.1 and 3b.2 landing. B is the proper fix and the existing plan node — don't reduce its scope by cramming flashes in pretending they're the answer.
+
+*** Scope of A
+- =services/onboarding.js= gets a =stepHints= map (step → array of hint strings).
+- Each wizard step controller =activate()= fires the first hint.
+- Errors (upload failed, no resume after step 2) trigger a different hint via =flashMessages.danger=.
+- Hints are dismissable; once dismissed within a session they don't re-fire on revisit (sessionStorage key per hint).
+
+Tag: =:frontend:= =:wizard:=.
+Related: notes.org Plans/ccsender as the gateway/Phase 3b — this is a cheaper alternative to embedding the agent surface.
+
+*** TODO Extension SSO via SPA localStorage — no login dialog :extension:auth:
+:PROPERTIES:
+:CREATED: [2026-05-07]
+:LAST_TOUCHED: [2026-05-07]
+:END:
+Current extension flow asks the user for username/password the first time they click its icon, then mints an API key from the resulting JWT. That's a *second* login the user already did on the SPA. With the extension's host permission on careercaddy.online, it can read the SPA's active session straight from =window.localStorage= (=ember_simple_auth-session=) and mint its own =jh_*= API key without a popup form.
+
+*** Flow
+1. Extension content script runs on careercaddy.online.
+2. Reads =ember_simple_auth-session= from =window.localStorage=. If absent, link the user to =careercaddy.online/login= from the popup — *no in-extension login dialog*.
+3. Extracts =access_token= (and =refresh_token= as a fallback for expiry).
+4. POSTs =/api/v1/api-keys/= with =Authorization: Bearer <access_token>= and =name="ccsender-auto-<date>"=. Returns the long-lived =jh_*= key.
+5. Extension stashes the key in =chrome.storage.local=. Discards the JWT immediately.
+
+*** Why this works
+- Same trust boundary the user already accepted by installing the extension with host permissions on careercaddy.online — analogous to a password manager reading a login form.
+- =/api/v1/api-keys/= already accepts JWT auth and lets the user mint keys for themselves; no new endpoint.
+- The "ccsender-auto-<date>" naming convention keeps auto-issued keys identifiable in the API-keys admin so they can be revoked separately from manual ones.
+
+*** Scope
+- *Extension repo* (=overcast-software/career_caddy_chrome=, also Firefox once AMO ships): content script reads localStorage, mints key, removes the popup login form for the happy path. Keep manual login as a fallback when the user isn't logged in to the SPA.
+- *No SPA changes.* The SPA is a dumb participant — its session lives in localStorage, the extension reads it.
+- *Privacy policy update*: one sentence — "the extension reads your active SPA session to issue itself a long-lived API key, then never reads it again." Honest disclosure, low policy surface.
+
+*** Edge cases
+- *Not logged in*: extension popup links to careercaddy.online/login. User logs in, extension's content script picks up the new session on the next navigation.
+- *JWT expired*: use the stored refresh_token to refresh, then mint. Or just nudge the user to navigate to any SPA page (ESA refreshes on its own).
+- *Multi-account*: ESA points at one user at a time — that's the active account the extension picks up. Matches user expectation.
+- *ESA storage adapter swap*: =ember_simple_auth-session= is the default key; if anyone changes the storage adapter the extension's read breaks silently. Treat missing key as "not logged in" and prompt manually.
+
+*** Why not now
+This is an extension-side change, not a wizard skeleton change. Phase 3b.1 ships the wizard against the existing extension login flow; this enhancement makes the wizard's "install the extension" step genuinely one-click on a logged-in tab. Land Phase 3b first; tackle this as a follow-up under =extension/auth=.
+
+Tag: =:extension:= =:auth:=.
+Related: notes.org Plans/ccsender as the gateway/Phase 3 — Post-install AW handoff. Improves the install→AW handoff by removing the second-login friction.
+
 *** TODO DOCX export — archetype-specific resume templates
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-07]
