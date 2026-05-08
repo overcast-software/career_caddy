@@ -6268,3 +6268,33 @@ Workflow:
 
 Unblocks M2 (frontend "Mark incomplete" button + extension popup branching) and M3 (cc_auto sets =complete=False= on email-stub creation directly).
 
+
+* SHIPPED Mark incomplete button + extension popup branching (M2) :frontend:extension:
+CLOSED: [2026-05-08]
+:PROPERTIES:
+:CREATED: [2026-05-08]
+:LAST_TOUCHED: [2026-05-08]
+:ARCHIVE_TIME: 2026-05-08 Fri 15:43
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Shipped 2026-05-08 as M2 of the ccsender-as-the-gateway plan's "complete bool" branch.
+
+frontend/:
+- =app/models/job-post.js= gains =@attr('boolean', { defaultValue: true }) complete=. The old =STUB_MIN_WORDS=60= constant + word-count getter are deleted; =isStub= now reads =!this.complete= for backward compat with template consumers (job-posts/list.hbs, job-posts/show.hbs).
+- =app/controllers/job-posts/show.js= gains =markIncomplete= action. Confirm dialog ("Mark this post incomplete so the extension will re-scrape it?"), then PATCHes =complete=false= and flashes success. Rolls back attributes on save error.
+- =app/templates/job-posts/show.hbs= gains a "Mark incomplete" small button next to Edit, gated on =this.model.complete= (hidden when already incomplete; the button is the off-switch).
+- =tests/acceptance/mark-incomplete-test.js= covers visibility-when-complete, hidden-when-incomplete, and click-flips-and-saves with a JobPostStub + window.confirm shim.
+
+extension (=public/extensions/career-caddy-sender/popup.js=, no version bump):
+- =lookupExistingJobPost= now reads =attrs.complete= (default true for older api) and returns it on the lookup result.
+- =resolveOpenScreen= branches three ways instead of two: existing complete JP → showTracked (Open link, today's behavior); existing !complete JP → showConnected with caption =Completing existing post: <title>=; no JP → showConnected (default Send).
+- The from-text endpoint's =existing.complete= bypass (M0) lets the resend through and parse_scrape upgrades the JP in place; CompletenessReviewer (M1) re-flips =complete=True= on success.
+
+Per memory =feedback_no_reflex_version_bumps=, manifest.json stays at 1.1.0 — user will bump when they want a CWS upload.
+
+Unblocks M3 (cc_auto sets =complete=False= on email-stub creation directly).
+
