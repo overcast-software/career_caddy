@@ -107,9 +107,6 @@ ResidentBrowser._ensure_context calls ctx.add_cookies once per domain (resident.
 :LAST_TOUCHED: [2026-05-05]
 :END:
 ** Feature
-*** SHIPPED Staff Resolve & dedupe button on jp.edit — kicks off browser scrape with skip_extract
-CLOSED: [2026-05-09]
-api PR #108 Scrape.skip_extract field + POST /api/v1/job-posts/:id/resolve-and-dedupe/ endpoint, staff-gated, returns the new Scrape resource for client polling. Merged at api 284daa5. agents PR #20 ScrapeGraphState.skip_extract threaded through hold-poller; PersistScrape conditionally returns ResolveApplyUrl when set, skipping StartExtract → Tier* → PersistJobPost → ReviewCompleteness → UpdateProfile. Merged at agents 6c6fb77. frontend PR #130 staff-only "Resolve & dedupe (staff)" pill on jp.edit; new app/adapters/job-post.js with resolveAndDedupe inheriting ApplicationAdapter.ajax for auth + JSON:API errors; controller is pure UI side effects. Merged at frontend ba82c33. Use case: tracker URLs like ZipRecruiter /km/<token> whose canonical_link can't be derived without a real browser fetch through the JS / meta-refresh redirect. Combined with today's earlier ResolveFinalUrl networkidle re-read (parent 3570ee5) and parse_scrape canonical_link OR-leg dedup (api 67a5295), the resulting child scrape collapses onto the canonical JobPost row automatically via CheckLinkDedup → DuplicateShortCircuit. The originating JP's fields are intentionally untouched.
 *** TODO Extension settings screen
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-09]
