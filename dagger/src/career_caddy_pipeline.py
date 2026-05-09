@@ -165,8 +165,13 @@ class CareerCaddy:
             # zero tests collected or swallowed failures, require the
             # canonical success markers in the log. Tally #9/#13/#14/#19 —
             # this assertion closes the green-but-broken gap.
+            #
+            # Cat the log first so `dagger call test-api stdout` returns
+            # the test output (otherwise the grep-q exec is silent and
+            # downstream filters have nothing to chew on).
             .with_exec([
                 "sh", "-c",
+                "cat /test.log; "
                 "grep -qE '^Ran [1-9][0-9]* test' /test.log "
                 "&& grep -qE '^OK( |$)' /test.log",
             ])
@@ -191,8 +196,13 @@ class CareerCaddy:
             # Belt-and-suspenders: even if the runner ever exits 0 with
             # zero passes or non-zero fails, require the canonical TAP
             # summary in the log. Tally #9/#13/#14/#19.
+            #
+            # Cat the log first so `dagger call test-frontend stdout`
+            # returns the TAP (otherwise the grep-q exec is silent and
+            # downstream filters have nothing to chew on).
             .with_exec([
                 "sh", "-c",
+                "cat /tap.log; "
                 "grep -qE '^# fail +0$' /tap.log "
                 "&& grep -qE '^# pass +[1-9]' /tap.log",
             ])
