@@ -6356,3 +6356,30 @@ CLOSED: [2026-05-08]
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
 api/job_hunting/lib/parsers/job_post_extractor.py: link_hit lookup in process_evaluation now matches Q(link=link) | Q(canonical_link=canonicalize_link(link)), mirroring the from-text endpoint dedupe. Without the canonical leg, an extension push at /jobs/view/<id>/ failed to match an email-stub at /comm/jobs/view/<id>/ and forked a new JobPost via the (title, company) get_or_create cold path. _trust_aware_overwrite now eager-flips complete=True on stub overwrite (mirrors the updated_stub branch). Regression test added. jp 1918 / jp 1922 incident 2026-05-08.
+
+* SHIPPED Navigate captures URL pre-JS-redirect — ResolveFinalUrl never re-reads page.url
+CLOSED: [2026-05-08]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-08 Fri 22:58
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Bug
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+agents/scrape_graph/nodes_scrape.py:267-268: page.goto(target_url, wait_until="domcontentloaded") + state.final_url=page.url captures the URL BEFORE JS / meta-refresh redirects fire. Email-tracker URLs - ZipRecruiter /km/<token>, SendGrid /ls/click, Mailgun /c/ - all redirect via meta-refresh or window.location after domcontentloaded; Navigate already returned by then, so state.final_url is frozen at the tracker URL. ResolveFinalUrl at nodes_scrape.py:283 reads state.final_url, sees it equals state.submitted_url, early-exits with did_redirect=false, never creates the child scrape, canonical_link stays as /km/<token>.
+
+Evidence: scrape 394 = jp 1908 graph trace, 2026-05-08 20:05:38 prod, ResolveFinalUrl duration_ms=0 did_redirect=false canonical_url=/km/<opaque>. Confirms the comment at Navigate that picked domcontentloaded over load to dodge LinkedIn /comm/ auth-interstitial deadlocks - fair for that case, leaves JS redirects unchaperoned.
+
+Fix scope: in ResolveFinalUrl.run, before _resolve_final_url_body, await page.wait_for_load_state networkidle timeout=5_000 then re-read page.url into state.final_url. Wrap in best-effort try/except so a slow tracker cannot park ResolveFinalUrl past its 15s budget. Navigate stays unchanged so its deadlock-safety holds.
+
+Regression test - agents: mock a Playwright page whose .goto returns immediately at /km/, then a delayed .url that flips to the canonical after a tick. Assert ResolveFinalUrl populates did_redirect=true + creates the child scrape + state.canonical_url is the post-redirect URL.
+
+Verification - manual, post-deploy: re-run a scrape against jp 1908 /km/<opaque> URL with caddy-poller --attended; graph trace should show ResolveFinalUrl did_redirect=true canonical_url=https://www.ziprecruiter.com/jobs/altus-llc-x/. With today landed canonical_link OR-leg dedup at parent b2c9ba8 / api 67a5295, the child scrape would then collapse onto jp 1923 or 1924 in parse_scrape link_hit.
+
+Out of scope: ZipRecruiter /km/ tracking-param strip lk lvk tsid is a separate _TRACKING_PARAMS PR. ZipRecruiter url_rewrites for slug-suffix tokens is a separate ScrapeProfile PR. LinkedIn apply selectors stale apply_resolver_config no_selector_matched is a separate ScrapeProfile PR. ZipRecruiter empty ready_selector is a separate ScrapeProfile PR.
+
+Files:
+- agents/scrape_graph/nodes_scrape.py:336 ResolveFinalUrl.run
+- agents/scrape_graph/nodes_scrape.py:241-273 Navigate, do not touch
+- agents/tests/test_scrape_graph_state.py or new test file for regression
