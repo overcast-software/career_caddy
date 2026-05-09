@@ -6332,3 +6332,15 @@ Closure [2026-05-08]: shipped via posture E (cc_auto declares =complete=False= o
 - PR-D cc_auto pytest harness + 3 digest fixtures (LinkedIn, ZipRecruiter jp 1724 reproduction, Indeed) + 17 tests covering both legs.
 - chore (api_client): =Optional[str]= → =str | None= ruff cleanup.
 Leg 2 (api page-fetch coherence) deferred — revisit only if posture E + leg 1 prove insufficient. Plan node retained at notes.org =Plans/Multi-job digest hallucination — legs 1 and 2=. Live verification (re-tag a digest, run =caddy-process --once=, confirm rows land =complete=False= and span validator drops cross-row pairs) deferred to user.
+
+* SHIPPED Move Mark-incomplete to edit + ccsender 1.1.1 resend UX
+CLOSED: [2026-05-08]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-08 Fri 21:49
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+frontend show.hbs button moved to edit.hbs (HyperUI amber pill); markIncomplete action moved to edit controller; mark-incomplete acceptance test now visits /edit. ccsender extension bumped 1.1.0 → 1.1.1 with resend-to-complete UX: showConnected swaps heading to 'Complete this post' and button to 'Resend to complete' when the active URL maps to a complete=false JobPost; new accent-colored banner shows existing post title+company. Disambiguates from earlier in-place 1.1.0 build (commit d2ea3da) that shipped the three-state branching without a version bump.
