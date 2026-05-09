@@ -14,9 +14,9 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (28)
+Inbox (29)
   Bug (3)
-  Enhancement (24)
+  Enhancement (25)
   Feature (2)
   Idea (0)
 Backlog [0/3]
@@ -328,9 +328,6 @@ Lives in =~/.config/doom/config.org=.
 :END:
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
-*** SHIPPED parse_scrape canonical_link dedupe + trust-aware overwrite eager-complete
-CLOSED: [2026-05-08]
-api/job_hunting/lib/parsers/job_post_extractor.py: link_hit lookup in process_evaluation now matches Q(link=link) | Q(canonical_link=canonicalize_link(link)), mirroring the from-text endpoint dedupe. Without the canonical leg, an extension push at /jobs/view/<id>/ failed to match an email-stub at /comm/jobs/view/<id>/ and forked a new JobPost via the (title, company) get_or_create cold path. _trust_aware_overwrite now eager-flips complete=True on stub overwrite (mirrors the updated_stub branch). Regression test added. jp 1918 / jp 1922 incident 2026-05-08.
 *** TODO Logout/login shows another user's score
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-08]
