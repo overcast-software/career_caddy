@@ -39,7 +39,31 @@ Archive (0)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** TODO ZipRecruiter dedup gaps — three URL shapes for the same job  :scrape:dedupe:bug:
+Repro: jp 1908 (source=email, /km/<opaque>), jp 1923 (source=extension, /jobs/altus-llc-2287a4f5/software-developer-c-remote-2ffd5d4c?lk=…&tsid=…), jp 1924 (source=extension, /jobs/altus-llc/software-developer-c-remote?lvk=…). Same Altus Engineering C++ Software Developer role. canonical_link == link on all three (canonicalize_link is a no-op for ZipRecruiter — no profile rewrites, no tracking-param strip).
+
+Three distinct gaps, fix in priority order:
+
+1. =_TRACKING_PARAMS= missing ZipRecruiter clickout params. =lk=, =lvk=, =tsid= are job-board referral tokens. One-line fix in =api/job_hunting/models/job_post_dedupe.py:42=. Necessary but not sufficient (1923 and 1924 still differ on slug).
+
+2. ZipRecruiter ScrapeProfile needs a =url_rewrites= rule to strip trailing =-<8hex>= tokens from =/jobs/<companyslug>-<token>/<jobslug>-<token>=. Pattern roughly: =^(/jobs/[^/-]+(?:-[^/-]+)*?)(-[a-f0-9]{8})/(.+?)(-[a-f0-9]{8})$= → =$1/$3=. Apply via =update_scrape_profile= MCP. Together with #1 this collapses 1923 ↔ 1924.
+
+3. =/km/<opaque>= (jp 1908) is a per-recipient ZipRecruiter email-redirect token; cannot be canonicalized without resolving the redirect. Two options:
+   - Resolve at email-parse time (cc_auto chases the 301/302, stores the resolved URL).
+   - Accept that =/km/= rows only collapse via title+company fingerprint. Currently =fingerprint(post)= hashes (company_id, normalized title, normalized location) — but 1908 title is "Software Developer" while 1923/1924 are "Software Developer-C++" so the fingerprint differs anyway. Probably untouchable without redirect-resolution.
+
+Files:
+- =api/job_hunting/models/job_post_dedupe.py:42= (_TRACKING_PARAMS)
+- ScrapeProfile for ziprecruiter.com (=update_scrape_profile= MCP)
+- =api/job_hunting/migrations/0067_recanonicalize_job_post_links.py= (re-run after #1+#2 land to backfill canonical_link on existing rows)
+
+Smallest test once #1+#2 land: =test_scrape_from_text.py= case where jp exists at /jobs/altus-llc-<token>/<jobslug>-<token>?lk=… and a new submission lands at /jobs/altus-llc/<jobslug>?lvk=…; assert 409 with =meta.job_post_id= pointing at existing.
+
+Out of scope: SQL re-pointing of =duplicate_of_id= for 1908/1923/1924 — user handles via SQL. /km/ resolution at cc_auto email-parse time is its own follow-up.
 ** TODO when clicking on possible duplicate link, the resulting job-post is the duplicate but the possible duplicate warning never chagnes to the other d
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-08]
+:END:
 ** TODO skeleton pages in reports
 ** TODO https://chromewebstore.google.com/detail/career-caddy-sender/pjdajamkhjkemoaogohehcdpfkocofhd
 ** TODO Extension API-key sprawl: dedupe on Connect or auto-expire server-side
