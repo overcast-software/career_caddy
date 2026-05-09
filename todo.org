@@ -1,6 +1,7 @@
 #+TITLE: career_caddy todo board
-#+TODO: TODO(t) STRT(s) WAIT(w) | KILL(k) SHIPPED(p) DONE(d)
+#+TODO: TODO(t) STRT(s) PLAN(p) WAIT(w) LOOP(l)| KILL(k) SHIPPED(p) DONE(d)
 #+TAGS: scrape(s) frontend(f) api(a) agents(g) bugs(b) infra(i) chore(C) chat(c) dedupe(d) extension(e) mcp(m)
+#+startup: overview
 
 * Navigation                                         :IMPORTANT:
 Triage board. Drill via =cc-todo-*= helpers; never read whole.
@@ -14,8 +15,8 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
 Inbox (28)
-  Bug (4)
-  Enhancement (22)
+  Bug (3)
+  Enhancement (24)
   Feature (2)
   Idea (0)
 Backlog [0/3]
@@ -127,7 +128,17 @@ Tags: docs, infra
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
+*** TODO remove expand caret on sidebar
+remove the expand carrot on the sidebar
+*** TODO skeleton pages in reports
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-08]
+:END:
+clicking reports should go to loading skeleton
 *** TODO Profile-as-resource: split User/Profile JSON:API conformity :api:frontend:chore:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-08]
+:END:
 Currently Profile fields (phone, linkedin, github, address, links, auto_score) are flattened into the User serializer's attributes and PATCHed via /api/v1/users/:id/. Backend has a Profile model; wire and Ember Data both treat them as one merged blob.
 
 *** Decided shape
@@ -320,56 +331,6 @@ After logout + login as the same user, the popup (or app?) displayed a score bel
 :LAST_TOUCHED: [2026-05-06]
 :END:
 On scrapes/:id (e.g. /scrapes/334), when the scrape redirected to a canonical child (e.g. 335), the show page renders no job-post or company even though JobPost 1735 was successfully created from 335. The graph-trace endpoint already walks meta.chain across source_scrape; scrapes.show frontend does not. Two reasonable fixes: (a) on the api side, when PersistJobPost runs on the canonical scrape, also set the parent tracker scrapes job_post FK so both ids resolve the same JobPost; (b) on the frontend, when scrape model carries a redirected_to_id (or the latest_status_note matches /redirected to scrape (\d+)/), follow the chain in the scrapes.show route and render the canonical scrapes JobPost. Repro: scrape 334 (governmentjobs.com tracker) → forks scrape 335 (canonical with jobId param) → JobPost 1735 created. /scrapes/334 shows no JobPost; /scrapes/335 should and presumably does.
-*** STRT cc_auto creates JobPost with mismatched link/title/company (multi-job digest hallucination)
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-05]
-:END:
-Repro:
-- jp 1724 stored as title='Junior to Mid Level Full Stack Developer', company='Web Connectivity LLC', link=ziprecruiter.com/km/AAGj-... (per-recipient tracking token), description='This remote position offers a salary range of $50K - $85K per year.'
-- Following the link in a browser lands on the SNBL bilingual BD/PM job at SNBL USA -- a totally different job (different title, different company, different role).
-- Extension push from that page correctly extracted SNBL content and deduped to existing jp 1428 (the real SNBL post). jp 1724 stayed as garbage data.
-
-Progress [2026-05-05]:
-- [X] Leg 3 (ops cleanup) shipped: =python manage.py scan_cc_auto_hallucinations= walks cc_auto-sourced JobPosts (source in email/email_direct), GETs each link, parses page <title>, classifies match/mismatch/indeterminate via Jaccard + SequenceMatcher. Read-only, markdown table to stdout + optional --json sidecar. Auth-wall guard (LinkedIn / Cloudflare login pages → indeterminate) shipped after the false-positive on jp 1730 in prod.
-- [X] Leg 4 (extension as source-of-truth, self-heal) shipped: trust ranking SOURCE_TRUST in models/job_post_dedupe.py (extension > paste > scrape > redirect > manual > email). When parse_scrape's dedupe finds an existing post AND the new source outranks the existing source, all overwritable fields are replaced in-place, source flips to new, JobPostOverwriteDecision audit row records the diff. Symmetric across link-hit and fingerprint-hit branches. The scrapes/from-text 409 short-circuit is now trust-aware too. 11 new tests + 3 existing tests adjusted to same-trust setups for the no-flip invariant. The cc_auto self-heal path: an extension push that canonical-link-collides with a hallucinated email post fixes it on the spot.
-- [ ] Leg 1 (cc_auto side, span-atomic MCP calls) -- still useful even after leg 4: leg 4 self-heals AFTER user pushes; leg 1 prevents the hallucination from landing in the first place. Lower priority now that leg 4 covers the worst case.
-- [ ] Leg 2 (api 422 incoherent_job_post defense) -- after leg 1 lands. Same priority drop as leg 1.
-
-Artifacts shipped [2026-05-05]:
-- api PR (leg 4): =models/job_post_dedupe.py= SOURCE_TRUST + =source_trust()=; =models/job_post_overwrite_decision.py= + migration 0068 (audit row: previous_source/new_source/changed_fields/triggering_scrape); =lib/parsers/job_post_extractor.py= =_trust_aware_overwrite= wired into both link-hit and fingerprint-hit branches; =api/views/scrapes.py= from-text 409 trust-gated. New TestTrustAwareOverwrite class; 3 existing tests narrowed to same-trust setups for the no-flip invariant.
-- api PR (leg 3): =job_hunting/management/commands/scan_cc_auto_hallucinations.py= with AUTH_WALL_MARKERS guard.
-- agents PR #12 hotfix: =tests/test_public_server.py= tool-count + expected-set update (was blocking 3 prior Deploys).
-
-Decisions baked in:
-- Audit trail: yes (JobPostOverwriteDecision row per overwrite, mirrors JobPostDescriptionDecision).
-- DescriptionArbiter: bypassed by trust-aware overwrite for now -- arbiter is untested AND gated behind STUB_MIN_WORDS=60 on BOTH sides, so it never fires for the LinkedIn login-wall case anyway. Top-trust wins; revisit arbiter once it has coverage.
-- All overwritable fields flip together (title, company_id, description, location, etc.) -- not just description. Source flag flips with them.
-- Email is rudimentary ducktape; the long-term plan is scrape-driven jp discovery, at which point email-source posts become rare.
-
-References:
-- Flowchart: =~/.claude/projects/-home-oldbones-Network-syncthing-Projects-career-caddy/flowcharts/ingest-pipeline.md= (TRUST ladder, OW node, three hallucination defense layers).
-- notes.org Architecture / Ingest pipeline -- extension as source of truth (local-only).
-- notes.org Operations / Scrape Log [2026-05-05] also has the screenshot-fix entry so scrape-profile-enhancer sees the safe-defaults change.
-
-Root cause:
-cc_auto's email->JobPost path uses the LLM via MCP tool create_job_post_with_company_check (in mcp.careercaddy.online/mcp). When the source email is a multi-job digest, the LLM can lose cross-row alignment and pass title/company from one row with the link from another. The API endpoint accepts whatever the agent passes -- no coherence check.
-
-Cost: every hallucinated jp is a false positive in the user's library. Future enrichment attempts (in-app scrape using the bad link) compound it -- they will dedupe to a different post via fingerprint and leave the bad jp empty forever.
-
-Fix scope (api + cc_auto):
-1. cc_auto side: when a digest email yields multiple job-candidate spans, force one MCP call per span and pass the link+title+company as a single atomic unit per call. Reject the LLM output if the link host does not appear in the same span as the title/company text.
-2. api side defense-in-depth: when create_job_post_with_company_check is called and the link is fetchable, optionally do a cheap HEAD or short GET, and if the page <title> or <h1> contradicts the title arg by a wide edit-distance, refuse with 422 incoherent_job_post.
-3. Mark jp 1724 as duplicate_of_id=NULL but flag it in the audit pass below.
-
-Ops cleanup:
-- Run a one-time scan: for each cc_auto-sourced jp with thin description, GET the link, parse title, compare to stored title. Surface mismatches in a triage list. Don't auto-delete; human review.
-
-Tags: cc_auto, api, dedupe, bugs
-
-Code touchpoints:
-- agents/mcp_servers/public_server.py + chat_server.py: create_job_post_with_company_check tool definition.
-- ~/Projects/career_caddy_automation: the agent that drives the email triage; needs span-atomic call pattern.
-- api/job_hunting/api/views/job_posts.py: create endpoint accepts title/company/link without coherence check.
 *** TODO SPC o c should reload todo.org before capture
 :PROPERTIES:
 :CREATED:  [2026-05-04]
