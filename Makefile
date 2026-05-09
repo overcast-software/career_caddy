@@ -93,11 +93,33 @@ ci-lint-api:
 ci-lint-frontend:
 	dagger -m ./dagger call lint-frontend
 
+# Concise reports: surface failure blocks + summary; suppress dagger noise.
+# Pass FULL=1 to dump the entire test log unfiltered.
 ci-test-api:
-	dagger -m ./dagger call test-api
+	@set -o pipefail; \
+	if [ -n "$(FULL)" ]; then \
+		dagger -m ./dagger call test-api stdout 2>/dev/null; \
+	else \
+		dagger -m ./dagger call test-api stdout 2>/dev/null | awk ' \
+			/^(FAIL|ERROR): / { hit=1; n=25 } \
+			/^={70}/ { hit=1; n=25 } \
+			/^Ran [0-9]+ tests/ { print } \
+			/^(OK|FAILED)( |$$)/ { print } \
+			hit { print; if (n-- <= 0) hit=0 } \
+		'; \
+	fi
 
 ci-test-frontend:
-	dagger -m ./dagger call test-frontend
+	@set -o pipefail; \
+	if [ -n "$(FULL)" ]; then \
+		dagger -m ./dagger call test-frontend stdout 2>/dev/null; \
+	else \
+		dagger -m ./dagger call test-frontend stdout 2>/dev/null | awk ' \
+			/^not ok / { hit=1; n=20; print; next } \
+			/^# (tests|pass|fail|skip|todo) / { print } \
+			hit { print; if (n-- <= 0) hit=0 } \
+		'; \
+	fi
 
 ci-lint: ci-lint-api ci-lint-frontend
 ci-test: ci-test-api ci-test-frontend
