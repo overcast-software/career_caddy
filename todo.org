@@ -39,6 +39,7 @@ Archive (0)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** TODO when clicking on possible duplicate link, the resulting job-post is the duplicate but the possible duplicate warning never chagnes to the other d
 ** TODO skeleton pages in reports
 ** TODO https://chromewebstore.google.com/detail/career-caddy-sender/pjdajamkhjkemoaogohehcdpfkocofhd
 ** TODO Extension API-key sprawl: dedupe on Connect or auto-expire server-side
@@ -128,6 +129,9 @@ Tags: docs, infra
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
+*** SHIPPED Move Mark-incomplete to edit + ccsender 1.1.1 resend UX
+CLOSED: [2026-05-08]
+frontend show.hbs button moved to edit.hbs (HyperUI amber pill); markIncomplete action moved to edit controller; mark-incomplete acceptance test now visits /edit. ccsender extension bumped 1.1.0 → 1.1.1 with resend-to-complete UX: showConnected swaps heading to 'Complete this post' and button to 'Resend to complete' when the active URL maps to a complete=false JobPost; new accent-colored banner shows existing post title+company. Disambiguates from earlier in-place 1.1.0 build (commit d2ea3da) that shipped the three-state branching without a version bump.
 *** TODO remove expand caret on sidebar
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-08]
@@ -324,9 +328,12 @@ Lives in =~/.config/doom/config.org=.
 :END:
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
+*** SHIPPED parse_scrape canonical_link dedupe + trust-aware overwrite eager-complete
+CLOSED: [2026-05-08]
+api/job_hunting/lib/parsers/job_post_extractor.py: link_hit lookup in process_evaluation now matches Q(link=link) | Q(canonical_link=canonicalize_link(link)), mirroring the from-text endpoint dedupe. Without the canonical leg, an extension push at /jobs/view/<id>/ failed to match an email-stub at /comm/jobs/view/<id>/ and forked a new JobPost via the (title, company) get_or_create cold path. _trust_aware_overwrite now eager-flips complete=True on stub overwrite (mirrors the updated_stub branch). Regression test added. jp 1918 / jp 1922 incident 2026-05-08.
 *** TODO Logout/login shows another user's score
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-06]
+:LAST_TOUCHED: [2026-05-08]
 :END:
 After logout + login as the same user, the popup (or app?) displayed a score belonging to a different user. Possible causes: (1) frontend Ember Data store not cleared on logout — stale records from previous session leak into new one; (2) UX7 made filter[link] visible across users — popup-open lookup may resolve to another user's JobPost id, then pull THAT user's score; (3) backend score endpoint not properly user-scoped. Repro: log out, log in, observe score visible that does not belong to current user. PRIORITY: privacy / auth bug. Investigate before promoting CWS Unlisted listing.
 *** TODO [#A] frontend scrapes.show does not follow redirect chain to surface canonical JobPost
