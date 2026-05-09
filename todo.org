@@ -128,7 +128,13 @@ Tags: docs, infra
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
+*** SHIPPED Move Mark-incomplete to edit + ccsender 1.1.1 resend UX
+CLOSED: [2026-05-08]
+frontend show.hbs button moved to edit.hbs (HyperUI amber pill); markIncomplete action moved to edit controller; mark-incomplete acceptance test now visits /edit. ccsender extension bumped 1.1.0 → 1.1.1 with resend-to-complete UX: showConnected swaps heading to 'Complete this post' and button to 'Resend to complete' when the active URL maps to a complete=false JobPost; new accent-colored banner shows existing post title+company. Disambiguates from earlier in-place 1.1.0 build (commit d2ea3da) that shipped the three-state branching without a version bump.
 *** TODO remove expand caret on sidebar
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-08]
+:END:
 remove the expand carrot on the sidebar
 *** TODO skeleton pages in reports
 :PROPERTIES:
