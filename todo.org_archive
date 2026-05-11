@@ -6395,3 +6395,56 @@ CLOSED: [2026-05-09]
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
 api PR #108 Scrape.skip_extract field + POST /api/v1/job-posts/:id/resolve-and-dedupe/ endpoint, staff-gated, returns the new Scrape resource for client polling. Merged at api 284daa5. agents PR #20 ScrapeGraphState.skip_extract threaded through hold-poller; PersistScrape conditionally returns ResolveApplyUrl when set, skipping StartExtract → Tier* → PersistJobPost → ReviewCompleteness → UpdateProfile. Merged at agents 6c6fb77. frontend PR #130 staff-only "Resolve & dedupe (staff)" pill on jp.edit; new app/adapters/job-post.js with resolveAndDedupe inheriting ApplicationAdapter.ajax for auth + JSON:API errors; controller is pure UI side effects. Merged at frontend ba82c33. Use case: tracker URLs like ZipRecruiter /km/<token> whose canonical_link can't be derived without a real browser fetch through the JS / meta-refresh redirect. Combined with today's earlier ResolveFinalUrl networkidle re-read (parent 3570ee5) and parse_scrape canonical_link OR-leg dedup (api 67a5295), the resulting child scrape collapses onto the canonical JobPost row automatically via CheckLinkDedup → DuplicateShortCircuit. The originating JP's fields are intentionally untouched.
+
+* SHIPPED Linkedin: SDUI partial-render escape hatch — accept placeholder description :scrape:agents:bug:
+CLOSED: [2026-05-04 Mon 14:03]
+   :PROPERTIES:
+   :CREATED:  2026-05-04
+   :LAST_TOUCHED: [2026-05-04]
+   :ARCHIVE_TIME: 2026-05-11 Mon 08:12
+   :ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+   :ARCHIVE_OLPATH: Active
+   :ARCHIVE_CATEGORY: todo
+   :ARCHIVE_TODO: SHIPPED
+   :ARCHIVE_ITAGS: IMPORTANT
+   :END:
+   Scrape 298 (=jobs/view/4407097463=) ran 4× today: 1 success, 3
+   =ExtractFail=. The 3 failures hit LinkedIn's documented SDUI
+   partial-render state — top card + Premium card + hiring-team card
+   render but the =About the job= subtree never lands in the DOM.
+   Profile id=2 already documents this in =extraction_hints= and
+   instructs the LLM to emit a placeholder description string
+   ("[DESCRIPTION NOT CAPTURED — LinkedIn page rendered only the top
+   card …]") while still extracting title/company/location/salary
+   from the visible card. But on every fail run today,
+   =EvaluateExtraction= bins the Tier1Mini output as fail, routes to
+   =Tier2Haiku= (which no-ops in 130-150ms), then to =ExtractFail=.
+   The placeholder path is never honored.
+
+   Files to inspect:
+   - =agents/scrape_graph/nodes/evaluate_extraction.py= — what is the
+     pass/fail rule and does it special-case the placeholder string
+     or =description.length < N=?
+   - =agents/scrape_graph/nodes/tier1_mini.py= /
+     =agents/scrape_graph/nodes/tier2_haiku.py= — are the prompts
+     even given the relevant hints from =extraction_hints=, and is
+     the placeholder string in the prompt?
+   - =agents/scrape_graph/nodes/persist_job_post.py= — would saving
+     a JobPost with the placeholder description and =is_partial=
+     (or similar) flag be acceptable downstream?
+
+   Smallest test that would catch the regression: feed a fixture
+   matching the persisted =job_content= for scrape 298 (top card +
+   "Use AI to assess how you fit" + "Looking for talent?" + footer,
+   no responsibilities prose) into the extract pipeline and assert
+   it produces a JobPost with the documented placeholder description
+   rather than =ExtractFail=. Fixture text is in the stored html for
+   scrape 298 (id=298).
+
+   Trace evidence: =mcp_get_scrape_graph_trace scrape_id=298= shows
+   four full runs, the 08:49 success matched =h2:has-text("About the
+   job")= in 18ms, and the three failures all timed out the entire
+   19-selector list with =matched_selector=null=. Logfire confirms
+   =Scrape 298 graph done outcome=success job_post_id=1650 tiers=2=
+   for the 08:49 run.
+

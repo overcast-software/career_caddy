@@ -14,13 +14,13 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (30)
+Inbox (32)
   Bug (3)
   Enhancement (25)
   Feature (2)
   Idea (0)
 Backlog [0/3]
-Active [1/36]
+Active [0/35]
 Icebox [0/6]
 Archive (0)
 #+end_example
@@ -39,6 +39,8 @@ Archive (0)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** TODO backup prod db
+** TODO new user, no wizard on localhost:4200
 ** TODO ZipRecruiter dedup gaps — three URL shapes for the same job  :scrape:dedupe:bug:
 Repro: jp 1908 (source=email, /km/<opaque>), jp 1923 (source=extension, /jobs/altus-llc-2287a4f5/software-developer-c-remote-2ffd5d4c?lk=…&tsid=…), jp 1924 (source=extension, /jobs/altus-llc/software-developer-c-remote?lvk=…). Same Altus Engineering C++ Software Developer role. canonical_link == link on all three (canonicalize_link is a no-op for ZipRecruiter — no profile rewrites, no tracking-param strip).
 
@@ -634,52 +636,6 @@ What I'd recommend:
     If you have the direct URL, we can update the scrape or create a new one with that link instead.
 
 Do you have the direct job post link, or would you like me to check the job post (ID 1667) for any other URL we can use?
-
-** SHIPPED Linkedin: SDUI partial-render escape hatch — accept placeholder description :scrape:agents:bug:
-CLOSED: [2026-05-04 Mon 14:03]
-   :PROPERTIES:
-   :CREATED:  2026-05-04
-   :LAST_TOUCHED: [2026-05-04]
-   :END:
-   Scrape 298 (=jobs/view/4407097463=) ran 4× today: 1 success, 3
-   =ExtractFail=. The 3 failures hit LinkedIn's documented SDUI
-   partial-render state — top card + Premium card + hiring-team card
-   render but the =About the job= subtree never lands in the DOM.
-   Profile id=2 already documents this in =extraction_hints= and
-   instructs the LLM to emit a placeholder description string
-   ("[DESCRIPTION NOT CAPTURED — LinkedIn page rendered only the top
-   card …]") while still extracting title/company/location/salary
-   from the visible card. But on every fail run today,
-   =EvaluateExtraction= bins the Tier1Mini output as fail, routes to
-   =Tier2Haiku= (which no-ops in 130-150ms), then to =ExtractFail=.
-   The placeholder path is never honored.
-
-   Files to inspect:
-   - =agents/scrape_graph/nodes/evaluate_extraction.py= — what is the
-     pass/fail rule and does it special-case the placeholder string
-     or =description.length < N=?
-   - =agents/scrape_graph/nodes/tier1_mini.py= /
-     =agents/scrape_graph/nodes/tier2_haiku.py= — are the prompts
-     even given the relevant hints from =extraction_hints=, and is
-     the placeholder string in the prompt?
-   - =agents/scrape_graph/nodes/persist_job_post.py= — would saving
-     a JobPost with the placeholder description and =is_partial=
-     (or similar) flag be acceptable downstream?
-
-   Smallest test that would catch the regression: feed a fixture
-   matching the persisted =job_content= for scrape 298 (top card +
-   "Use AI to assess how you fit" + "Looking for talent?" + footer,
-   no responsibilities prose) into the extract pipeline and assert
-   it produces a JobPost with the documented placeholder description
-   rather than =ExtractFail=. Fixture text is in the stored html for
-   scrape 298 (id=298).
-
-   Trace evidence: =mcp_get_scrape_graph_trace scrape_id=298= shows
-   four full runs, the 08:49 success matched =h2:has-text("About the
-   job")= in 18ms, and the three failures all timed out the entire
-   19-selector list with =matched_selector=null=. Logfire confirms
-   =Scrape 298 graph done outcome=success job_post_id=1650 tiers=2=
-   for the 08:49 run.
 
 ** TODO Hold-poller "graph done" log uses entry-time scrape_id (false-positive success on parent) :scrape:agents:bug:obs:
    :PROPERTIES:
