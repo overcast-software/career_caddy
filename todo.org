@@ -14,7 +14,7 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (34)
+Inbox (33)
   Bug (3)
   Enhancement (25)
   Feature (2)
@@ -100,22 +100,6 @@ Fix surfaces: agents scrape graph (ATS click-through), api dedupe pipeline (fing
 job-post.show.delete
 ** TODO ai chat promonent url showing.  user confused about context.
 ** TODO buy me coffee.  cofee leaderborad :frontend:
-** DONE answer prompt injection jp.show.questions.show.answers.index :api:bug:
-CLOSED: [2026-05-12 Tue]
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-12]
-:END:
-Root cause was failure mode #2: =ApplicationPromptBuilder.build()=
-appended =injected_prompt= LAST under a =## Additional Instructions=
-header, AFTER a default preamble whose leading "OUTPUT FORMAT — strictly
-plain text" rules outweighed it on every LLM tested.
-
-Fix in =api/job_hunting/lib/services/application_prompt_builder.py=:
-move =injected_prompt= to the TOP of the prompt under a "User
-Instructions (PRIORITY — these override the default behavior and output
-format guidance below)" header, and reword the default preamble's
-format clause to defer to the user override. Tests in
-=tests/test_application_prompt_builder.py= lock the ordering invariant.
 ** TODO Vertical slide animation for jp.show.questions index <-> detail :frontend:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-12]

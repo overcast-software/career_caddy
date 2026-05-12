@@ -6510,3 +6510,26 @@ CLOSED: [2026-05-12 Tue 11:49]
 :ARCHIVE_TODO: DONE
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
+
+* DONE answer prompt injection jp.show.questions.show.answers.index :api:bug:
+CLOSED: [2026-05-12 Tue]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-12]
+:ARCHIVE_TIME: 2026-05-12 Tue 16:17
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Root cause was failure mode #2: =ApplicationPromptBuilder.build()=
+appended =injected_prompt= LAST under a =## Additional Instructions=
+header, AFTER a default preamble whose leading "OUTPUT FORMAT — strictly
+plain text" rules outweighed it on every LLM tested.
+
+Fix in =api/job_hunting/lib/services/application_prompt_builder.py=:
+move =injected_prompt= to the TOP of the prompt under a "User
+Instructions (PRIORITY — these override the default behavior and output
+format guidance below)" header, and reword the default preamble's
+format clause to defer to the user override. Tests in
+=tests/test_application_prompt_builder.py= lock the ordering invariant.
