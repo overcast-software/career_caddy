@@ -39,6 +39,12 @@ Archive (0)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** TODO capture prompt used.
+** DONE jp.show.cover-letters.show
+CLOSED: [2026-05-12]
+Introduced nested =job-posts.show.cover-letters.show= route — clicking View on a cover-letter row from a JP page now lands inside the JP context instead of bouncing to the top-level =/cover-letters/:id=. Frontend changes: new =in-route-scope= helper, =<ResourceLink>= (flat vs nested LinkTo by parent scope), =<ParentReference>= (hides redundant breadcrumb when already inside parent scope) so =cover-letters/item= drops its "for [JP] at [Company]" header on the nested show. Restyled =scores=, =summaries=, =job-applications/index=, and =cover-letters= parent template into uniform =panel-card= "New X" form + section list. On the nested show, the form+list collapse into a single "← Cover letters" / "← Scores" back-link so the focused record sits near the top.
+** TODO coverletter ai produced two
+** TODO /cover/letter.show should have jp and company
 ** TODO backup prod db
 ** TODO new user, no wizard on localhost:4200
 ** TODO ZipRecruiter dedup gaps — three URL shapes for the same job  :scrape:dedupe:bug:
@@ -158,8 +164,38 @@ Tags: docs, infra
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
+*** TODO Cover-letter parity: scrapes tab
+Replicate the navigation/component improvements on the scrapes tab. Skip the panel-card AI-prompt wrapper per [2026-05-12] direction — scrape has no AI prompt textarea. Nested show route already exists at =job-posts.show.scrapes.show=. To do: (a) =<ResourceLink>= for the scrapes list row View link so it targets flat or nested based on parent scope; (b) =<ParentReference>= around the Scrapes::Item job-post header so it hides when inside =job-posts.show.scrapes.show=; (c) on =/scrapes= index, the JP-column LinkTo should target =job-posts.show.scrapes.show= with =[jobPost, scrape]=; (d) collapse the form + scrapes list when nested show is active — single "← Scrapes" back-link. Reference: =app/components/cover-letters/{list,item}.hbs= for the ResourceLink + ParentReference swaps; =app/templates/job-posts/show/cover-letters.hbs= for the collapse pattern.
+*** TODO Cover-letter parity: summaries tab
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-12]
+:END:
+Replicate the cover-letter improvements on the summaries tab. Done this session: panel-card "New summary" wrapper + =Summaries= section list wrapper. Largest gap: there is NO nested show route. Need to add =job-posts.show.summaries.show= with route/controller/template trio (mirror the cover-letter trio under =app/routes|controllers|templates/job-posts/show/cover-letters/=). Router change: =this.route('summaries', function() { this.route('show', { path: '/:summary_id' }); });= Then: (a) =<ResourceLink>= in =components/summaries/list.hbs= for the row View link; (b) =<ParentReference>= around the Summaries::Item job-post header so it hides when nested; (c) on =/summaries= index, the JP-column LinkTo should target the nested show with =[jobPost, summary]=; (d) consolidate any item-show action buttons into the item =panel-actions= slot; (e) collapse the form + list when nested show is active — "← Summaries" back-link. Reference: the cover-letter trio under =app/{routes,controllers,templates}/job-posts/show/cover-letters/=.
+*** TODO Cover-letter parity: questions tab
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-12]
+:END:
+Replicate the cover-letter improvements on the questions tab. Nested show route already exists at =job-posts.show.questions.show=. Skip the panel-card wrapper — existing question wrapper is already good per [2026-05-12] direction. Still to do: (a) =<ResourceLink>= on the questions list row View link so it targets flat or nested based on parent scope; (b) =<ParentReference>= around the Questions::Item job-post header so it hides when inside =job-posts.show.questions.show= (and within answers.show inside that); (c) on =/questions= index, the JP-column LinkTo should target =job-posts.show.questions.show= with =[jobPost, question]=; (d) collapse the form + questions list when nested show is active — single "← Questions" back-link. Bonus: same pattern can flow down one more level to =job-posts.show.questions.show.answers.show= where Answers::Item drops its question-quote breadcrumb (the strongest =ParentReference= case). Reference: =app/components/cover-letters/list.hbs= + =cover-letters/item.hbs=.
+*** TODO Cover-letter parity: scores tab
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-12]
+:END:
+Replicate remaining cover-letter improvements on the scores tab. Nested show route already exists at =job-posts.show.scores.show=. Done this session: panel-card "New score" wrapper, =Scores= section list wrapper, and the collapse-to-back-link pattern on the nested show. Still to do: (a) =<ResourceLink>= in =components/scores/list.hbs= so the row View link targets flat or nested based on parent scope; (b) =<ParentReference>= around the Scores::Item job-post header so it hides when inside =job-posts.show.scores.show=; (c) on =/scores= index, the JP-column LinkTo should target =job-posts.show.scores.show= with =[jobPost, score]=; (d) consolidate any floating action buttons on the score show page into the item =panel-actions= slot. Reference: =app/components/cover-letters/list.hbs= LinkTo→ResourceLink swap and =cover-letters/item.hbs= ParentReference wrap.
+*** TODO Cover-letter parity: job-applications tab
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-12]
+:END:
+Replicate the cover-letter improvements on the job-applications tab. Nested show route already exists at =job-posts.show.job-applications.show=. Done this session: panel-card "New application" wrapper around the resume picker + Apply LinkTo. Still to do: (a) =<ResourceLink>= in =components/job-applications/compact.hbs= so the row View link targets flat or nested based on parent scope; (b) =<ParentReference>= around the JA item header ("For [JP] at [Company]") so it hides when inside =job-posts.show.job-applications.show=; (c) on =/job-applications= index, the JP-column LinkTo should target =job-posts.show.job-applications.show= with =[jobPost, application]=; (d) consolidate floating action buttons on the JA show page into the item card =panel-actions= slot; (e) collapse the "New application" form + applications list when nested show is active — show a single "← Applications" back-link. Reference: =app/templates/job-posts/show/cover-letters.hbs= + =components/cover-letters/{list,item}.{hbs,js}=.
+*** TODO Collapse form+list on remaining jp.show.* tabs with nested shows
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-12]
+:END:
+Apply the in-route-scope collapse pattern (introduced for cover-letters and scores) to the other jp.show.* sub-tabs that have nested .show routes — questions, scrapes, applications. When the nested show is active, render a single "← <Tab>" back-link in place of the form panel + list section so the focused record sits near the top of the tabbed content. Reference templates: app/templates/job-posts/show/cover-letters.hbs + scores.hbs. Helper: in-route-scope.
 *** SHIPPED Move Mark-incomplete to edit + ccsender 1.1.1 resend UX
 CLOSED: [2026-05-08]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-12]
+:END:
 frontend show.hbs button moved to edit.hbs (HyperUI amber pill); markIncomplete action moved to edit controller; mark-incomplete acceptance test now visits /edit. ccsender extension bumped 1.1.0 → 1.1.1 with resend-to-complete UX: showConnected swaps heading to 'Complete this post' and button to 'Resend to complete' when the active URL maps to a complete=false JobPost; new accent-colored banner shows existing post title+company. Disambiguates from earlier in-place 1.1.0 build (commit d2ea3da) that shipped the three-state branching without a version bump.
 *** TODO remove expand caret on sidebar
 :PROPERTIES:
