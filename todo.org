@@ -40,7 +40,19 @@ Archive (0)
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
 ** TODO capture prompt used.
-** TODO coverletter ai produced two
+** DONE coverletter ai produced two
+CLOSED: [2026-05-12 Tue]
+Root cause in =api/job_hunting/lib/services/cover_letter_service.py=:
+=generate_cover_letter()= did its own =CoverLetter.objects.get_or_create()=
+keyed on the generated content. The POST view at
+=api/job_hunting/api/views/cover_letters.py:341= already creates a
+pending row before dispatching the worker thread, so the service's
+=get_or_create= never matched (the pending row had =content=""=) and
+produced a SECOND row on every generation. Fix: service now returns
+the content string only; both callers (=cover_letters.py= +
+=_monolith.py=) update their pending row with that content. Regression
+test in =tests/test_cover_letter_service.py= locks the
+no-DB-side-effect invariant.
 ** TODO new user, no wizard on localhost:4200
 ** TODO ZipRecruiter dedup gaps — three URL shapes for the same job  :scrape:dedupe:bug:
 Repro: jp 1908 (source=email, /km/<opaque>), jp 1923 (source=extension, /jobs/altus-llc-2287a4f5/software-developer-c-remote-2ffd5d4c?lk=…&tsid=…), jp 1924 (source=extension, /jobs/altus-llc/software-developer-c-remote?lvk=…). Same Altus Engineering C++ Software Developer role. canonical_link == link on all three (canonicalize_link is a no-op for ZipRecruiter — no profile rewrites, no tracking-param strip).
