@@ -6533,3 +6533,25 @@ Instructions (PRIORITY — these override the default behavior and output
 format guidance below)" header, and reword the default preamble's
 format clause to defer to the user override. Tests in
 =tests/test_application_prompt_builder.py= lock the ordering invariant.
+
+* DONE coverletter ai produced two
+CLOSED: [2026-05-12 Tue]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 16:46
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Root cause in =api/job_hunting/lib/services/cover_letter_service.py=:
+=generate_cover_letter()= did its own =CoverLetter.objects.get_or_create()=
+keyed on the generated content. The POST view at
+=api/job_hunting/api/views/cover_letters.py:341= already creates a
+pending row before dispatching the worker thread, so the service's
+=get_or_create= never matched (the pending row had =content=""=) and
+produced a SECOND row on every generation. Fix: service now returns
+the content string only; both callers (=cover_letters.py= +
+=_monolith.py=) update their pending row with that content. Regression
+test in =tests/test_cover_letter_service.py= locks the
+no-DB-side-effect invariant.
