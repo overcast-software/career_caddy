@@ -14,7 +14,7 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (33)
+Inbox (34)
   Bug (3)
   Enhancement (25)
   Feature (2)
@@ -100,7 +100,60 @@ Fix surfaces: agents scrape graph (ATS click-through), api dedupe pipeline (fing
 job-post.show.delete
 ** TODO ai chat promonent url showing.  user confused about context.
 ** TODO buy me coffee.  cofee leaderborad :frontend:
-** TODO answer prompt injection jp.show.questions.show.answers.index
+** DONE answer prompt injection jp.show.questions.show.answers.index :api:bug:
+CLOSED: [2026-05-12 Tue]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-12]
+:END:
+Root cause was failure mode #2: =ApplicationPromptBuilder.build()=
+appended =injected_prompt= LAST under a =## Additional Instructions=
+header, AFTER a default preamble whose leading "OUTPUT FORMAT — strictly
+plain text" rules outweighed it on every LLM tested.
+
+Fix in =api/job_hunting/lib/services/application_prompt_builder.py=:
+move =injected_prompt= to the TOP of the prompt under a "User
+Instructions (PRIORITY — these override the default behavior and output
+format guidance below)" header, and reword the default preamble's
+format clause to defer to the user override. Tests in
+=tests/test_application_prompt_builder.py= lock the ordering invariant.
+** TODO Vertical slide animation for jp.show.questions index <-> detail :frontend:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-12]
+:END:
+Desired UX: going from =jp.show.questions.index= to a detail route
+(=questions.show.<id>=, =questions.show.answers.{new,id}=, etc.), the
+detail content rises up from the bottom of the viewport while the list
+slides off the top. On back navigation, the inverse — list drops down
+from the top while detail slides off the bottom. Mirrors the existing
+horizontal tab-swipe pattern in =controllers/job-posts/show.js= but on
+the Y axis.
+
+Tried 2026-05-12 with =animated-each= keyed on activeSubKey in a new
+=templates/job-posts/show/questions.hbs= parent template (+ controller).
+Failed: a single ={{outlet}}= can only render one route's template at a
+time, so by the time activeSubKey flips, the outlet has already swapped
+to the destination content. ember-animated then captures the
+destination content as BOTH the removed and inserted sprite — user sees
+"motion on top of existing", i.e. the destination self-replaces.
+
+routeWillChange instead of routeDidChange didn't help — the route
+transition and outlet swap race in the same Glimmer flush and the
+outlet wins.
+
+Path forward (needs its own focused branch, ~1-2h):
+1. Refactor: extract =questions/index.hbs= and =questions/show.hbs= as
+   components rendered DIRECTLY in the parent template via
+   ={{#if (eq this.activeSubKey "index")}}=. No outlet inside the
+   animation — animated-each then sees two distinct DOM subtrees and
+   captures sprites cleanly.
+2. Move model loading from the index/show routes into the parent
+   route's model() hook (or have the parent's controller proxy to the
+   child models via =modelFor=).
+3. Either reuse the same vertical-slide motion described above, OR use
+   the browser View Transitions API as a thinner alternative.
+
+Reverted commit: templates/job-posts/show/questions.hbs and
+controllers/job-posts/show/questions.js were deleted before ship.
 ** TODO omarchy themer needs to change the background highlight darker.
 /home/oldbones/Pictures/screenshot-2026-05-05_09-16-12.png
 ** TODO Verify cookie seeding still works after session-token sharing landed
