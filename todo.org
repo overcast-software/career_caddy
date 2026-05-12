@@ -14,7 +14,7 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (32)
+Inbox (33)
   Bug (3)
   Enhancement (25)
   Feature (2)
@@ -40,30 +40,7 @@ Archive (0)
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
 ** TODO capture prompt used.
-** DONE jp.show.cover-letters.show
-CLOSED: [2026-05-12 Tue]
-Nested =job-posts.show.<resource>.show= now exists for all JP-context
-tabs: cover-letters (#151), scrapes, summaries, questions, scores,
-job-applications (this PR). View buttons in the matching list components
-route to the nested show whenever the record has a =jobPost=, falling
-back to the flat route only for JP-less records (career-data summaries,
-orphan scrapes). Implemented as explicit
-={{#if record.jobPost.id}}<LinkTo nested>{{else}}<LinkTo flat>{{/if}}=
-in each list — the earlier ResourceLink wrapper that branched on
-=router.currentRouteName= was removed for readability.
 ** TODO coverletter ai produced two
-** DONE /cover/letter.show should have jp and company
-CLOSED: [2026-05-12 Tue]
-=<ParentReference @parent=… @parentScope="job-posts.show">= yields the
-"for [JP] at [Company]" breadcrumb on every resource item template
-(cover-letter, scrape, summary, question, score, job-application) when
-viewed outside the JP context, and hides it when already inside
-=job-posts.show=. Cover-letters got it in #151; this PR extends to the
-remaining five resources, plus refactors =Scores::Item= to the
-=panel-card / panel-title / panel-body= shape so its breadcrumb lives
-in the title slot like the rest.
-** DONE backup prod db
-CLOSED: [2026-05-12 Tue 11:49]
 ** TODO new user, no wizard on localhost:4200
 ** TODO ZipRecruiter dedup gaps — three URL shapes for the same job  :scrape:dedupe:bug:
 Repro: jp 1908 (source=email, /km/<opaque>), jp 1923 (source=extension, /jobs/altus-llc-2287a4f5/software-developer-c-remote-2ffd5d4c?lk=…&tsid=…), jp 1924 (source=extension, /jobs/altus-llc/software-developer-c-remote?lvk=…). Same Altus Engineering C++ Software Developer role. canonical_link == link on all three (canonicalize_link is a no-op for ZipRecruiter — no profile rewrites, no tracking-param strip).

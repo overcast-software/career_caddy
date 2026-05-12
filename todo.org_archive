@@ -6460,3 +6460,53 @@ CLOSED: [2026-05-12]
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
 Introduced nested =job-posts.show.cover-letters.show= route — clicking View on a cover-letter row from a JP page now lands inside the JP context instead of bouncing to the top-level =/cover-letters/:id=. Frontend changes: new =in-route-scope= helper, =<ResourceLink>= (flat vs nested LinkTo by parent scope), =<ParentReference>= (hides redundant breadcrumb when already inside parent scope) so =cover-letters/item= drops its "for [JP] at [Company]" header on the nested show. Restyled =scores=, =summaries=, =job-applications/index=, and =cover-letters= parent template into uniform =panel-card= "New X" form + section list. On the nested show, the form+list collapse into a single "← Cover letters" / "← Scores" back-link so the focused record sits near the top.
+
+* DONE jp.show.cover-letters.show
+CLOSED: [2026-05-12 Tue]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 13:50
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Nested =job-posts.show.<resource>.show= now exists for all JP-context
+tabs: cover-letters (#151), scrapes, summaries, questions, scores,
+job-applications (this PR). View buttons in the matching list components
+route to the nested show whenever the record has a =jobPost=, falling
+back to the flat route only for JP-less records (career-data summaries,
+orphan scrapes). Implemented as explicit
+={{#if record.jobPost.id}}<LinkTo nested>{{else}}<LinkTo flat>{{/if}}=
+in each list — the earlier ResourceLink wrapper that branched on
+=router.currentRouteName= was removed for readability.
+
+* DONE /cover/letter.show should have jp and company
+CLOSED: [2026-05-12 Tue]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 13:50
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+=<ParentReference @parent=… @parentScope="job-posts.show">= yields the
+"for [JP] at [Company]" breadcrumb on every resource item template
+(cover-letter, scrape, summary, question, score, job-application) when
+viewed outside the JP context, and hides it when already inside
+=job-posts.show=. Cover-letters got it in #151; this PR extends to the
+remaining five resources, plus refactors =Scores::Item= to the
+=panel-card / panel-title / panel-body= shape so its breadcrumb lives
+in the title slot like the rest.
+
+* DONE backup prod db
+CLOSED: [2026-05-12 Tue 11:49]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 13:51
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
