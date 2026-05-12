@@ -98,9 +98,9 @@ ci-lint-frontend:
 ci-test-api:
 	@set -o pipefail; \
 	if [ -n "$(FULL)" ]; then \
-		dagger -m ./dagger call test-api stdout 2>/dev/null; \
+		dagger -m ./dagger call test-api stdout 2>&1; \
 	else \
-		dagger -m ./dagger call test-api stdout 2>/dev/null | awk ' \
+		dagger -m ./dagger call test-api stdout 2>&1 | awk ' \
 			/^(FAIL|ERROR): / { hit=1; n=25 } \
 			/^={70}/ { hit=1; n=25 } \
 			/^Ran [0-9]+ tests/ { print } \
@@ -112,9 +112,9 @@ ci-test-api:
 ci-test-frontend:
 	@set -o pipefail; \
 	if [ -n "$(FULL)" ]; then \
-		dagger -m ./dagger call test-frontend stdout 2>/dev/null; \
+		dagger -m ./dagger call test-frontend stdout 2>&1; \
 	else \
-		dagger -m ./dagger call test-frontend stdout 2>/dev/null | awk ' \
+		dagger -m ./dagger call test-frontend stdout 2>&1 | awk ' \
 			/^not ok / { hit=1; n=20; print; next } \
 			/^# (tests|pass|fail|skip|todo) / { print } \
 			hit { print; if (n-- <= 0) hit=0 } \
