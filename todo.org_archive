@@ -6448,3 +6448,15 @@ CLOSED: [2026-05-04 Mon 14:03]
    =Scrape 298 graph done outcome=success job_post_id=1650 tiers=2=
    for the 08:49 run.
 
+
+* DONE jp.show.cover-letters.show
+CLOSED: [2026-05-12]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 12:57
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Introduced nested =job-posts.show.cover-letters.show= route — clicking View on a cover-letter row from a JP page now lands inside the JP context instead of bouncing to the top-level =/cover-letters/:id=. Frontend changes: new =in-route-scope= helper, =<ResourceLink>= (flat vs nested LinkTo by parent scope), =<ParentReference>= (hides redundant breadcrumb when already inside parent scope) so =cover-letters/item= drops its "for [JP] at [Company]" header on the nested show. Restyled =scores=, =summaries=, =job-applications/index=, and =cover-letters= parent template into uniform =panel-card= "New X" form + section list. On the nested show, the form+list collapse into a single "← Cover letters" / "← Scores" back-link so the focused record sits near the top.

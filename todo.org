@@ -14,9 +14,9 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (32)
+Inbox (35)
   Bug (3)
-  Enhancement (25)
+  Enhancement (31)
   Feature (2)
   Idea (0)
 Backlog [0/3]
@@ -40,9 +40,6 @@ Archive (0)
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
 ** TODO capture prompt used.
-** DONE jp.show.cover-letters.show
-CLOSED: [2026-05-12]
-Introduced nested =job-posts.show.cover-letters.show= route — clicking View on a cover-letter row from a JP page now lands inside the JP context instead of bouncing to the top-level =/cover-letters/:id=. Frontend changes: new =in-route-scope= helper, =<ResourceLink>= (flat vs nested LinkTo by parent scope), =<ParentReference>= (hides redundant breadcrumb when already inside parent scope) so =cover-letters/item= drops its "for [JP] at [Company]" header on the nested show. Restyled =scores=, =summaries=, =job-applications/index=, and =cover-letters= parent template into uniform =panel-card= "New X" form + section list. On the nested show, the form+list collapse into a single "← Cover letters" / "← Scores" back-link so the focused record sits near the top.
 ** TODO coverletter ai produced two
 ** TODO /cover/letter.show should have jp and company
 ** TODO backup prod db
