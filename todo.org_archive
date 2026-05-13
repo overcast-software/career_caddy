@@ -6577,3 +6577,50 @@ CLOSED: [2026-05-12 Tue]
    terminal-close handles the parent's status separately).
    Tests in =tests/test_hold_poller_label.py= lock the format.
 
+
+* DONE ZipRecruiter dedup gaps — three URL shapes for the same job :scrape:dedupe:bug:
+CLOSED: [2026-05-12 Tue 18:21]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-12]
+:ARCHIVE_TIME: 2026-05-12 Tue 18:41
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Repro: jp 1908 (source=email, /km/<opaque>), jp 1923 (source=extension, /jobs/altus-llc-2287a4f5/software-developer-c-remote-2ffd5d4c?lk=…&tsid=…), jp 1924 (source=extension, /jobs/altus-llc/software-developer-c-remote?lvk=…). Same Altus Engineering C++ Software Developer role. canonical_link == link on all three (canonicalize_link is a no-op for ZipRecruiter — no profile rewrites, no tracking-param strip).
+
+Three distinct gaps, fix in priority order:
+
+1. =_TRACKING_PARAMS= missing ZipRecruiter clickout params. =lk=, =lvk=, =tsid= are job-board referral tokens. One-line fix in =api/job_hunting/models/job_post_dedupe.py:42=. Necessary but not sufficient (1923 and 1924 still differ on slug).
+
+2. ZipRecruiter ScrapeProfile needs a =url_rewrites= rule to strip trailing =-<8hex>= tokens from =/jobs/<companyslug>-<token>/<jobslug>-<token>=. Pattern roughly: =^(/jobs/[^/-]+(?:-[^/-]+)*?)(-[a-f0-9]{8})/(.+?)(-[a-f0-9]{8})$= → =$1/$3=. Apply via =update_scrape_profile= MCP. Together with #1 this collapses 1923 ↔ 1924.
+
+3. =/km/<opaque>= (jp 1908) is a per-recipient ZipRecruiter email-redirect token; cannot be canonicalized without resolving the redirect. Two options:
+   - Resolve at email-parse time (cc_auto chases the 301/302, stores the resolved URL).
+   - Accept that =/km/= rows only collapse via title+company fingerprint. Currently =fingerprint(post)= hashes (company_id, normalized title, normalized location) — but 1908 title is "Software Developer" while 1923/1924 are "Software Developer-C++" so the fingerprint differs anyway. Probably untouchable without redirect-resolution.
+
+Files:
+- =api/job_hunting/models/job_post_dedupe.py:42= (_TRACKING_PARAMS)
+- ScrapeProfile for ziprecruiter.com (=update_scrape_profile= MCP)
+- =api/job_hunting/migrations/0067_recanonicalize_job_post_links.py= (re-run after #1+#2 land to backfill canonical_link on existing rows)
+
+Smallest test once #1+#2 land: =test_scrape_from_text.py= case where jp exists at /jobs/altus-llc-<token>/<jobslug>-<token>?lk=… and a new submission lands at /jobs/altus-llc/<jobslug>?lvk=…; assert 409 with =meta.job_post_id= pointing at existing.
+
+Out of scope: SQL re-pointing of =duplicate_of_id= for 1908/1923/1924 — user handles via SQL. /km/ resolution at cc_auto email-parse time is its own follow-up.
+
+** What shipped
+- =api/job_hunting/models/job_post_dedupe.py= — added =lk=, =lvk=, =tsid= to =_TRACKING_PARAMS=. Closes gap #1.
+- =api/job_hunting/tests/test_job_post_dedupe.py= — unit tests for the new tracking-param strip + the ZipRecruiter rewrite (collapse + no-token-passthrough). Tests fixture the ScrapeProfile inline so they prove the dedup pipeline end-to-end against the gap-#2 rule.
+- =api/job_hunting/tests/test_scrape_from_text.py= — integration test: tokenized existing JP + clean-variant submission → 409 =duplicate_job_post=, no Scrape created, no agent call.
+- =api/job_hunting/management/commands/recanonicalize_job_posts.py= — operator-invoked backfill that re-applies canonicalize_link to every JobPost. Run after the post-deploy MCP rule update so legacy rows pick up both gap fixes.
+
+** Operator follow-ups (NOT in this PR)
+- Run =update_scrape_profile= MCP for =ziprecruiter.com= adding rule:
+  =match=: =/jobs/([^/]+?)-([a-f0-9]{8})/([^/?#]+?)-([a-f0-9]{8})(?=[/?#]|$)=
+  =rewrite=: =/jobs/\1/\3=
+  Profile data is operator-owned JSONB, deliberately not put behind a code migration.
+- After the MCP edit lands, run =python manage.py recanonicalize_job_posts= once to backfill =canonical_link= on existing rows.
+
+Gap #3 (=/km/<opaque>= email redirects) deliberately left for a cc_auto follow-up.
