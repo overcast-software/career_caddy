@@ -20,7 +20,7 @@ Inbox (32)
   Feature (2)
   Idea (0)
 Backlog [0/3]
-Active [0/35]
+Active [0/34]
 Icebox [0/6]
 Archive (0)
 #+end_example
@@ -657,7 +657,6 @@ Verification: integration test pending — needs a re-scrape of 309's
 URL form on a poller running the feature branch. Until then leave
 SHIPPED off; mark =STRT= once merged + deployed.
 
-** TODO [#A] hitting multple scrape and score for a single domain could corrupt data :scrape:
 ** TODO https:  careercaddy.online job-posts 1667 scrapes 309 :scrape:
 https://www.ziprecruiter.com/jobs/v2/eyJsaXN0aW5nX2tleSI6InIzTzNkcWV2TUMyU3NEci1GNkQ4MGciLCJtYXRjaF9pZCI6IjAxOWRlZjM5LWY2YmEtNzY5Yy1iMWQwLTA0YWYyMmNjYzc4MSIsImJpZF90cmFja2luZ19kYXRhIjoiQUFHM3lPbGhZOWlVbEZlVTI3X3BkTk5HNFNRRkFaeHVPOVhESmo2VTdldE1Tb1ZyVXV1UXc0UV9mMWRreHBJcnNNQW9maWFMIiwic291cmNlX3BsYWNlbWVudF9pZCI6NDMwMjR9?tsid=111000153
 The graph trace actually shows DetectObstacle completed quickly (29ms) and routed to ResolveFinalUrl — so the scrape moved past DetectObstacle. The issue is it's now stuck in ResolveFinalUrl and the overall status is still running.
