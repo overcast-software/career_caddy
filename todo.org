@@ -400,26 +400,6 @@ changes) on the target file before inserting.
 :LAST_TOUCHED: [2026-05-04]
 :END:
 what jp.show.job-application.show
-** DONE jp.show.questions.new doesn't allow me to pick the job application. :frontend:bug:
-CLOSED: [2026-05-12]
-=Questions::Form= had a single =hasLockedContext= getter that locked
-the JobPost, Company, AND JobApplication pickers whenever the
-question came in with a JobPost pre-filled. On
-=jp.show.questions.new= that meant the JobApp field rendered as a
-disabled input showing "None" — no way to attach the question to any
-of the JP's existing applications.
-
-What shipped (frontend submodule):
-- =frontend/app/components/questions/form.js= — capture
-  =_initialJobAppLocked= in the constructor (true only when the
-  question came in with a =jobApplication= belongsTo id). New
-  =jobAppLocked= getter exposes that.
-- =frontend/app/components/questions/form.hbs= — JobApplication
-  field gates on =this.jobAppLocked= instead of the broader
-  =this.hasLockedContext=. JobPost + Company still gate on
-  =hasLockedContext=, so the locked-context routes
-  (=ja.show.questions.new=, =jp.show.ja.show.questions.new=) are
-  unchanged.
 ** TODO spc o c should reload the file before adding capture
 ** TODO I can only see one user in ai-spend
 ** TODO ban 84.32.70.55

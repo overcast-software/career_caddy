@@ -6636,3 +6636,32 @@ CLOSED: [2026-05-12 Tue 18:51]
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
 ResidentBrowser._ensure_context calls ctx.add_cookies once per domain (resident.py:57-65). Untested since the session-token-sharing changes. Verify by: launch attended poller, point at a known auth-walled site (linkedin.com), confirm logged-in state is reached without manual login. If broken, check whether session_store.load() format still matches what add_cookies expects.
+
+* DONE jp.show.questions.new doesn't allow me to pick the job application. :frontend:bug:
+CLOSED: [2026-05-12]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 19:10
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: frontend bug
+:END:
+=Questions::Form= had a single =hasLockedContext= getter that locked
+the JobPost, Company, AND JobApplication pickers whenever the
+question came in with a JobPost pre-filled. On
+=jp.show.questions.new= that meant the JobApp field rendered as a
+disabled input showing "None" — no way to attach the question to any
+of the JP's existing applications.
+
+What shipped (frontend submodule):
+- =frontend/app/components/questions/form.js= — capture
+  =_initialJobAppLocked= in the constructor (true only when the
+  question came in with a =jobApplication= belongsTo id). New
+  =jobAppLocked= getter exposes that.
+- =frontend/app/components/questions/form.hbs= — JobApplication
+  field gates on =this.jobAppLocked= instead of the broader
+  =this.hasLockedContext=. JobPost + Company still gate on
+  =hasLockedContext=, so the locked-context routes
+  (=ja.show.questions.new=, =jp.show.ja.show.questions.new=) are
+  unchanged.
