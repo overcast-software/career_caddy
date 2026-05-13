@@ -449,7 +449,13 @@ class CareerCaddy:
                     f"docker compose -f docker-compose.prod.yml pull; "
                     f"docker compose -f docker-compose.prod.yml down --remove-orphans; "
                     f"docker compose -f docker-compose.prod.yml up -d --remove-orphans; "
-                    f"docker image prune -f",
+                    # Reclaim disk: prune unused images (including OLD per-SHA
+                    # tags from previous deploys, not just dangling ones),
+                    # stopped containers, and unused networks. Equivalent to
+                    # the manual `docker system prune -a` the operator was
+                    # running by hand. Volumes are intentionally excluded —
+                    # the Postgres data volume must survive.
+                    f"docker system prune -a -f",
                 ]
             )
             .stdout()
