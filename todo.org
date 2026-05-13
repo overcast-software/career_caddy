@@ -14,9 +14,9 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (30)
+Inbox (27)
   Bug (3)
-  Enhancement (25)
+  Enhancement (24)
   Feature (2)
   Idea (0)
 Backlog [0/3]
@@ -45,18 +45,6 @@ Archive (1)
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-08]
 :END:
-** DONE skeleton pages in reports :frontend:
-CLOSED: [2026-05-12]
-=reports/activity/loading.hbs= used the generic =<LoadingSkeleton />=
-(eight-card list) which doesn't match the calendar+stacked-chart
-shape of the live page. The peer loading templates
-(=application-flow/loading.hbs= + =sources/loading.hbs=) already
-render a chart-shaped pulse panel; activity was the odd one out.
-
-What shipped (frontend submodule):
-- =frontend/app/templates/reports/activity/loading.hbs= — heading +
-  tall pulse panel for the calendar + medium pulse for the optional
-  stacked-status chart. Matches the existing chart-shaped pattern.
 ** TODO https://chromewebstore.google.com/detail/career-caddy-sender/pjdajamkhjkemoaogohehcdpfkocofhd
 ** TODO Extension API-key sprawl: dedupe on Connect or auto-expire server-side
 Each popup Connect mints a fresh =Career Caddy Sender — YYYY-MM-DD= key; Disconnect best-effort revokes. Leaks happen on uninstall, profile reset, or offline disconnect. Severity is low — keys are scoped to the minting user — but the API-keys list grows unbounded.
@@ -81,35 +69,8 @@ Root cause (per user): the scrape pipeline does not click through ATS chains (Se
 Secondary: fingerprint-based dedupe also missed despite ~95% identical description text. Worth checking why.
 
 Fix surfaces: agents scrape graph (ATS click-through), api dedupe pipeline (fingerprint match strength). Not an extension bug.
-** DONE score spinner not standard :frontend:
-CLOSED: [2026-05-12]
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-05]
-:END:
-=components/job-posts/actions.js:128= called
-=spinner.wrap(newScore.save(), { label: 'Scoring, please wait…' })=
-— verbose outlier vs. the codebase standard of terse labels
-(=Scoring…=, =Parsing…=, =Generating cover letter…=, etc.).
-
-What shipped (frontend submodule):
-- =frontend/app/components/job-posts/actions.js= — label normalized
-  to ='Scoring…'= matching the standard pattern.
 ** TODO delete -> delete everything should scroll to section with popup.
 job-post.show.delete
-** DONE ai chat display context for user.  user confused about context. :frontend:chat:
-CLOSED: [2026-05-12]
-=chat.service.js= sends =page_context: this.currentPage.url= to the
-server on every turn (=services/chat.js:128=) but =Chat::Panel= UI
-never showed it — the user couldn't tell what context the AI knows
-about, leading to confused "wait, do you know what page I'm on?"
-loops.
-
-What shipped (frontend submodule):
-- =frontend/app/components/chat/panel.hbs= — small "Context: <url>"
-  strip below the panel header (link icon + monospaced URL) showing
-  =chat.currentPage.url=. Tooltip explains the AI sees this URL on
-  every turn. Renders only when =currentPage.url= is set so empty
-  routes don't show a stub strip.
 ** TODO buy me coffee.  cofee leaderborad :frontend:
 ** TODO Vertical slide animation for jp.show.questions index <-> detail :frontend:
 :PROPERTIES:
@@ -215,11 +176,6 @@ frontend show.hbs button moved to edit.hbs (HyperUI amber pill); markIncomplete 
 :LAST_TOUCHED: [2026-05-08]
 :END:
 remove the expand carrot on the sidebar
-*** TODO skeleton pages in reports
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-08]
-:END:
-clicking reports should go to loading skeleton
 *** TODO Profile-as-resource: split User/Profile JSON:API conformity :api:frontend:chore:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-08]

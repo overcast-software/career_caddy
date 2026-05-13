@@ -6665,3 +6665,85 @@ What shipped (frontend submodule):
   =hasLockedContext=, so the locked-context routes
   (=ja.show.questions.new=, =jp.show.ja.show.questions.new=) are
   unchanged.
+
+* DONE skeleton pages in reports :frontend:
+CLOSED: [2026-05-12]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 21:01
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+=reports/activity/loading.hbs= used the generic =<LoadingSkeleton />=
+(eight-card list) which doesn't match the calendar+stacked-chart
+shape of the live page. The peer loading templates
+(=application-flow/loading.hbs= + =sources/loading.hbs=) already
+render a chart-shaped pulse panel; activity was the odd one out.
+
+What shipped (frontend submodule):
+- =frontend/app/templates/reports/activity/loading.hbs= — heading +
+  tall pulse panel for the calendar + medium pulse for the optional
+  stacked-status chart. Matches the existing chart-shaped pattern.
+
+* DONE score spinner not standard :frontend:
+CLOSED: [2026-05-12]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-05]
+:ARCHIVE_TIME: 2026-05-12 Tue 21:01
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+=components/job-posts/actions.js:128= called
+=spinner.wrap(newScore.save(), { label: 'Scoring, please wait…' })=
+— verbose outlier vs. the codebase standard of terse labels
+(=Scoring…=, =Parsing…=, =Generating cover letter…=, etc.).
+
+What shipped (frontend submodule):
+- =frontend/app/components/job-posts/actions.js= — label normalized
+  to ='Scoring…'= matching the standard pattern.
+
+* DONE ai chat display context for user.  user confused about context. :frontend:chat:
+CLOSED: [2026-05-12]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 21:01
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+=chat.service.js= sends =page_context: this.currentPage.url= to the
+server on every turn (=services/chat.js:128=) but =Chat::Panel= UI
+never showed it — the user couldn't tell what context the AI knows
+about, leading to confused "wait, do you know what page I'm on?"
+loops.
+
+What shipped (frontend submodule):
+- =frontend/app/components/chat/panel.hbs= — small "Context: <url>"
+  strip below the panel header (link icon + monospaced URL) showing
+  =chat.currentPage.url=. Tooltip explains the AI sees this URL on
+  every turn. Renders only when =currentPage.url= is set so empty
+  routes don't show a stub strip.
+
+* DONE skeleton pages in reports :frontend:
+CLOSED: [2026-05-12]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-08]
+:ARCHIVE_TIME: 2026-05-12 Tue 21:01
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+clicking reports should go to loading skeleton
+
+Duplicate of the level-2 STRT shipped the same day — see archive
+entry "skeleton pages in reports" (frontend PR #146 commit ee1a539
+chart-shaped =reports/activity/loading.hbs= matching the existing
+peer skeletons).
