@@ -424,13 +424,13 @@ controllers/job-posts/show/questions.js were deleted before ship.
 :END:
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
-*** SHIPPED list-model cache held destroyed records — login broken in prod :frontend: 
+*** SHIPPED list-model cache held destroyed records — login broken in prod :frontend:
 CLOSED: [2026-05-13 Wed 09:58]
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
 Closed [2026-05-13]: After logout (=store.unloadAll=) or per-record =destroyRecord=, the cached =InfinityModel= in =frontend/app/utils/list-model.js= still held references to destroyed records. On next visit the template walked an =@belongsTo= async proxy whose target was gone — Ember Data threw =Cannot read properties of undefined (reading '_graph')= in prod (Chromium), Glimmer threw =Cannot create a new tag for `<(unknown):emberNNN>` after it has been destroyed= in dev (Firefox). Symptom: only the FIRST row in =/job-posts= rendered. Fix: =infinityModel()= now also discards the cache when any cached record is =isDestroyed= or =isDestroying=. Architecture note: =Architecture/list-model.js cache — list-route InfinityModel + destroyed-record invalidation=. Punted side effect tracked separately as =Inbox/Bug/stagger-rows replays after logout-and-back...=
-*** TODO stagger-rows replays after logout-and-back or row delete on list pages :frontend: 
+*** TODO stagger-rows replays after logout-and-back or row delete on list pages :frontend:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
@@ -921,8 +921,13 @@ the existing stub has a NULL company (Microsoft regression #22 in the
 =stage5.fingerprint_null_risk= warnings once the introspection PR
 (E+F+H) ships, so we'll have data on how often the precondition fires
 before designing the fix.
-** TODO delete -> delete everything should scroll to section with the aditional dialog.
+** TODO delete ->
+*** delete everything ( nuclear ) should scroll to section with the aditional dialog.
 job-post.show.delete
+*** regular users should not be able to remove job-posts if other people have data on them.
+** TODO jp 2045
+how did that get complete designation
+** PLAN need to either merge jps together or associate them better i.e. join table
 
 * Backlog
 ** PROJ [#C] Electron desktop app feasibility :PENDING_APPROVAL:
