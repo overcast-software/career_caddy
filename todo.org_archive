@@ -5161,9 +5161,9 @@ agents/mcp_servers/chat_server.py, plus the two tests.
 
 ** TODO AI still decided to update_anser tool instead of create_answer.  It did not pull the correct context and gave a generic answer blowing away the one I wanted to interate on.
 ** TODO AI chat will put answers in the chat but not write new answers with MCP :chat:
-good answers get follow ups iterating on them takes a couple of steps. 
+good answers get follow ups iterating on them takes a couple of steps.
 ** TODO AI should offer to modify answer or create a new answer.
-or take more feedback. 
+or take more feedback.
 
 * DONE cc_auto followup agent: PositiveInt guard on api_client IDs
 CLOSED: [2026-05-04 Mon 15:10]
@@ -5945,7 +5945,7 @@ CLOSED: [2026-05-05]
 :END:
 Extension popup links to /job-posts/<id>/scores/<scoreId> after Score-this-post; that URL 404d in prod because frontend only had a leaf scores route. Added router.js nested show, route+controller+template under app/{routes,controllers,templates}/job-posts/show/scores/show, and {{outlet}} in scores.hbs so detail renders below the list.
 
-* DONE find the link the user is currently on and if we have a jp. link to it for them. 
+* DONE find the link the user is currently on and if we have a jp. link to it for them.
 CLOSED: [2026-05-05 Tue 12:39]
 :PROPERTIES:
 :ARCHIVE_TIME: 2026-05-06 Wed 13:54
@@ -6845,3 +6845,553 @@ Verification: integration test pending — needs a re-scrape of 309's
 URL form on a poller running the feature branch. Until then leave
 SHIPPED off; mark =STRT= once merged + deployed.
 
+
+* TODO ResolveApplyUrl: short-circuit on internal_apply_markers (Easy Apply false-fail) :scrape:agents:bug:
+   :PROPERTIES:
+   :CREATED:  2026-05-04
+   :ARCHIVE_TIME: 2026-05-12 Tue 21:17
+   :ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+   :ARCHIVE_OLPATH: Active
+   :ARCHIVE_CATEGORY: todo
+   :ARCHIVE_TODO: TODO
+   :ARCHIVE_ITAGS: IMPORTANT
+   :END:
+   Killed [2026-05-12]: literal ask was already-shipped at filing
+   time. The short-circuit lives in
+   =agents/scrape_graph/apply_resolver.py:50-57= — markers are
+   checked BEFORE link selectors, returning
+   =apply_url_status="internal"= on first match. Landed in commit
+   =9a5fc56= on 2026-04-25, nine days before this TODO was filed.
+   The original diagnosis was wrong.
+
+   The actual symptom (LinkedIn returning =no_selector_matched
+   apply_url_status=failed= for jobs that visibly have an Easy
+   Apply button) DOES persist — verified on scrape 396
+   (2026-05-08, =linkedin.com/jobs/view/4409398808/=, ResolveApplyUrl
+   ran 7.1s and tried every configured selector). Real cause is
+   selector staleness on LinkedIn's =internal_apply_markers=
+   (=.jobs-apply-button--easy-apply= et al.) — either the class was
+   renamed by the SDUI build, or the button hydrates after
+   ResolveApplyUrl runs, or it sits inside a shadow root that
+   =page.query_selector= can't pierce. That's a different, narrower
+   bug — file fresh as a profile-side selector-discovery task if
+   the apply-url failure metric becomes load-bearing.
+
+
+* DONE Extension allFrames capture for iframe-embedded ATS (greenhouse, dat.com class) :extension:frontend:scrape:
+CLOSED: [2026-05-12 Tue 22:05]
+:PROPERTIES:
+:CREATED:  [2026-05-02]
+:ARCHIVE_TIME: 2026-05-12 Tue 22:05
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Trigger:* scrape 273 from =https://careers.dat.com/jobs/?gh_jid=5741667004&gh_src=fd81f4a54us=
+captured page chrome only (~1.1KB of nav/footer + DAT marketing copy, no
+job description body). Root cause: dat.com embeds the actual job description
+inside a greenhouse iframe (host: =boards.greenhouse.io=). The extension's
+=grabPayload= (=frontend/public/extensions/career-caddy-sender/popup.js:336-342=)
+calls =scripting.executeScript= on the active tab without =allFrames=, so
+=document.body.innerText= only sees the parent document — iframe contents
+are invisible.
+
+This pattern is widespread: any ATS that gets embedded into a company's
+own careers page (greenhouse, lever, workday, jobvite) hits the same gap.
+
+** File :scrape:
+
+=frontend/public/extensions/career-caddy-sender/popup.js= — =grabPayload=
+(line 336-342). Bump version in =manifest.json= to 0.3.7 and add a
+README.md version-history entry.
+
+** Change :scrape:
+
+#+begin_src js
+// BEFORE
+async function grabPayload(tabId) {
+  const results = await api.scripting.executeScript({
+    target: { tabId },
+    func: () => ({ url: location.href, text: document.body.innerText }),
+  });
+  return results && results[0] && results[0].result;
+}
+
+// AFTER
+async function grabPayload(tabId) {
+  const results = await api.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: () => ({
+      url: location.href,
+      // Frame metadata so the API side can debug when something goes wrong.
+      frameUrl: location.href,
+      text: document.body ? document.body.innerText : '',
+    }),
+  });
+  if (!results || !results.length) return null;
+  // results[0] is the top frame (per chrome.scripting docs); the rest
+  // are subframes in unspecified order. Top frame's URL is the canonical
+  // link for the scrape.
+  const top = results[0];
+  if (!top || !top.result) return null;
+  // Concatenate every frame's text with a separator the LLM can use to
+  // distinguish chrome from embedded ATS body.
+  const allText = results
+    .map((r) => r && r.result && r.result.text)
+    .filter(Boolean)
+    .join('\n\n--- frame ---\n\n');
+  return { url: top.result.url, text: allText };
+}
+#+end_src
+
+Notes for the implementer:
+- =allFrames: true= requires =host_permissions= covering the iframe origin.
+  Manifest already declares =host_permissions: ["<all_urls>"]= so any
+  cross-origin iframe is reachable.
+- In Firefox MV3 with =<all_urls>= host_permissions and =activeTab=,
+  =allFrames= works for both same- and cross-origin frames.
+- If the page uses a sandboxed iframe (=sandbox= attribute without
+  =allow-same-origin=), =executeScript= will fail for that frame; the
+  result entry will have =frameId= but no =result=. The =filter(Boolean)=
+  drops them silently — acceptable.
+- The =--- frame ---= separator is a hint to the LLM that there are
+  multiple text regions; the prompt doesn't currently mention it but
+  Tier1Mini will benefit from any structural delimiter.
+
+** Test plan (manual — extension testing is hard to automate) :scrape:
+
+1. Load extension from =frontend/public/extensions/career-caddy-sender/=
+   in Firefox via =about:debugging= → Load Temporary Add-on.
+2. Navigate to a known greenhouse-embedded page:
+   - =https://careers.dat.com/jobs/?gh_jid=5741667004&gh_src=fd81f4a54us=
+     (the scrape 273 case)
+   - =https://join.com/companies/...= (similar pattern, different ATS)
+3. Click the extension icon → Send.
+4. Open prod/local job-posts list, find the new scrape, confirm
+   =job_content= contains the actual job description body
+   (responsibilities, qualifications) — not just nav + "About DAT".
+5. Confirm =job_content= length > 2KB (sanity check; chrome alone was 1.1KB).
+6. Confirm Tier1Mini extraction yielded a populated =description= on the
+   resulting JobPost.
+
+** Acceptance criteria :scrape:
+1. Extension version bumped to 0.3.7 in =manifest.json= + README version-history.
+2. Submitting from a greenhouse-iframed page captures the iframe contents.
+3. Existing single-frame pages (linkedin, indeed direct, paste-only sites)
+   continue to work — no regression.
+4. Same-origin frames still captured correctly (sanity check).
+5. Cross-origin iframe failure (sandboxed iframes) is graceful — popup
+   doesn't crash, just sends what it can.
+
+** Out of scope :scrape:
+- Detecting and rewriting tracker URLs (=?gh_jid== → =boards.greenhouse.io/{org}/jobs/{id}=)
+  before navigation. Could be a follow-up if the iframe approach
+  proves flaky, but iframe walking is the cleaner answer.
+- Cleaning chrome out of the captured text in JS. The LLM does that;
+  don't duplicate the work client-side.
+- Updating =~/Sandbox/cc-ext-local/= (it points to localhost:4200 and
+  has its own gecko id; user maintains it manually).
+- Building a new XPI artifact. Once popup.js + manifest.json change,
+  rebuild via:
+  =cd frontend/public/extensions/career-caddy-sender && zip -r ~/Sandbox/career-caddy-sender-0.3.7.xpi . --exclude "*.DS_Store"=
+
+* KILL ResolveApplyUrl: short-circuit on internal_apply_markers (Easy Apply false-fail) :scrape:agents:bug:
+CLOSED: [2026-05-12 Tue]
+   :PROPERTIES:
+   :CREATED:  2026-05-04
+   :ARCHIVE_TIME: 2026-05-12 Tue 22:05
+   :ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+   :ARCHIVE_OLPATH: Active
+   :ARCHIVE_CATEGORY: todo
+   :ARCHIVE_TODO: KILL
+   :ARCHIVE_ITAGS: IMPORTANT
+   :END:
+   Killed [2026-05-12]: literal ask was already-shipped at filing
+   time. The short-circuit lives in
+   =agents/scrape_graph/apply_resolver.py:50-57= — markers are
+   checked BEFORE link selectors, returning
+   =apply_url_status="internal"= on first match. Landed in commit
+   =9a5fc56= on 2026-04-25, nine days before this TODO was filed.
+   The original diagnosis was wrong.
+
+   The actual symptom (LinkedIn returning =no_selector_matched
+   apply_url_status=failed= for jobs that visibly have an Easy
+   Apply button) DOES persist — verified on scrape 396
+   (2026-05-08, =linkedin.com/jobs/view/4409398808/=, ResolveApplyUrl
+   ran 7.1s and tried every configured selector). Real cause is
+   selector staleness on LinkedIn's =internal_apply_markers=
+   (=.jobs-apply-button--easy-apply= et al.) — either the class was
+   renamed by the SDUI build, or the button hydrates after
+   ResolveApplyUrl runs, or it sits inside a shadow root that
+   =page.query_selector= can't pierce. That's a different, narrower
+   bug — file fresh as a profile-side selector-discovery task if
+   the apply-url failure metric becomes load-bearing.
+
+* KILL UI fixes
+CLOSED: [2026-05-12 Tue 21:11]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 22:05
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: KILL
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+* KILL wrong job-post :scrape:
+CLOSED: [2026-05-12]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-04]
+:ARCHIVE_TIME: 2026-05-12 Tue 22:05
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: KILL
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+https://www.ziprecruiter.com/jobs/v2/eyJsaXN0aW5nX2tleSI6InIzTzNkcWV2TUMyU3NEci1GNkQ4MGciLCJtYXRjaF9pZCI6IjAxOWRlZjM5LWY2YmEtNzY5Yy1iMWQwLTA0YWYyMmNjYzc4MSIsImJpZF90cmFja2luZ19kYXRhIjoiQUFHM3lPbGhZOWlVbEZlVTI3X3BkTk5HNFNRRkFaeHVPOVhESmo2VTdldE1Tb1ZyVXV1UXc0UV9mMWRreHBJcnNNQW9maWFMIiwic291cmNlX3BsYWNlbWVudF9pZCI6NDMwMjR9?tsid=111000153
+/home/oldbones/Pictures/screenshot-2026-05-04_12-41-24.png
+I put that in the extention and it said it already existed https://careercaddy.online/job-posts/1668
+but this one is more closely aligned
+https://careercaddy.online/job-posts/1667
+what happened?
+
+KILL rationale [2026-05-12]: investigated via MCP, the original
+diagnosis was based on a misread of which JP was the right match.
+
+- The pasted =/jobs/v2/<base64>?tsid=...= base64 decodes to
+  =listing_key=r3O3dqevMC2SsDr-F6D80g=, =source_placement_id=43024=
+  — a *Senior Product Manager II at Redfin* listing, not the
+  Software Developer I (1667) or Software Engineer II (1668) the
+  user thought it was. That listing now lives at job-post 1690,
+  created cleanly via from-text on 2026-05-04 16:04 (scrape 300:
+  pending → extracting → updating_profile → completed in 8s, no
+  409). =complete=true=, =top_score=30=, salary $118.8–145.2k Seattle.
+- The =from-text= dedupe gate (=Q(link=...) | Q(canonical_link=...)=)
+  could not have matched 1668 — neither 1667's nor 1668's =/km/<token>=
+  link/canonical equals or canonicalizes to the pasted /jobs/v2/
+  URL. Whatever the popup told the user that day was not the 409
+  path that exists in code.
+- Most plausible source of the "1668" misread: the extension's
+  open-time =lookupExistingJobPost(tab.url)= (popup.js:310) reads
+  the active tab's URL, not the user's clipboard. If the tab was a
+  still-redirecting =/km/AAF8hsLm.../?auth_token=...= link, that's
+  literally 1668's stored link and the popup would correctly say
+  "Tracked" — then a separate paste of the /jobs/v2/<base64> URL
+  proceeded and minted 1690.
+- The earlier-proposed code change (teach =canonicalize_link= about
+  =/jobs/v2/<base64>= + =/km/<token>=) does not address the
+  user-reported confusion (which had no real dedupe miss to fix).
+  The /km/ side is also non-fixable without HEAD resolution against
+  long-expired auth_tokens. If a future incident shows the same
+  listing being scraped via two different shapes and producing dups,
+  capture a fresh entry from concrete evidence.
+
+* KILL Backfill linkedin  comm  duplicate jp 1315 ↔ jp 1550 :api:data:scrape:
+CLOSED: [2026-05-12 Tue 22:05]
+:PROPERTIES:
+:CREATED:  2026-05-01
+:ARCHIVE_TIME: 2026-05-12 Tue 22:05
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: KILL
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Scrape #251 (linkedin.com, 2026-05-01) created jp 1550 from a
+=https://www.linkedin.com/comm/jobs/view/4383047961/= source while jp
+1315 (same role, Lululemon Senior Cybersecurity Engineer) sat as a
+stub on the =/comm/= URL. Root cause + fix tracked in Scrape Log
+entry =[2026-05-01] linkedin.com — /comm/ dedup miss=; profile id 2
+now carries a =url_rewrites= rule that strips =/comm/= before
+Navigate, so *new* scrapes won't repeat the split.
+
+This todo is *only* the data backfill:
+- Confirm jp 1315 and jp 1550 describe the same posting (link IDs
+  match: =4383047961=).
+- Decide retention: keep jp 1315 (older id, has stub interaction
+  history) and copy the description / metadata from jp 1550 onto it,
+  then delete jp 1550 — *or* the inverse, whichever has more
+  attachments. Default: keep the older id, hard-delete the newer.
+- Re-point any related rows (Scrapes, Applications, Scores) from the
+  losing id to the winning id before delete. Use the canonical
+  =/jobs/view/4383047961/= URL on the survivor.
+- Repeat the audit for any other linkedin.com JobPost pairs whose
+  links differ only by =/comm/= — quick: =SELECT id, link FROM
+  job_posts WHERE link LIKE '%linkedin.com/comm/jobs/view/%';= and
+  for each row, look for a sibling on the bare-path form.
+
+Out of scope: code changes — the prevention fix is already in the
+profile.
+
+* KILL result from scrape https:  careercaddy.online scrapes 218: :scrape:
+CLOSED: [2026-05-12 Tue 22:06]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 22:06
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: KILL
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+If are copying this link from a mail reader please ensure that you have copied all the lines in the link.
+
+* KILL new user, no wizard on localhost:4200
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 23:32
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: KILL
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+* DONE Dedupe miss: email-source posts keep wrapper canonical_link, no ATS click-through :api:agents:
+CLOSED: [2026-05-12 Tue 23:33]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-06]
+:ARCHIVE_TIME: 2026-05-12 Tue 23:33
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Repro: jp 1409 (source=email) and jp 1782 (source=extension) are the same Talkdesk Senior Security Engineer post. duplicate_of_id null on both.
+
+1409 canonical_link = SendGrid click-tracking URL (u52508838.ct.sendgrid.net/ls/click?...). Never resolved to careers.talkdesk.com.
+
+1782 canonical_link = careers.talkdesk.com/jobs?id=7858488 — extension correctly normalized the greenhouse embed URL.
+
+Root cause (per user): the scrape pipeline does not click through ATS chains (SendGrid -> talkdesk careers -> greenhouse embed -> final). With no follow-through, email-ingested posts keep their wrapper as canonical_link and any future post on the real URL cant match.
+
+Secondary: fingerprint-based dedupe also missed despite ~95% identical description text. Worth checking why.
+
+Fix surfaces: agents scrape graph (ATS click-through), api dedupe pipeline (fingerprint match strength). Not an extension bug.
+
+* DONE Verify cookie seeding still works after session-token sharing landed
+CLOSED: [2026-05-12 Tue 23:34]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 23:34
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+ResidentBrowser._ensure_context calls ctx.add_cookies once per domain (resident.py:57-65). Untested since the session-token-sharing changes. Verify by: launch attended poller, point at a known auth-walled site (linkedin.com), confirm logged-in state is reached without manual login. If broken, check whether session_store.load() format still matches what add_cookies expects.
+
+* KILL omarchy themer needs to change the background highlight darker.
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-12 Tue 23:34
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: KILL
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+/home/oldbones/Pictures/screenshot-2026-05-05_09-16-12.png
+
+* SHIPPED [#A] Extracting-state safety net: try finally + sweeper :api:bug:scrape:
+CLOSED: [2026-05-13]
+:PROPERTIES:
+:CREATED:  [2026-05-02]
+:ARCHIVE_TIME: 2026-05-13 Wed 08:12
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Shipped 2026-05-13.* Two layers of defense against scrapes stuck in =extracting=/=updating_profile= forever (scrape 273 case):
+
+1. =api/job_hunting/lib/parsers/job_post_extractor.py= — wrapped =parse_scrape._run= in try/except/finally with a =reached_terminal= flag. The flag is set at all three early-bail returns (scrape not found / already linked / no content) and at every terminal status flip (=completed=, =failed=, review_rejected→failed). If anything between =extracting= and the terminal flip raises (uncaught exception, container restart racing the LLM call, OOM mid-=_update_scrape_profile=), the finally branch flips the row to =failed= with note ="parse_scrape died before terminal — see api logs"=. Defensive inner try/except around the safety-net flip itself so even a broken =_log_scrape_status= can't propagate.
+2. =api/job_hunting/management/commands/sweep_stuck_extracting.py= — new management command for the SIGKILL-class case where finally itself can't run. Cutoff is computed from =Max(scrape_statuses__logged_at)= (the model has no =updated_at= field). Args: =--min-age-minutes= (default 15), =--dry-run=. Wire to cron separately.
+
+Tests at =api/job_hunting/tests/test_parse_scrape_safety.py= (6 tests, all green): unhandled exception flips stuck-extracting to failed via finally; safety net itself doesn't crash when =_log_scrape_status= raises; early-bail returns don't spuriously flip; sweep flips old extracting rows but not recent ones; sweep handles =updating_profile= state too; =--dry-run= reports without flipping.
+
+Verification: focused tests 6/6 pass; =make ci= green (api 869/869, frontend 350/350, lint clean).
+
+Out of scope (deferred): cron schedule for the sweep (run manually from =make shell-api= for now); migrating off daemon-thread architecture to a real worker queue.
+
+
+*Trigger:* scrape 273 stuck at =extracting= even though =parse_scrape='s
+=_run= function (=api/job_hunting/lib/parsers/job_post_extractor.py:733-795=)
+already wraps =parser.parse()= in try/except (line 760-763). The =extracting=
+status was written at line 756, then the daemon thread died before reaching
+=updating_profile= (line 765) or the success/fail status flip (lines 776-795).
+
+Most likely root causes (any of them is possible):
+- Daemon thread killed by container restart (deploy churn) between line 756
+  and line 765/793.
+- Uncaught exception in pre-parse setup (lines 738-754: DB lookups, user
+  resolution).
+- Uncaught exception in =_log_scrape_status= itself.
+- OOM kill of the api container while the LLM call was in flight.
+
+Even after the from-text =sync=True= fix above, =parse_scrape= is still
+called from other paths that DO use daemon threads:
+- =api/job_hunting/api/views/jobs.py= =reextract= action (line 696)
+- =api/job_hunting/api/views/scrapes.py= =parse= action (line 540, =_reparse_force=)
+- Hold-poller's =partial_update= → =_maybe_trigger_extraction= →
+  =_reparse_force= path (=scrapes.py:540=)
+
+These need a safety net.
+
+** Change A: try/finally around =_run= so terminal status is guaranteed :scrape:
+
+In =api/job_hunting/lib/parsers/job_post_extractor.py=, =parse_scrape._run=
+(line 733):
+
+#+begin_src python
+def _run():
+    from job_hunting.models.scrape import Scrape as ScrapeModel
+    from job_hunting.lib.scraper import _log_scrape_status
+    from django.contrib.auth import get_user_model
+
+    reached_terminal = False
+    try:
+        scrape = ScrapeModel.objects.filter(pk=scrape_id).first()
+        if not scrape:
+            logger.warning("parse_scrape: scrape_id=%s not found", scrape_id)
+            reached_terminal = True  # nothing to flip
+            return
+        # ... existing body unchanged through the success/failure status flip ...
+        # Inside the existing branches, set reached_terminal = True after each
+        # _log_scrape_status("completed", ...) and _log_scrape_status("failed", ...)
+    except Exception:
+        logger.exception("parse_scrape: unhandled in _run scrape_id=%s", scrape_id)
+    finally:
+        if not reached_terminal:
+            # Guarantee the scrape leaves `extracting` no matter what.
+            try:
+                _log_scrape_status(
+                    scrape_id, "failed",
+                    note="parse_scrape died before terminal — see api logs",
+                )
+            except Exception:
+                logger.exception(
+                    "parse_scrape: failed to flip stuck scrape_id=%s to failed",
+                    scrape_id,
+                )
+#+end_src
+
+Set =reached_terminal = True= at lines 790 (=completed=) and 793 (=failed=)
+inside the existing branches.
+
+** Change B: management command for stuck-extracting sweep :scrape:
+
+New file =api/job_hunting/management/commands/sweep_stuck_extracting.py=:
+
+#+begin_src python
+from datetime import timedelta
+from django.core.management.base import BaseCommand
+from django.utils import timezone
+from job_hunting.models import Scrape
+from job_hunting.lib.scraper import _log_scrape_status
+
+
+class Command(BaseCommand):
+    help = "Flip Scrapes stuck in extracting/updating_profile to failed."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--min-age-minutes", type=int, default=15)
+        parser.add_argument("--dry-run", action="store_true")
+
+    def handle(self, *args, min_age_minutes, dry_run, **opts):
+        cutoff = timezone.now() - timedelta(minutes=min_age_minutes)
+        stuck = Scrape.objects.filter(
+            status__in=["extracting", "updating_profile"],
+            updated_at__lt=cutoff,  # or use the latest_status timestamp
+        )
+        for s in stuck:
+            self.stdout.write(
+                f"scrape={s.id} status={s.status} updated_at={s.updated_at}"
+            )
+            if not dry_run:
+                _log_scrape_status(
+                    s.id, "failed",
+                    note=f"swept: stuck in {s.status} > {min_age_minutes}m",
+                )
+        self.stdout.write(f"swept {stuck.count()} stuck scrapes")
+#+end_src
+
+Wire as cron via the existing scheduling pattern (or invoke from
+=make sweep-stuck= for now; later cron is a separate ticket).
+
+** Tests :scrape:
+
+=api/job_hunting/tests/test_parse_scrape_safety.py= (new):
+
+#+begin_src python
+class TestParseScrapeSafetyNet(TestCase):
+    def test_unhandled_exception_flips_to_failed(self):
+        scrape = Scrape.objects.create(
+            url="https://example.com/x", job_content="x" * 200,
+            status="pending", created_by=self.user, source="extension",
+        )
+        with patch(
+            "job_hunting.lib.parsers.job_post_extractor.JobPostExtractor.parse"
+        ) as p:
+            p.side_effect = RuntimeError("simulated daemon-thread death")
+            parse_scrape(scrape.id, user_id=self.user.id, sync=True)
+        scrape.refresh_from_db()
+        # Even with an unhandled exception, scrape MUST reach terminal.
+        self.assertEqual(scrape.status, "failed")
+
+    def test_pre_parse_db_failure_flips_to_failed(self):
+        # Simulate ScrapeModel.objects.filter raising
+        with patch("job_hunting.models.scrape.Scrape.objects") as mgr:
+            mgr.filter.side_effect = OperationalError("db down")
+            # Should not raise, should not loop forever
+            parse_scrape(99999, user_id=self.user.id, sync=True)
+        # No assertion on status — scrape doesn't exist in this test —
+        # but the call must return without error.
+
+class TestSweepStuckExtractingCommand(TestCase):
+    def test_sweeps_old_extracting_rows(self):
+        old = Scrape.objects.create(
+            url="https://example.com/old", status="extracting",
+            created_by=self.user, source="extension",
+        )
+        Scrape.objects.filter(pk=old.id).update(
+            updated_at=timezone.now() - timedelta(minutes=20)
+        )
+        recent = Scrape.objects.create(
+            url="https://example.com/new", status="extracting",
+            created_by=self.user, source="extension",
+        )
+        call_command("sweep_stuck_extracting", "--min-age-minutes=15")
+        old.refresh_from_db(); recent.refresh_from_db()
+        self.assertEqual(old.status, "failed")
+        self.assertEqual(recent.status, "extracting")
+#+end_src
+
+** Acceptance criteria :scrape:
+1. Any =parse_scrape= invocation that reaches the daemon thread leaves
+   the scrape in a terminal status (=completed= or =failed=), even on
+   uncaught exception or container restart mid-flight.
+2. =python manage.py sweep_stuck_extracting --min-age-minutes=15= flips
+   stuck rows; =--dry-run= reports without flipping.
+3. =make ci= green.
+
+** Out of scope :scrape:
+- Cron schedule for =sweep_stuck_extracting= (file separately if you want
+  it on a timer; can also run manually from =make shell-api= for now).
+- Changing the underlying daemon-thread architecture to a real worker
+  queue (Celery / Django-Q). That's a larger refactor.
+
+
+* SHIPPED Move Mark-incomplete to edit + ccsender 1.1.1 resend UX
+CLOSED: [2026-05-08]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-13 Wed 08:12
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+frontend show.hbs button moved to edit.hbs (HyperUI amber pill); markIncomplete action moved to edit controller; mark-incomplete acceptance test now visits /edit. ccsender extension bumped 1.1.0 → 1.1.1 with resend-to-complete UX: showConnected swaps heading to 'Complete this post' and button to 'Resend to complete' when the active URL maps to a complete=false JobPost; new accent-colored banner shows existing post title+company. Disambiguates from earlier in-place 1.1.0 build (commit d2ea3da) that shipped the three-state branching without a version bump.

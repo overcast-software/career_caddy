@@ -16,11 +16,11 @@ TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
 Inbox (21)
   Bug (3)
-  Enhancement (27)
+  Enhancement (26)
   Feature (3)
   Idea (0)
 Backlog [0/3]
-Active [0/26]
+Active [0/25]
 Icebox [0/6]
 Archive (1)
 #+end_example
@@ -183,9 +183,6 @@ Tags: docs, infra
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
-*** SHIPPED Move Mark-incomplete to edit + ccsender 1.1.1 resend UX
-CLOSED: [2026-05-08]
-frontend show.hbs button moved to edit.hbs (HyperUI amber pill); markIncomplete action moved to edit controller; mark-incomplete acceptance test now visits /edit. ccsender extension bumped 1.1.0 → 1.1.1 with resend-to-complete UX: showConnected swaps heading to 'Complete this post' and button to 'Resend to complete' when the active URL maps to a complete=false JobPost; new accent-colored banner shows existing post title+company. Disambiguates from earlier in-place 1.1.0 build (commit d2ea3da) that shipped the three-state branching without a version bump.
 *** TODO remove expand caret on sidebar
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-08]
@@ -564,189 +561,6 @@ What I'd recommend:
     If you have the direct URL, we can update the scrape or create a new one with that link instead.
 
 Do you have the direct job post link, or would you like me to check the job post (ID 1667) for any other URL we can use?
-
-** SHIPPED [#A] Extracting-state safety net: try finally + sweeper :api:bug:scrape:
-CLOSED: [2026-05-13]
-:PROPERTIES:
-:CREATED:  [2026-05-02]
-:END:
-*Shipped 2026-05-13.* Two layers of defense against scrapes stuck in =extracting=/=updating_profile= forever (scrape 273 case):
-
-1. =api/job_hunting/lib/parsers/job_post_extractor.py= — wrapped =parse_scrape._run= in try/except/finally with a =reached_terminal= flag. The flag is set at all three early-bail returns (scrape not found / already linked / no content) and at every terminal status flip (=completed=, =failed=, review_rejected→failed). If anything between =extracting= and the terminal flip raises (uncaught exception, container restart racing the LLM call, OOM mid-=_update_scrape_profile=), the finally branch flips the row to =failed= with note ="parse_scrape died before terminal — see api logs"=. Defensive inner try/except around the safety-net flip itself so even a broken =_log_scrape_status= can't propagate.
-2. =api/job_hunting/management/commands/sweep_stuck_extracting.py= — new management command for the SIGKILL-class case where finally itself can't run. Cutoff is computed from =Max(scrape_statuses__logged_at)= (the model has no =updated_at= field). Args: =--min-age-minutes= (default 15), =--dry-run=. Wire to cron separately.
-
-Tests at =api/job_hunting/tests/test_parse_scrape_safety.py= (6 tests, all green): unhandled exception flips stuck-extracting to failed via finally; safety net itself doesn't crash when =_log_scrape_status= raises; early-bail returns don't spuriously flip; sweep flips old extracting rows but not recent ones; sweep handles =updating_profile= state too; =--dry-run= reports without flipping.
-
-Verification: focused tests 6/6 pass; =make ci= green (api 869/869, frontend 350/350, lint clean).
-
-Out of scope (deferred): cron schedule for the sweep (run manually from =make shell-api= for now); migrating off daemon-thread architecture to a real worker queue.
-
-
-*Trigger:* scrape 273 stuck at =extracting= even though =parse_scrape='s
-=_run= function (=api/job_hunting/lib/parsers/job_post_extractor.py:733-795=)
-already wraps =parser.parse()= in try/except (line 760-763). The =extracting=
-status was written at line 756, then the daemon thread died before reaching
-=updating_profile= (line 765) or the success/fail status flip (lines 776-795).
-
-Most likely root causes (any of them is possible):
-- Daemon thread killed by container restart (deploy churn) between line 756
-  and line 765/793.
-- Uncaught exception in pre-parse setup (lines 738-754: DB lookups, user
-  resolution).
-- Uncaught exception in =_log_scrape_status= itself.
-- OOM kill of the api container while the LLM call was in flight.
-
-Even after the from-text =sync=True= fix above, =parse_scrape= is still
-called from other paths that DO use daemon threads:
-- =api/job_hunting/api/views/jobs.py= =reextract= action (line 696)
-- =api/job_hunting/api/views/scrapes.py= =parse= action (line 540, =_reparse_force=)
-- Hold-poller's =partial_update= → =_maybe_trigger_extraction= →
-  =_reparse_force= path (=scrapes.py:540=)
-
-These need a safety net.
-
-*** Change A: try/finally around =_run= so terminal status is guaranteed :scrape:
-
-In =api/job_hunting/lib/parsers/job_post_extractor.py=, =parse_scrape._run=
-(line 733):
-
-#+begin_src python
-def _run():
-    from job_hunting.models.scrape import Scrape as ScrapeModel
-    from job_hunting.lib.scraper import _log_scrape_status
-    from django.contrib.auth import get_user_model
-
-    reached_terminal = False
-    try:
-        scrape = ScrapeModel.objects.filter(pk=scrape_id).first()
-        if not scrape:
-            logger.warning("parse_scrape: scrape_id=%s not found", scrape_id)
-            reached_terminal = True  # nothing to flip
-            return
-        # ... existing body unchanged through the success/failure status flip ...
-        # Inside the existing branches, set reached_terminal = True after each
-        # _log_scrape_status("completed", ...) and _log_scrape_status("failed", ...)
-    except Exception:
-        logger.exception("parse_scrape: unhandled in _run scrape_id=%s", scrape_id)
-    finally:
-        if not reached_terminal:
-            # Guarantee the scrape leaves `extracting` no matter what.
-            try:
-                _log_scrape_status(
-                    scrape_id, "failed",
-                    note="parse_scrape died before terminal — see api logs",
-                )
-            except Exception:
-                logger.exception(
-                    "parse_scrape: failed to flip stuck scrape_id=%s to failed",
-                    scrape_id,
-                )
-#+end_src
-
-Set =reached_terminal = True= at lines 790 (=completed=) and 793 (=failed=)
-inside the existing branches.
-
-*** Change B: management command for stuck-extracting sweep :scrape:
-
-New file =api/job_hunting/management/commands/sweep_stuck_extracting.py=:
-
-#+begin_src python
-from datetime import timedelta
-from django.core.management.base import BaseCommand
-from django.utils import timezone
-from job_hunting.models import Scrape
-from job_hunting.lib.scraper import _log_scrape_status
-
-
-class Command(BaseCommand):
-    help = "Flip Scrapes stuck in extracting/updating_profile to failed."
-
-    def add_arguments(self, parser):
-        parser.add_argument("--min-age-minutes", type=int, default=15)
-        parser.add_argument("--dry-run", action="store_true")
-
-    def handle(self, *args, min_age_minutes, dry_run, **opts):
-        cutoff = timezone.now() - timedelta(minutes=min_age_minutes)
-        stuck = Scrape.objects.filter(
-            status__in=["extracting", "updating_profile"],
-            updated_at__lt=cutoff,  # or use the latest_status timestamp
-        )
-        for s in stuck:
-            self.stdout.write(
-                f"scrape={s.id} status={s.status} updated_at={s.updated_at}"
-            )
-            if not dry_run:
-                _log_scrape_status(
-                    s.id, "failed",
-                    note=f"swept: stuck in {s.status} > {min_age_minutes}m",
-                )
-        self.stdout.write(f"swept {stuck.count()} stuck scrapes")
-#+end_src
-
-Wire as cron via the existing scheduling pattern (or invoke from
-=make sweep-stuck= for now; later cron is a separate ticket).
-
-*** Tests :scrape:
-
-=api/job_hunting/tests/test_parse_scrape_safety.py= (new):
-
-#+begin_src python
-class TestParseScrapeSafetyNet(TestCase):
-    def test_unhandled_exception_flips_to_failed(self):
-        scrape = Scrape.objects.create(
-            url="https://example.com/x", job_content="x" * 200,
-            status="pending", created_by=self.user, source="extension",
-        )
-        with patch(
-            "job_hunting.lib.parsers.job_post_extractor.JobPostExtractor.parse"
-        ) as p:
-            p.side_effect = RuntimeError("simulated daemon-thread death")
-            parse_scrape(scrape.id, user_id=self.user.id, sync=True)
-        scrape.refresh_from_db()
-        # Even with an unhandled exception, scrape MUST reach terminal.
-        self.assertEqual(scrape.status, "failed")
-
-    def test_pre_parse_db_failure_flips_to_failed(self):
-        # Simulate ScrapeModel.objects.filter raising
-        with patch("job_hunting.models.scrape.Scrape.objects") as mgr:
-            mgr.filter.side_effect = OperationalError("db down")
-            # Should not raise, should not loop forever
-            parse_scrape(99999, user_id=self.user.id, sync=True)
-        # No assertion on status — scrape doesn't exist in this test —
-        # but the call must return without error.
-
-class TestSweepStuckExtractingCommand(TestCase):
-    def test_sweeps_old_extracting_rows(self):
-        old = Scrape.objects.create(
-            url="https://example.com/old", status="extracting",
-            created_by=self.user, source="extension",
-        )
-        Scrape.objects.filter(pk=old.id).update(
-            updated_at=timezone.now() - timedelta(minutes=20)
-        )
-        recent = Scrape.objects.create(
-            url="https://example.com/new", status="extracting",
-            created_by=self.user, source="extension",
-        )
-        call_command("sweep_stuck_extracting", "--min-age-minutes=15")
-        old.refresh_from_db(); recent.refresh_from_db()
-        self.assertEqual(old.status, "failed")
-        self.assertEqual(recent.status, "extracting")
-#+end_src
-
-*** Acceptance criteria :scrape:
-1. Any =parse_scrape= invocation that reaches the daemon thread leaves
-   the scrape in a terminal status (=completed= or =failed=), even on
-   uncaught exception or container restart mid-flight.
-2. =python manage.py sweep_stuck_extracting --min-age-minutes=15= flips
-   stuck rows; =--dry-run= reports without flipping.
-3. =make ci= green.
-
-*** Out of scope :scrape:
-- Cron schedule for =sweep_stuck_extracting= (file separately if you want
-  it on a timer; can also run manually from =make shell-api= for now).
-- Changing the underlying daemon-thread architecture to a real worker
-  queue (Celery / Django-Q). That's a larger refactor.
 
 ** TODO Ingest abuse defense — Phase 2 (provenance + pipeline) :api:agents:security:scrape:
 Phase 2 follow-up. Single deliverable for vector I5
