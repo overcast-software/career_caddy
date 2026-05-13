@@ -1,5 +1,5 @@
 #+TITLE: career_caddy todo board
-#+TODO: TODO(t) STRT(s) PLAN(p) WAIT(w) LOOP(l) | KILL(k) SHIPPED(P) DONE(d)
+#+TODO: TODO(t) STRT(s) PLAN(p) WAIT(w) LOOP(l) IDEA (i)| KILL(k) SHIPPED(P) DONE(d)
 #+TAGS: scrape(s) frontend(f) api(a) agents(g) bugs(b) infra(i) chore(C) chat(c) dedupe(d) extension(e) mcp(m)
 #+startup: overview
 
@@ -928,7 +928,19 @@ job-post.show.delete
 ** TODO jp 2045
 how did that get complete designation
 ** PLAN need to either merge jps together or associate them better i.e. join table
+*** how?
+*** why?
+I see duplicate jps but I want to do something about it
+*** what?
+duplicates feels like a chore I can't action upon
+**** IDEA application to one that's deemed duplicate could be referenced
+**** IDEA give duplicatation pill on list view
 
+*** when?
+When encountering a duplicate I want to be able to take action
+I don't know if that's in the edit page or the show page.
+show page does have a lot of actions, but we hide complexity in the edit page.
+***
 * Backlog
 ** PROJ [#C] Electron desktop app feasibility :PENDING_APPROVAL:
 :PROPERTIES:
