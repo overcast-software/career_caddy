@@ -20,9 +20,9 @@ Inbox (32)
   Feature (2)
   Idea (0)
 Backlog [0/3]
-Active [0/33]
+Active [0/32]
 Icebox [0/6]
-Archive (0)
+Archive (1)
 #+end_example
 * Inbox                                              :IMPORTANT:
 - AW is a term referring to Agent Wizard for the agent that is focused on onboarding
@@ -1137,79 +1137,6 @@ This todo is *only* the data backfill:
 Out of scope: code changes — the prevention fix is already in the
 profile.
 
-** STRT a few bugs in this output :important:ai:scrape:
-api PR #81 merged 2026-05-01 21:36 UTC: explicit provider:model prefix
-in JobPostExtractor + IngestResume dispatchers; bare names + unknown
-providers raise. Resume default OpenAI fallback gpt-5 → gpt-4o
-(gpt-5 is gated on some tiers and was the cause of "my resume never
-parsed"). Promote to SHIPPED after parent Deploy succeeds.
-frontend-1  | 172.19.0.1 - - [01/May/2026:00:21:08 +0000] "GET /resumes/36 HTTP/1.1" 200 5007 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:150.0) Gecko/20100101 Firefox/150.0" "67.185.49.200"
-api-1       |     return await self._run_node_with_hooks(node, self._advance_graph)
-api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/run.py", line 282, in _run_node_with_hooks
-api-1       |     return await self._wrap_and_advance(run_context, node, step_fn)
-api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/run.py", line 262, in _wrap_and_advance
-api-1       |     result = await cap.on_node_run_error(run_context, node=node, error=e)
-api-1       |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/capabilities/combined.py", line 215, in on_node_run_error
-api-1       |     raise error
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/run.py", line 260, in _wrap_and_advance
-api-1       |     result = await cap.wrap_node_run(run_context, node=node, handler=step_fn)
-api-1       |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/capabilities/combined.py", line 201, in wrap_node_run
-api-1       |     return await chain(node)
-api-1       |            ^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/run.py", line 238, in _advance_graph
-api-1       |     task = await self._graph_run.next(task)
-api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 497, in next
-api-1       |     return await anext(self)
-api-1       |            ^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 471, in __anext__
-api-1       |     self._next = await self._iterator.asend(self._next)
-api-1       |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 580, in iter_graph
-api-1       |     raise task_result.error
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 754, in _run_tracked_task
-api-1       |     result = await self._run_task(t_)
-api-1       |              ^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 795, in _run_task
-api-1       |     output = await node.call(step_context)
-api-1       |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/step.py", line 253, in _call_node
-api-1       |     return await node.run(GraphRunContext(state=ctx.state, deps=ctx.deps))
-api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/_agent_graph.py", line 496, in run
-api-1       |     return await self._make_request(ctx)
-api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/_agent_graph.py", line 711, in _make_request
-api-1       |     model_response = await ctx.deps.root_capability.on_model_request_error(
-api-1       |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/capabilities/combined.py", line 276, in on_model_request_error
-api-1       |     raise error
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/_agent_graph.py", line 701, in _make_request
-api-1       |     model_response = await ctx.deps.root_capability.wrap_model_request(
-api-1       |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/capabilities/combined.py", line 262, in wrap_model_request
-api-1       |     return await chain(request_context)
-api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/_agent_graph.py", line 687, in model_handler
-api-1       |     response = await req_ctx.model.request(
-api-1       |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/models/openai.py", line 1452, in request
-api-1       |     response = await self._responses_create(
-api-1       |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/models/openai.py", line 1781, in _responses_create
-api-1       |     raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.body) from e
-api-1       | pydantic_ai.exceptions.ModelHTTPError: status_code: 400, model_name: anthropic:claude-haiku-4-5, body: {'message': "The requested model 'anthropic:claude-haiku-4-5' does not exist.", 'type': 'invalid_request_error', 'param': 'model', 'code': 'model_not_found'}
-api-1       | ERROR 2026-04-30 16:57:50,878 log 28 133751456723712 Bad Gateway: /api/v1/scrapes/237/llm-extract/
-api-1       | 172.19.0.1 - - [30/Apr/2026:16:57:50 -0700] "POST /api/v1/scrapes/237/llm-extract/ HTTP/1.1" 502 268 "-" "python-httpx/0.28.1"
-*** who is calling llm-extract? :scrape:
-*** what is the error for? :scrape:
-*** My resume never parsed :( :scrape:
-
-
 ** TODO when pasting a url for a new job-post :bug:scrape:
 https://careercaddy.online/job-posts/1481
 the url submitted and I was taken to the job post.
@@ -1509,3 +1436,79 @@ Iceboxed 2026-05-08. No evidence users get stuck mid-wizard; static copy + sideb
 Iceboxed 2026-05-08. notes.org Phase 4 marked DEAD same date — postMessage-into-careercaddy-sessionStorage mechanism breaks on third-party JD pages where Ember isn't loaded. URL-param fallback collapses into =/docs= which already serves the help role. Reopen only if users ask for in-popup help; even then, =/docs= is probably the answer.
 * Archive                                            :IMPORTANT:
 Auto-populated by =cc-todo-archive-*=. Do not rely on freshness.
+** SHIPPED a few bugs in this output :important:ai:scrape:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-12]
+:END:
+api PR #81 merged 2026-05-01 21:36 UTC: explicit provider:model prefix
+in JobPostExtractor + IngestResume dispatchers; bare names + unknown
+providers raise. Resume default OpenAI fallback gpt-5 → gpt-4o
+(gpt-5 is gated on some tiers and was the cause of "my resume never
+parsed"). Promote to SHIPPED after parent Deploy succeeds.
+frontend-1  | 172.19.0.1 - - [01/May/2026:00:21:08 +0000] "GET /resumes/36 HTTP/1.1" 200 5007 "-" "Mozilla/5.0 (X11; Linux x86_64; rv:150.0) Gecko/20100101 Firefox/150.0" "67.185.49.200"
+api-1       |     return await self._run_node_with_hooks(node, self._advance_graph)
+api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/run.py", line 282, in _run_node_with_hooks
+api-1       |     return await self._wrap_and_advance(run_context, node, step_fn)
+api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/run.py", line 262, in _wrap_and_advance
+api-1       |     result = await cap.on_node_run_error(run_context, node=node, error=e)
+api-1       |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/capabilities/combined.py", line 215, in on_node_run_error
+api-1       |     raise error
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/run.py", line 260, in _wrap_and_advance
+api-1       |     result = await cap.wrap_node_run(run_context, node=node, handler=step_fn)
+api-1       |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/capabilities/combined.py", line 201, in wrap_node_run
+api-1       |     return await chain(node)
+api-1       |            ^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/run.py", line 238, in _advance_graph
+api-1       |     task = await self._graph_run.next(task)
+api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 497, in next
+api-1       |     return await anext(self)
+api-1       |            ^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 471, in __anext__
+api-1       |     self._next = await self._iterator.asend(self._next)
+api-1       |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 580, in iter_graph
+api-1       |     raise task_result.error
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 754, in _run_tracked_task
+api-1       |     result = await self._run_task(t_)
+api-1       |              ^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/graph.py", line 795, in _run_task
+api-1       |     output = await node.call(step_context)
+api-1       |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_graph/beta/step.py", line 253, in _call_node
+api-1       |     return await node.run(GraphRunContext(state=ctx.state, deps=ctx.deps))
+api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/_agent_graph.py", line 496, in run
+api-1       |     return await self._make_request(ctx)
+api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/_agent_graph.py", line 711, in _make_request
+api-1       |     model_response = await ctx.deps.root_capability.on_model_request_error(
+api-1       |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/capabilities/combined.py", line 276, in on_model_request_error
+api-1       |     raise error
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/_agent_graph.py", line 701, in _make_request
+api-1       |     model_response = await ctx.deps.root_capability.wrap_model_request(
+api-1       |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/capabilities/combined.py", line 262, in wrap_model_request
+api-1       |     return await chain(request_context)
+api-1       |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/_agent_graph.py", line 687, in model_handler
+api-1       |     response = await req_ctx.model.request(
+api-1       |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/models/openai.py", line 1452, in request
+api-1       |     response = await self._responses_create(
+api-1       |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1       |   File "/app/.venv/lib/python3.11/site-packages/pydantic_ai/models/openai.py", line 1781, in _responses_create
+api-1       |     raise ModelHTTPError(status_code=status_code, model_name=self.model_name, body=e.body) from e
+api-1       | pydantic_ai.exceptions.ModelHTTPError: status_code: 400, model_name: anthropic:claude-haiku-4-5, body: {'message': "The requested model 'anthropic:claude-haiku-4-5' does not exist.", 'type': 'invalid_request_error', 'param': 'model', 'code': 'model_not_found'}
+api-1       | ERROR 2026-04-30 16:57:50,878 log 28 133751456723712 Bad Gateway: /api/v1/scrapes/237/llm-extract/
+api-1       | 172.19.0.1 - - [30/Apr/2026:16:57:50 -0700] "POST /api/v1/scrapes/237/llm-extract/ HTTP/1.1" 502 268 "-" "python-httpx/0.28.1"
+*** who is calling llm-extract? :scrape:
+*** what is the error for? :scrape:
+*** My resume never parsed :( :scrape:
+
+
