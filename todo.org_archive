@@ -7342,15 +7342,31 @@ CLOSED: [2026-05-13 Wed 08:43]
 :END:
 attempted /.env
 
-* SHIPPED SHIPPED Firefox extension support + browser-extension docs page :frontend:extension:
-CLOSED: [2026-05-13 Wed 08:40]
+* DONE https:  careercaddy.online job-posts 1667 scrapes 309 :scrape:
+CLOSED: [2026-05-13 Wed 08:50]
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-13]
-:ARCHIVE_TIME: 2026-05-13 Wed 08:45
+:ARCHIVE_TIME: 2026-05-13 Wed 08:51
 :ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
-:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_OLPATH: Active
 :ARCHIVE_CATEGORY: todo
-:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_TODO: DONE
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
-Closed [2026-05-13]: Firefox add-on listing went live alongside the Chrome Web Store entry, so the install CTA in frontend/app/services/extension-install.js now returns =available: true= for Firefox UAs with the AMO URL. Added a new docs page at /docs/extension (frontend/app/routes/docs/extension.js + controllers/docs/extension.js + templates/docs/extension.hbs) covering install, first-time connect, sending posts, the auto-score toggle, the 1.1.1 Resend-to-complete UX, and disconnect. Linked from the docs index Resources table. Also: wizard/score.hbs copy de-Chrome-d to "browser extension" since both stores are live. Bonus: fixed scroll-to-top on docs sub-route transitions — RouteLayout scrolls inside .course-main not window, so docs.js now resets .course-main.scrollTop on every docs.* routeDidChange (was landing mid-page when clicking links from the long docs index).
+:LOGBOOK:
+- Note taken on [2026-05-13 Wed 08:50] \\
+  fixed in another push
+:END:
+https://www.ziprecruiter.com/jobs/v2/eyJsaXN0aW5nX2tleSI6InIzTzNkcWV2TUMyU3NEci1GNkQ4MGciLCJtYXRjaF9pZCI6IjAxOWRlZjM5LWY2YmEtNzY5Yy1iMWQwLTA0YWYyMmNjYzc4MSIsImJpZF90cmFja2luZ19kYXRhIjoiQUFHM3lPbGhZOWlVbEZlVTI3X3BkTk5HNFNRRkFaeHVPOVhESmo2VTdldE1Tb1ZyVXV1UXc0UV9mMWRreHBJcnNNQW9maWFMIiwic291cmNlX3BsYWNlbWVudF9pZCI6NDMwMjR9?tsid=111000153
+The graph trace actually shows DetectObstacle completed quickly (29ms) and routed to ResolveFinalUrl — so the scrape moved past DetectObstacle. The issue is it's now stuck in ResolveFinalUrl and the overall status is still running.
+
+This looks like the scrape is hanging after navigating the ZipRecruiter tracking/redirect URL. A few things to note:
+
+    The URL is a ZipRecruiter tracking link (/km/...) with an auth_token and expires timestamp — the token expired on May 5, 2026, so this URL may no longer be valid, which could cause the redirect/resolution to hang or fail silently.
+    The scrape has been stuck in running since ~18:12 UTC — that's well past a normal timeout window.
+
+What I'd recommend:
+
+    Check if the original job posting URL (not the tracking link) is available — a direct ZipRecruiter job URL (e.g. ziprecruiter.com/jobs/...) would be much more reliable.
+    If you have the direct URL, we can update the scrape or create a new one with that link instead.
+
+Do you have the direct job post link, or would you like me to check the job post (ID 1667) for any other URL we can use?
