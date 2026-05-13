@@ -497,7 +497,8 @@ Projects
 * Active                                             :IMPORTANT:
 Work that should happen. Categories carry =[done/total]= cookies.
 
-** TODO wrong job-post :scrape:
+** KILL wrong job-post :scrape:
+CLOSED: [2026-05-12]
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-04]
 :END:
@@ -508,57 +509,36 @@ but this one is more closely aligned
 https://careercaddy.online/job-posts/1667
 what happened?
 
-Diagnosis [2026-05-04 scrape-profile-enhancer]: real dedupe gap, not
-a profile/selector issue.
+KILL rationale [2026-05-12]: investigated via MCP, the original
+diagnosis was based on a misread of which JP was the right match.
 
-Pasted URL: =https://www.ziprecruiter.com/jobs/v2/<base64>?tsid=...=
-where the base64 payload decodes to
-={listing_key:"r3O3dqevMC2SsDr-F6D80g", match_id:"019def39-...",
-source_placement_id:43024}=.
-
-Both candidate posts (1667 Software Developer I - RIGHT, 1668
-Software Engineer II - Conversational Search) were created via
-=source: email= and have =/km/<token>?auth_token=...&expires=...=
-URLs as both =link= AND =canonical_link=. Their /km/ tokens are
-entirely different from each other and bear no relation to the
-pasted /jobs/v2/ listing_key.
-
-So:
-- =canonicalize_link= (=api/job_hunting/models/job_post_dedupe.py=)
-  does NOT recognise =tsid= as a tracking param (not in
-  =_TRACKING_PARAMS=) — pasted URL canonicalizes to itself.
-- Neither =filter(canonical_link=...)= nor =filter(link=...)= can
-  match the pasted URL against either /km/ row.
-- =find_job_post_by_link= is exact-match only; same miss.
-- =fingerprint= = sha1(company_id|title|location). The two posts'
-  titles differ, so fingerprint dedupe wouldn't match either.
-
-How did 1668 still come back to the user? Likely paths, none of
-which the on-ingest dedupe gate covers today:
-1. Extension matched on a different field (title-substring? company?)
-   that we cannot reproduce from the JSON:API payloads alone.
-2. Both posts were created with a placeholder =canonical_link= that
-   collapses across listing_keys (worth a DB peek).
-3. The pasted URL was scraped, redirected through ZipRecruiter's
-   listing-key resolver, and a downstream dedupe path (post-scrape)
-   made the call.
-
-Action: not a profile change. Code-side todo — teach
-=canonicalize_link= about ZipRecruiter URL shapes:
-=/jobs/v2/<base64>= → decode + use =listing_key= as the canonical
-identifier; =/km/<token>?auth_token=...= must be HEAD-resolved
-(the auth_token expires) and routed through =tracker_resolver=,
-even though =www.ziprecruiter.com= is not in
-=_TRACKER_HOST_SUFFIXES= today (only =click.ziprecruiter.com= is).
-Both /jobs/v2 and /km/ should land on =/jobs/<listing_key>= as the
-dedupe key; without that, every email re-issue mints a new JobPost.
-
-Reference scrapes: 309 (/km/, hung) + 314 (clean direct /jobs/) —
-the hang fix lives in the sibling todo on this same heading.
-
-Scrape Log entry: =Operations/Scrape Log= → =[2026-05-04 21:30]
-ziprecruiter.com — link-normalization: /jobs/v2/<base64> + /km/<token>
-not recognised as same listing_key=
+- The pasted =/jobs/v2/<base64>?tsid=...= base64 decodes to
+  =listing_key=r3O3dqevMC2SsDr-F6D80g=, =source_placement_id=43024=
+  — a *Senior Product Manager II at Redfin* listing, not the
+  Software Developer I (1667) or Software Engineer II (1668) the
+  user thought it was. That listing now lives at job-post 1690,
+  created cleanly via from-text on 2026-05-04 16:04 (scrape 300:
+  pending → extracting → updating_profile → completed in 8s, no
+  409). =complete=true=, =top_score=30=, salary $118.8–145.2k Seattle.
+- The =from-text= dedupe gate (=Q(link=...) | Q(canonical_link=...)=)
+  could not have matched 1668 — neither 1667's nor 1668's =/km/<token>=
+  link/canonical equals or canonicalizes to the pasted /jobs/v2/
+  URL. Whatever the popup told the user that day was not the 409
+  path that exists in code.
+- Most plausible source of the "1668" misread: the extension's
+  open-time =lookupExistingJobPost(tab.url)= (popup.js:310) reads
+  the active tab's URL, not the user's clipboard. If the tab was a
+  still-redirecting =/km/AAF8hsLm.../?auth_token=...= link, that's
+  literally 1668's stored link and the popup would correctly say
+  "Tracked" — then a separate paste of the /jobs/v2/<base64> URL
+  proceeded and minted 1690.
+- The earlier-proposed code change (teach =canonicalize_link= about
+  =/jobs/v2/<base64>= + =/km/<token>=) does not address the
+  user-reported confusion (which had no real dedupe miss to fix).
+  The /km/ side is also non-fixable without HEAD resolution against
+  long-expired auth_tokens. If a future incident shows the same
+  listing being scraped via two different shapes and producing dups,
+  capture a fresh entry from concrete evidence.
 ** TODO UI fixes
 ** TODO ResolveFinalUrl: bound by wall-clock timeout + soft-fail on tracker hang :scrape:agents:bug:
 :PROPERTIES:
