@@ -7194,204 +7194,114 @@ ResidentBrowser._ensure_context calls ctx.add_cookies once per domain (resident.
 :END:
 /home/oldbones/Pictures/screenshot-2026-05-05_09-16-12.png
 
-* SHIPPED [#A] Extracting-state safety net: try finally + sweeper :api:bug:scrape:
-CLOSED: [2026-05-13]
+* SHIPPED jp.show duplicate-candidates banner — Ember Data sub-collection sideload :api:frontend:bug:
 :PROPERTIES:
-:CREATED:  [2026-05-02]
-:ARCHIVE_TIME: 2026-05-13 Wed 08:12
+:ARCHIVE_TIME: 2026-05-13 Wed 08:24
 :ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
-:ARCHIVE_OLPATH: Active
+:ARCHIVE_OLPATH: Inbox
 :ARCHIVE_CATEGORY: todo
 :ARCHIVE_TODO: SHIPPED
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
-*Shipped 2026-05-13.* Two layers of defense against scrapes stuck in =extracting=/=updating_profile= forever (scrape 273 case):
+Closed [2026-05-13]: jp.show banner was empty even when /duplicate-candidates/ returned candidates, because the JP payload had no relationships.duplicate-candidates block — Ember Data hasMany.reload() silently no-op'd.
 
-1. =api/job_hunting/lib/parsers/job_post_extractor.py= — wrapped =parse_scrape._run= in try/except/finally with a =reached_terminal= flag. The flag is set at all three early-bail returns (scrape not found / already linked / no content) and at every terminal status flip (=completed=, =failed=, review_rejected→failed). If anything between =extracting= and the terminal flip raises (uncaught exception, container restart racing the LLM call, OOM mid-=_update_scrape_profile=), the finally branch flips the row to =failed= with note ="parse_scrape died before terminal — see api logs"=. Defensive inner try/except around the safety-net flip itself so even a broken =_log_scrape_status= can't propagate.
-2. =api/job_hunting/management/commands/sweep_stuck_extracting.py= — new management command for the SIGKILL-class case where finally itself can't run. Cutoff is computed from =Max(scrape_statuses__logged_at)= (the model has no =updated_at= field). Args: =--min-age-minutes= (default 15), =--dry-run=. Wire to cron separately.
+Fix is the canonical Ember Data sub-collection pipeline:
+- =api/job_hunting/api/serializers.py=: new =compute_duplicate_candidates(post, request)= helper (single source of truth), new =JobPostDuplicateCandidateSerializer= class registered in =TYPE_TO_SERIALIZER=, =relationships["duplicate-candidates"]= declared on =JobPostSerializer= with a =get_related= override.
+- =api/job_hunting/api/views/jobs.py=: refactored standalone =/duplicate-candidates/= action to call the helper.
+- =api/job_hunting/tests/test_job_post_duplicate_candidates.py=: +2 tests (links.related on every JP payload, ?include= sideload).
+- =frontend/app/routes/job-posts/show.js=: route now =findRecord(... { include: 'scrapes,duplicate-candidates' })=, dropped the explicit =.reload()=. One round-trip.
+- =frontend/app/adapters/job-post.js=: deleted (vestigial — the auto-emitted =links.related= replaces it).
 
-Tests at =api/job_hunting/tests/test_parse_scrape_safety.py= (6 tests, all green): unhandled exception flips stuck-extracting to failed via finally; safety net itself doesn't crash when =_log_scrape_status= raises; early-bail returns don't spuriously flip; sweep flips old extracting rows but not recent ones; sweep handles =updating_profile= state too; =--dry-run= reports without flipping.
+Reference: =Architecture/Ember Data sub-collection reads — the canonical pattern= in notes.org. Refactor candidates for the same pattern parked under separate Inbox entry.
 
-Verification: focused tests 6/6 pass; =make ci= green (api 869/869, frontend 350/350, lint clean).
-
-Out of scope (deferred): cron schedule for the sweep (run manually from =make shell-api= for now); migrating off daemon-thread architecture to a real worker queue.
-
-
-*Trigger:* scrape 273 stuck at =extracting= even though =parse_scrape='s
-=_run= function (=api/job_hunting/lib/parsers/job_post_extractor.py:733-795=)
-already wraps =parser.parse()= in try/except (line 760-763). The =extracting=
-status was written at line 756, then the daemon thread died before reaching
-=updating_profile= (line 765) or the success/fail status flip (lines 776-795).
-
-Most likely root causes (any of them is possible):
-- Daemon thread killed by container restart (deploy churn) between line 756
-  and line 765/793.
-- Uncaught exception in pre-parse setup (lines 738-754: DB lookups, user
-  resolution).
-- Uncaught exception in =_log_scrape_status= itself.
-- OOM kill of the api container while the LLM call was in flight.
-
-Even after the from-text =sync=True= fix above, =parse_scrape= is still
-called from other paths that DO use daemon threads:
-- =api/job_hunting/api/views/jobs.py= =reextract= action (line 696)
-- =api/job_hunting/api/views/scrapes.py= =parse= action (line 540, =_reparse_force=)
-- Hold-poller's =partial_update= → =_maybe_trigger_extraction= →
-  =_reparse_force= path (=scrapes.py:540=)
-
-These need a safety net.
-
-** Change A: try/finally around =_run= so terminal status is guaranteed :scrape:
-
-In =api/job_hunting/lib/parsers/job_post_extractor.py=, =parse_scrape._run=
-(line 733):
-
-#+begin_src python
-def _run():
-    from job_hunting.models.scrape import Scrape as ScrapeModel
-    from job_hunting.lib.scraper import _log_scrape_status
-    from django.contrib.auth import get_user_model
-
-    reached_terminal = False
-    try:
-        scrape = ScrapeModel.objects.filter(pk=scrape_id).first()
-        if not scrape:
-            logger.warning("parse_scrape: scrape_id=%s not found", scrape_id)
-            reached_terminal = True  # nothing to flip
-            return
-        # ... existing body unchanged through the success/failure status flip ...
-        # Inside the existing branches, set reached_terminal = True after each
-        # _log_scrape_status("completed", ...) and _log_scrape_status("failed", ...)
-    except Exception:
-        logger.exception("parse_scrape: unhandled in _run scrape_id=%s", scrape_id)
-    finally:
-        if not reached_terminal:
-            # Guarantee the scrape leaves `extracting` no matter what.
-            try:
-                _log_scrape_status(
-                    scrape_id, "failed",
-                    note="parse_scrape died before terminal — see api logs",
-                )
-            except Exception:
-                logger.exception(
-                    "parse_scrape: failed to flip stuck scrape_id=%s to failed",
-                    scrape_id,
-                )
-#+end_src
-
-Set =reached_terminal = True= at lines 790 (=completed=) and 793 (=failed=)
-inside the existing branches.
-
-** Change B: management command for stuck-extracting sweep :scrape:
-
-New file =api/job_hunting/management/commands/sweep_stuck_extracting.py=:
-
-#+begin_src python
-from datetime import timedelta
-from django.core.management.base import BaseCommand
-from django.utils import timezone
-from job_hunting.models import Scrape
-from job_hunting.lib.scraper import _log_scrape_status
-
-
-class Command(BaseCommand):
-    help = "Flip Scrapes stuck in extracting/updating_profile to failed."
-
-    def add_arguments(self, parser):
-        parser.add_argument("--min-age-minutes", type=int, default=15)
-        parser.add_argument("--dry-run", action="store_true")
-
-    def handle(self, *args, min_age_minutes, dry_run, **opts):
-        cutoff = timezone.now() - timedelta(minutes=min_age_minutes)
-        stuck = Scrape.objects.filter(
-            status__in=["extracting", "updating_profile"],
-            updated_at__lt=cutoff,  # or use the latest_status timestamp
-        )
-        for s in stuck:
-            self.stdout.write(
-                f"scrape={s.id} status={s.status} updated_at={s.updated_at}"
-            )
-            if not dry_run:
-                _log_scrape_status(
-                    s.id, "failed",
-                    note=f"swept: stuck in {s.status} > {min_age_minutes}m",
-                )
-        self.stdout.write(f"swept {stuck.count()} stuck scrapes")
-#+end_src
-
-Wire as cron via the existing scheduling pattern (or invoke from
-=make sweep-stuck= for now; later cron is a separate ticket).
-
-** Tests :scrape:
-
-=api/job_hunting/tests/test_parse_scrape_safety.py= (new):
-
-#+begin_src python
-class TestParseScrapeSafetyNet(TestCase):
-    def test_unhandled_exception_flips_to_failed(self):
-        scrape = Scrape.objects.create(
-            url="https://example.com/x", job_content="x" * 200,
-            status="pending", created_by=self.user, source="extension",
-        )
-        with patch(
-            "job_hunting.lib.parsers.job_post_extractor.JobPostExtractor.parse"
-        ) as p:
-            p.side_effect = RuntimeError("simulated daemon-thread death")
-            parse_scrape(scrape.id, user_id=self.user.id, sync=True)
-        scrape.refresh_from_db()
-        # Even with an unhandled exception, scrape MUST reach terminal.
-        self.assertEqual(scrape.status, "failed")
-
-    def test_pre_parse_db_failure_flips_to_failed(self):
-        # Simulate ScrapeModel.objects.filter raising
-        with patch("job_hunting.models.scrape.Scrape.objects") as mgr:
-            mgr.filter.side_effect = OperationalError("db down")
-            # Should not raise, should not loop forever
-            parse_scrape(99999, user_id=self.user.id, sync=True)
-        # No assertion on status — scrape doesn't exist in this test —
-        # but the call must return without error.
-
-class TestSweepStuckExtractingCommand(TestCase):
-    def test_sweeps_old_extracting_rows(self):
-        old = Scrape.objects.create(
-            url="https://example.com/old", status="extracting",
-            created_by=self.user, source="extension",
-        )
-        Scrape.objects.filter(pk=old.id).update(
-            updated_at=timezone.now() - timedelta(minutes=20)
-        )
-        recent = Scrape.objects.create(
-            url="https://example.com/new", status="extracting",
-            created_by=self.user, source="extension",
-        )
-        call_command("sweep_stuck_extracting", "--min-age-minutes=15")
-        old.refresh_from_db(); recent.refresh_from_db()
-        self.assertEqual(old.status, "failed")
-        self.assertEqual(recent.status, "extracting")
-#+end_src
-
-** Acceptance criteria :scrape:
-1. Any =parse_scrape= invocation that reaches the daemon thread leaves
-   the scrape in a terminal status (=completed= or =failed=), even on
-   uncaught exception or container restart mid-flight.
-2. =python manage.py sweep_stuck_extracting --min-age-minutes=15= flips
-   stuck rows; =--dry-run= reports without flipping.
-3. =make ci= green.
-
-** Out of scope :scrape:
-- Cron schedule for =sweep_stuck_extracting= (file separately if you want
-  it on a timer; can also run manually from =make shell-api= for now).
-- Changing the underlying daemon-thread architecture to a real worker
-  queue (Celery / Django-Q). That's a larger refactor.
-
-
-* SHIPPED Move Mark-incomplete to edit + ccsender 1.1.1 resend UX
-CLOSED: [2026-05-08]
+* DONE Refactor sub-collection adapters to hasMany + include= sideload :frontend:api:
+CLOSED: [2026-05-13 Wed 08:25]
 :PROPERTIES:
-:ARCHIVE_TIME: 2026-05-13 Wed 08:12
+:LAST_TOUCHED: [2026-05-13]
+:ARCHIVE_TIME: 2026-05-13 Wed 08:25
 :ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
-:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_OLPATH: Inbox
 :ARCHIVE_CATEGORY: todo
-:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_TODO: DONE
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
-frontend show.hbs button moved to edit.hbs (HyperUI amber pill); markIncomplete action moved to edit controller; mark-incomplete acceptance test now visits /edit. ccsender extension bumped 1.1.0 → 1.1.1 with resend-to-complete UX: showConnected swaps heading to 'Complete this post' and button to 'Resend to complete' when the active URL maps to a complete=false JobPost; new accent-colored banner shows existing post title+company. Disambiguates from earlier in-place 1.1.0 build (commit d2ea3da) that shipped the three-state branching without a version bump.
+Convert remaining urlForQuery + store.query sub-collection patterns to the canonical Ember Data pipeline shipped 2026-05-13 for jp.show duplicate-candidates: serializer-side @hasMany on parent + auto-emitted relationships.<name>.{links.related, data} block + ?include=<name> sideload via included[]. See =Architecture/Ember Data sub-collection reads — the canonical pattern= for the four wiring points and anti-patterns.
+
+Why: each remaining urlForQuery + store.query pair is the same silent-no-op landmine — Ember Data won't populate the hasMany without a relationships block, so any future caller that switches from store.query to a relationship reference gets an empty list with no error. Better to migrate while the pattern is fresh.
+
+Candidates (verified by grep on 2026-05-13):
+
+- =frontend/app/adapters/screenshot.js= — sub-collection =Scrape :id/screenshots/=. Consumer: =components/scrapes/item.js=. Refactor: declare =@hasMany('screenshot')= on Scrape model; serializer emits relationships block; route uses =include: 'screenshots'= when needed. Drop =store.query('screenshot', { scrape_id })= in favor of =scrape.screenshotsList=.
+- =frontend/app/adapters/scrape-status.js= — sub-collection =Scrape :id/graph-trace/=. Returns ordered ScrapeStatus rows for the source-scrape *chain* plus =meta.chain=. Computed-relationship pattern (chain spans multiple scrapes): mirror duplicate-candidates approach — =@hasMany('scrape-status', { ... })= on Scrape with a =get_related= override that walks the chain and stashes per-row metadata, plus a serializer-emitted virtual relationship =graph-trace=. The =meta.chain= envelope can flow back via JSON:API top-level =meta=.
+
+Not candidates (different pattern, leave as-is):
+
+- =frontend/app/adapters/career-data.js= — =urlForQueryRecord= for the =/career-data= aggregate. This is a Report (CLAUDE.md pattern #4), not a parent/child sub-collection. Use =reportFetch= if it ever gets reworked.
+- =frontend/app/adapters/user.js= — =urlForQueryRecord= for =/users/me=. Singleton-by-identity pattern; not a sub-collection.
+- =frontend/app/adapters/onboarding.js= — =urlForQueryRecord= for =/users/me/onboarding=. Singleton-per-user; not a sub-collection.
+
+** Pros / cons per candidate (added 2026-05-13 for tomorrow's review)
+For each REAL candidate: pros, cons, recommendation. Non-candidates get a quick sanity check at the bottom in case any of them deserves promotion.
+
+*** screenshot.js
+Endpoint: =GET /api/v1/scrapes/:scrape_id/screenshots/=. Adapter: =urlForQuery= → =buildURL('scrape', id) + 'screenshots/'=. Consumer: =components/scrapes/item.js _loadScreenshotList()= called from the constructor (already a separate code-smell — violates =feedback_no_logic_in_component_constructors=).
+
+**** Pros of refactor
+- Consumer becomes a pure renderer over =scrape.screenshotsList= — kills the constructor side-effect at the same time.
+- Scrape model already declares =scrapeStatuses= hasMany; =screenshots= as a sibling matches the established pattern on the same parent.
+- Single round-trip: =scrapes/show= already does =include: 'company,job-post,scrape-statuses'=. Adding =,screenshots= piggybacks on the existing fetch with zero new requests.
+- Eliminates the =urlForQuery= adapter file entirely (consistent with the deletion of =adapters/job-post.js= yesterday once it became vestigial).
+- Future callers that want screenshots get them via relationship reference (=scrape.screenshots=) — no chance of the silent-no-op landmine if someone migrates from =store.query= later.
+
+**** Cons of refactor
+- Screenshots are *staff-only* and frequently empty for non-debug scrapes. Eager sideload via =?include=screenshots= adds an extra DB round-trip per scrape view even when the user never expands the dropdown. Today's lazy-load is on-demand and skipped entirely for non-staff.
+- Screenshot is a *virtual* model (id =scrape_id/filename=, no DB row). Wiring requires a =get_related= override in =ScrapeSerializer= that walks the disk + stashes per-row metadata. Doable (we did the same dance for duplicate-candidates) but adds API surface for one consumer.
+- The component-constructor smell can be fixed independently with =modifier @did-insert= or by hoisting the load into a route =model()= — without touching the adapter at all. The adapter is not the actual bug.
+- The =scrapes/show= include= line gets longer and tied to a staff-only relationship; non-staff requests would need to omit =screenshots= or the API needs to no-op the include for non-staff users (extra branching).
+
+**** Recommendation
+Refactor only if staff-on-scrapes-show happens often enough that the eager sideload is a clear UX win. Otherwise: leave the adapter, fix the constructor smell on its own track. Borderline.
+
+*** scrape-status.js
+Endpoint: =GET /api/v1/scrapes/:scrape_id/graph-trace/=. Adapter: =urlForQuery= → =buildURL('scrape', id) + 'graph-trace/'=. Consumer: =routes/scrapes/graph.js= which reads =result.meta.chain= for the redirect lineage. Note: the parent Scrape *also* exposes =@hasMany('scrape-status', { inverse: 'scrape' })= for the local-statuses set, sideloaded via =include=scrape-statuses= in =scrapes/show= and =job-posts/show/scrapes/show=. Two endpoints, two shapes.
+
+**** Pros of refactor
+- Uniformity with the new pattern. The inbox entry's proposed approach (computed-relationship + =get_related= override + pass =meta.chain= via JSON:API top-level =meta=) matches the duplicate-candidates wiring and stays inside the framework.
+- The graph route's awkward =traceResult.toArray()= + composition into flat dicts becomes =scrape.graphTraceList= or similar synced-array getter on the Scrape model — kills the manual mapping.
+- =meta.chain= still flows through; JSON:API allows top-level =meta= alongside =included=.
+
+**** Cons of refactor
+- *Scrape already has =scrape-status= as a hasMany.* The /graph-trace/ projection returns ScrapeStatus rows, but they're *cross-scrape* — the redirect chain spans multiple Scrape ids. If we sideload them under =include=graph-trace= as ScrapeStatus resources, Ember Data's identity-map will conflict / merge them with the parent's local =scrapeStatuses= set, depending on the order. Hard to reason about.
+- The escape hatch is exactly what duplicate-candidates did: a *separate virtual type* (=job-post-duplicate-candidate=) with its own JSON:API =type=. Means a new model =graph-trace-row= or similar — same DB row class, different =type= tag — with its own attribute shape. That's three new files (model, serializer, type registration) for one consumer.
+- =meta.chain= via top-level =meta= works, but reading top-level meta off a =findRecord(scrape).meta= response is more awkward than off a =store.query(...).meta= response. The route would need to inspect =store.peekRecord('scrape', id).errors=-style internals or change the route to capture the raw payload. Minor but real.
+- The current adapter is *small and obvious*. Comment explains exactly why it exists. Cost-of-staying is near zero.
+
+**** Recommendation
+Lean *do not refactor*. The inbox entry's framing assumes the duplicate-candidates pattern transfers cleanly; it almost does, but =scrapeStatuses= already exists as a hasMany so the new virtual type has to be carefully named to avoid identity-map collision. Cost > benefit unless we're forced to touch this code for another reason. If we do touch it, do the work as proposed (virtual type + meta) but don't open it just for uniformity.
+
+*** Non-candidates — sanity check (in case any of these deserves promotion)
+- *career-data.js* — confirmed not a sub-collection. It's a per-user aggregate computed across many models. CLAUDE.md classifies as Report (pattern #4). Would need =reportFetch= migration for a full conversion to canonical patterns; that's a different audit. *Leave for now.*
+- *user.js* — =urlForQueryRecord({me}) → /users/me=. The currentUser service uses =findRecord('user', jwt-id)= — the JWT-id path obviates =/me=. Worth one =grep= sweep to confirm no live caller passes ={me: true}=; if none, the adapter is dead code and can be deleted entirely. *Action: 30-second grep; delete if zero callers.*
+- *onboarding.js* — =urlForQueryRecord= AND =urlForUpdateRecord= both → =/users/me/onboarding=. Singleton-by-design (URL is per-user, not per-id). Could be expressed as a =hasOne= on User and sideloaded on boot, but onboarding is mutated frequently and =urlForUpdateRecord= still has to be overridden — so the adapter doesn't go away. *Leave as-is.*
+
+** Suggested order of operations
+1. Confirm canon: =frontend/CLAUDE.md= pattern #3 is the *legacy* description; the new pattern (declared hasMany + include= sideload) is the migration target. Update CLAUDE.md text after the first migration lands so the doc and the memory stop drifting.
+2. =user.js= grep audit (cheap; possibly delete adapter — net negative LOC).
+3. =screenshot.js= refactor *only if* you want to fix the constructor smell at the same time AND staff-on-scrapes-show is hot enough to justify the eager load.
+4. =scrape-status.js= — no action unless something else forces a touch on this code path.
+5. =career-data.js= / =onboarding.js= — defer indefinitely; not sub-collections.
+
+** Net assessment
+Two real candidates (=screenshot.js= borderline, =scrape-status.js= lean-no), one cheap delete-or-not check (=user.js=), two leave-alone. Most of the value of this audit is *avoiding the refactor* — the inbox entry's bullet list reads like five candidates but only one is clearly worth the effort, and even that one has a separate code-smell that probably matters more than the adapter shape.
+
+* DONE When Clicking on possible duplicate link, the resulting job-post is the duplicate but the possible duplicate warning never chagnes to the other d
+CLOSED: [2026-05-13 Wed 08:25]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-13]
+:ARCHIVE_TIME: 2026-05-13 Wed 08:25
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:

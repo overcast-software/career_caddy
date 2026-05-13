@@ -38,7 +38,7 @@ Archive (1)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
-** TODO SHIPPED jp.show duplicate-candidates banner — Ember Data sub-collection sideload :api:frontend:bug:
+** SHIPPED jp.show duplicate-candidates banner — Ember Data sub-collection sideload :api:frontend:bug:
 Closed [2026-05-13]: jp.show banner was empty even when /duplicate-candidates/ returned candidates, because the JP payload had no relationships.duplicate-candidates block — Ember Data hasMany.reload() silently no-op'd.
 
 Fix is the canonical Ember Data sub-collection pipeline:
