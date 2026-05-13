@@ -20,7 +20,7 @@ Inbox (32)
   Feature (2)
   Idea (0)
 Backlog [0/3]
-Active [0/34]
+Active [0/33]
 Icebox [0/6]
 Archive (0)
 #+end_example
@@ -672,21 +672,6 @@ What I'd recommend:
     If you have the direct URL, we can update the scrape or create a new one with that link instead.
 
 Do you have the direct job post link, or would you like me to check the job post (ID 1667) for any other URL we can use?
-
-** DONE Hold-poller "graph done" log uses entry-time scrape_id (false-positive success on parent) :scrape:agents:bug:obs:
-CLOSED: [2026-05-12 Tue]
-   :PROPERTIES:
-   :CREATED:  2026-05-04
-   :END:
-   Took the "render entry→final when the swap happened" path. New
-   module-level =format_scrape_label(entry_id, final_id)= in
-   =agents/pollers/hold_poller.py= produces ="302→303"= when
-   ResolveFinalUrl forked, or ="273"= otherwise. Applied to all three
-   terminal surfaces: "graph done", graph-cap timeout, and
-   graph-exception. =update_scrape()= calls still target the entry id
-   (parent row is the user-visible one; ResolveFinalUrl's
-   terminal-close handles the parent's status separately).
-   Tests in =tests/test_hold_poller_label.py= lock the format.
 
 ** TODO ResolveApplyUrl: short-circuit on internal_apply_markers (Easy Apply false-fail) :scrape:agents:bug:
    :PROPERTIES:

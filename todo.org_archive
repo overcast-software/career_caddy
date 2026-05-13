@@ -6555,3 +6555,25 @@ the content string only; both callers (=cover_letters.py= +
 =_monolith.py=) update their pending row with that content. Regression
 test in =tests/test_cover_letter_service.py= locks the
 no-DB-side-effect invariant.
+
+* DONE Hold-poller "graph done" log uses entry-time scrape_id (false-positive success on parent) :scrape:agents:bug:obs:
+CLOSED: [2026-05-12 Tue]
+   :PROPERTIES:
+   :CREATED:  2026-05-04
+   :ARCHIVE_TIME: 2026-05-12 Tue 17:33
+   :ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+   :ARCHIVE_OLPATH: Active
+   :ARCHIVE_CATEGORY: todo
+   :ARCHIVE_TODO: DONE
+   :ARCHIVE_ITAGS: IMPORTANT
+   :END:
+   Took the "render entry→final when the swap happened" path. New
+   module-level =format_scrape_label(entry_id, final_id)= in
+   =agents/pollers/hold_poller.py= produces ="302→303"= when
+   ResolveFinalUrl forked, or ="273"= otherwise. Applied to all three
+   terminal surfaces: "graph done", graph-cap timeout, and
+   graph-exception. =update_scrape()= calls still target the entry id
+   (parent row is the user-visible one; ResolveFinalUrl's
+   terminal-close handles the parent's status separately).
+   Tests in =tests/test_hold_poller_label.py= lock the format.
+
