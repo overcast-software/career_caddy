@@ -15,9 +15,9 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
 Inbox (21)
-  Bug (3)
+  Bug (8)
   Enhancement (26)
-  Feature (3)
+  Feature (4)
   Idea (0)
 Backlog [0/3]
 Active [0/25]
@@ -424,7 +424,12 @@ controllers/job-posts/show/questions.js were deleted before ship.
 :END:
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
+*** TODO sweep_stuck_scoring cron — paired with model.isPending gate
+Now that the spinner gate reads =status= directly off the record (per-model =isPending= getter, shipped 2026-05-13), a Score / CoverLetter / Summary / Scrape that gets stuck in a non-terminal state on the server (worker dies mid-flight, OOM, exception bypasses the =finally=) will spin forever in the UI on every visit. We already have =sweep_stuck_extracting= for Scrape; need the equivalent for Score (and probably CoverLetter / Summary). Two-prong: (1) wrap the worker entrypoints in =try / except / finally= that ALWAYS sets a terminal status, (2) periodic management command (cron) that flips records older than N minutes in pending states to =error= with a reason. Surfaces as =/api/v1/sweep_stuck_<resource>/= mgmt commands; runs on the api container schedule. Should mirror =sweep_stuck_extracting= shape exactly so ops behavior is consistent.
 *** TODO from-text inline scorer span detached from parent request :api:agents: 
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-13]
+:END:
 Diagnosing the JP 2045 description-clobber required pulling a gpt-5 scorer span (id 4254ad0101bf8519) whose =parent_span_id= was null even though it was kicked off inline by =POST /scrapes/from-text/=. Naive logfire trace queries by trace_id miss it; you have to widen by user/time. This hid the score-vs-extract ordering on the from-text path and matters anytime we investigate any score/extract race on extension-sourced scrapes. Fix shape: when =/scrapes/from-text/= triggers the inline scorer, propagate the request's span context so the scorer span attaches to its parent. Affects =api/job_hunting/api/views/scrapes.py= from-text handler + the scorer kickoff. Verification: a new from-text POST should show the scorer span as a child of the request span in logfire. 
 *** TODO linkedin.com extraction_hints overfires on rich extension captures :scrape:extension: 
 :PROPERTIES:

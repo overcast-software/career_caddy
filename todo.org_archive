@@ -7370,3 +7370,15 @@ What I'd recommend:
     If you have the direct URL, we can update the scrape or create a new one with that link instead.
 
 Do you have the direct job post link, or would you like me to check the job post (ID 1667) for any other URL we can use?
+
+* SHIPPED Row spinner missing on F5 + server-kicked records
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-13]
+:ARCHIVE_TIME: 2026-05-13 Wed 12:56
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Bug
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Fixed [2026-05-13]: Spinner gate moved from session-scoped =pollable.pendingIds= Set to per-model =isPending= getter on Score / CoverLetter / Summary / Scrape models that reads server =status= directly (=status && !TERMINAL.has(status)=). =TERMINAL= now exported from =services/pollable.js=. Templates read =record.isPending= directly — no controller =@action isPending=, no =@isPending= arg threading. F5 cold reload + chat-agent-created scores + hold-poller-created scrapes now spin correctly without re-introducing the cross-contamination bug that =b7009ca= (2026-04-16) added =pendingIds= for. Architecture note updated: =Architecture/AI-Generated Resource Polling — async create + pollable service=. Shipped: PR #154 (frontend) merge =ee027f44=, PR #169 (parent) merge =098b8adb=.
