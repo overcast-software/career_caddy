@@ -1,5 +1,5 @@
 #+TITLE: career_caddy todo board
-#+TODO: TODO(t) STRT(s) PLAN(p) WAIT(w) LOOP(l) | KILL(k) SHIPPED(p) DONE(d)
+#+TODO: TODO(t) STRT(s) PLAN(p) WAIT(w) LOOP(l) | KILL(k) SHIPPED(P) DONE(d)
 #+TAGS: scrape(s) frontend(f) api(a) agents(g) bugs(b) infra(i) chore(C) chat(c) dedupe(d) extension(e) mcp(m)
 #+startup: overview
 
@@ -183,12 +183,6 @@ Tags: docs, infra
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
-*** SHIPPED SHIPPED Firefox extension support + browser-extension docs page :frontend:extension: 
-CLOSED: [2026-05-13 Wed 08:40]
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-13]
-:END:
-Closed [2026-05-13]: Firefox add-on listing went live alongside the Chrome Web Store entry, so the install CTA in frontend/app/services/extension-install.js now returns =available: true= for Firefox UAs with the AMO URL. Added a new docs page at /docs/extension (frontend/app/routes/docs/extension.js + controllers/docs/extension.js + templates/docs/extension.hbs) covering install, first-time connect, sending posts, the auto-score toggle, the 1.1.1 Resend-to-complete UX, and disconnect. Linked from the docs index Resources table. Also: wizard/score.hbs copy de-Chrome-d to "browser extension" since both stores are live. Bonus: fixed scroll-to-top on docs sub-route transitions — RouteLayout scrolls inside .course-main not window, so docs.js now resets .course-main.scrollTop on every docs.* routeDidChange (was landing mid-page when clicking links from the long docs index).
 *** TODO remove expand caret on sidebar
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
