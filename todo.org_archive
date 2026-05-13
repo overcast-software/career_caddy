@@ -6747,3 +6747,101 @@ Duplicate of the level-2 STRT shipped the same day — see archive
 entry "skeleton pages in reports" (frontend PR #146 commit ee1a539
 chart-shaped =reports/activity/loading.hbs= matching the existing
 peer skeletons).
+
+* SHIPPED ResolveFinalUrl: bound by wall-clock timeout + soft-fail on tracker hang :scrape:agents:bug:
+CLOSED: [2026-05-12 Tue]
+:PROPERTIES:
+:CREATED:  2026-05-04
+:ARCHIVE_TIME: 2026-05-12 Tue 21:08
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: TODO
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Already in prod — agents PR #9 (=feature/resolve-final-url-timeout=,
+merge commit =7d61cb5=) merged 2026-05-04 21:29 UTC and parent now
+pins agents@=1872a62= which is past it. The todo body's
+"NOT pushed — awaiting review" note was stale at archive time.
+Wall-clock budget knob =SCRAPE_GRAPH_RESOLVE_FINAL_URL_BUDGET_S=
+(default 15s) is live; on TimeoutError the parent gets PATCHed to
+=failed= with a "ResolveFinalUrl timeout after Ns" note and the
+graph routes to CheckLinkDedup with =canonical_url= falling back
+to =submitted_url=. Tracker-host hangs (ZipRecruiter =/km/=,
+LinkedIn =/safety/go/=, indeed redirects) now reach a terminal
+state instead of stranding the scrape in =running= forever.
+
+Generic =NodeTimeout= unification with =scrapes 54= rescue path
+remains deferred (see that entry).
+
+ZipRecruiter =/km/...= tracker URLs (auth_token + expires) can
+hang ResolveFinalUrl indefinitely — scrape 309 (job-post 1667,
+Software Developer I - RIGHT) was stuck in =running= for hours,
+trace ends at =DetectObstacle routed_to=ResolveFinalUrl= (29ms)
+and the next node never emits. No terminal status was ever
+written.
+
+Static =url_rewrites= can't help here (the listing_key isn't
+derivable from the tracker without a server-side redirect
+resolution). The fix is engine-side: bound ResolveFinalUrl by a
+wall-clock budget and route to ExtractFail (or a new
+=ResolveFailed= terminal) when the budget expires, so the parent
+scrape always reaches a terminal state.
+
+Files: =agents/scrape_graph/nodes/resolve_final_url.py= — wrap the
+HEAD/GET / page-redirect probe in =asyncio.wait_for= with a
+configurable budget (suggest ~10s default, override per-profile).
+
+Reference scrapes: 309 (=running= forever, =/km/= tracker), 314
+(=completed= cleanly on the direct =/jobs/=... form for the same
+job). Same shape applies to other tracker hosts (linkedin
+=/safety/go/=, indeed redirects, etc.).
+
+Bundled with [[https://careercaddy.online/scrapes/54][scrape 54
+\"rescue from timeout\" todo]] above — both want the same shape
+(node-level timeout that doesn't kill the whole graph). Could be
+unified as a generic =NodeTimeout= guard rather than per-node
+bounding.
+
+Scrape Log entry: =Operations/Scrape Log= → =[2026-05-04 20:00]
+ziprecruiter.com — graph/timing: ResolveFinalUrl hangs on expired
+tracker URL (/km/...)=
+
+Update [2026-05-04 21:30 scrape-profile-enhancer]: targeted fix on
+=feature/resolve-final-url-timeout= (agents repo, commit =daa4bc8=,
+NOT pushed — awaiting review).
+
+Approach taken (narrower than the original todo body):
+- Split =ResolveFinalUrl.run()=' sync body into a private helper
+  =_resolve_final_url_body(state)= so it can be wrapped in
+  =asyncio.wait_for(asyncio.to_thread(...))=.
+- New env knob =SCRAPE_GRAPH_RESOLVE_FINAL_URL_BUDGET_S= (default
+  =15.0=), bumped from the 10s the todo suggested because the
+  child-scrape POST + parent terminal-close needs ~3s headroom over
+  the existing 10s httpx timeout for the slow path.
+- On =asyncio.TimeoutError=: best-effort PATCH the parent to
+  =failed= with a "ResolveFinalUrl timeout after Ns" note, fall back
+  =state.canonical_url= to =state.submitted_url= so CheckLinkDedup
+  still has a non-empty key, and route to CheckLinkDedup as usual
+  (no new =ResolveFailed= terminal — the existing failure-path is
+  enough; introducing a new terminal would require api + frontend
+  status-string changes for a single-trigger scenario).
+- Trace payload now carries =timed_out= + =budget_s= for diagnosis.
+- Two new tests in =tests/test_resolve_final_url_timeout.py=
+  (timeout path closes parent + fast-path no-op); full agents test
+  suite stays green at 289/289.
+
+What this does NOT solve and is intentionally deferred:
+- The generic =NodeTimeout= unification with =scrapes 54= rescue
+  path (graph-wide budget that captures whatever DOM/text it has
+  and routes to StartExtract instead of ExtractFail). That is a
+  bigger refactor with frontend visibility (new graph node) — see
+  the diagnosis appended to the scrapes 54 todo above.
+- Teaching =canonicalize_link= to recognise =/jobs/v2/<base64>= and
+  =/km/<token>= as the same listing — this fix bounds the *hang*
+  but does not fix the *dedupe miss*. See =wrong job-post= todo.
+
+Verification: integration test pending — needs a re-scrape of 309's
+URL form on a poller running the feature branch. Until then leave
+SHIPPED off; mark =STRT= once merged + deployed.
+
