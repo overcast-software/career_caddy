@@ -14,106 +14,120 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (27)
+Inbox (21)
   Bug (3)
-  Enhancement (24)
-  Feature (2)
+  Enhancement (27)
+  Feature (3)
   Idea (0)
 Backlog [0/3]
-Active [0/31]
+Active [0/26]
 Icebox [0/6]
 Archive (1)
 #+end_example
 * Inbox                                              :IMPORTANT:
 - AW is a term referring to Agent Wizard for the agent that is focused on onboarding
-- Leave notes for the other agent using =#+NOTE:= inside the subtree
+- Leave notes for the other agent using sub-headers
 - Never mark DONE until =make test-api= or =make test-frontend= passes locally
 - Feature branches cut from =main=; PRs target =main=
-- Do NOT touch items marked :[PENDING APPROVAL:
+- Do NOT touch items marked :PENDING APPROVAL:
 - SHIPPED tasks older than 5 days are archived to =todo_archive.org=. Last prune: [2026-04-15].
-- =PROJ= prefix on todo items means "use /plan mode" — enter planning, design the architecture, write the plan to notes.org, then exit.
-- LOOP prefix are items whose work needs research about where it is.
-- Prefer amending recent commits for small fixes rather than creating new commits.
+- =PLAN= prefix on todo items means "use /plan mode" — enter planning, design the architecture, write the plan to notes.org, then exit.
+- LOOP prefix refers to the user adding comments about a plan that need addressing
 - Update =todo.org= to reflect completed work before pushing. =notes.org= is LOCAL-ONLY — NEVER commit it (holds server IPs / internal info). It is gitignored in parent + every submodule; unstage it if it ever shows up.
 - All =manage.py= commands run inside Docker (=make shell-api=), never locally with =uv run=.
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
-** TODO capture prompt used. :medium:
-** KILL new user, no wizard on localhost:4200
-** TODO When Clicking on possible duplicate link, the resulting job-post is the duplicate but the possible duplicate warning never chagnes to the other d
+** TODO SHIPPED jp.show duplicate-candidates banner — Ember Data sub-collection sideload :api:frontend:bug:
+Closed [2026-05-13]: jp.show banner was empty even when /duplicate-candidates/ returned candidates, because the JP payload had no relationships.duplicate-candidates block — Ember Data hasMany.reload() silently no-op'd.
+
+Fix is the canonical Ember Data sub-collection pipeline:
+- =api/job_hunting/api/serializers.py=: new =compute_duplicate_candidates(post, request)= helper (single source of truth), new =JobPostDuplicateCandidateSerializer= class registered in =TYPE_TO_SERIALIZER=, =relationships["duplicate-candidates"]= declared on =JobPostSerializer= with a =get_related= override.
+- =api/job_hunting/api/views/jobs.py=: refactored standalone =/duplicate-candidates/= action to call the helper.
+- =api/job_hunting/tests/test_job_post_duplicate_candidates.py=: +2 tests (links.related on every JP payload, ?include= sideload).
+- =frontend/app/routes/job-posts/show.js=: route now =findRecord(... { include: 'scrapes,duplicate-candidates' })=, dropped the explicit =.reload()=. One round-trip.
+- =frontend/app/adapters/job-post.js=: deleted (vestigial — the auto-emitted =links.related= replaces it).
+
+Reference: =Architecture/Ember Data sub-collection reads — the canonical pattern= in notes.org. Refactor candidates for the same pattern parked under separate Inbox entry.
+** TODO Refactor sub-collection adapters to hasMany + include= sideload :frontend:api:
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-08]
+:LAST_TOUCHED: [2026-05-13]
+:END:
+Convert remaining urlForQuery + store.query sub-collection patterns to the canonical Ember Data pipeline shipped 2026-05-13 for jp.show duplicate-candidates: serializer-side @hasMany on parent + auto-emitted relationships.<name>.{links.related, data} block + ?include=<name> sideload via included[]. See =Architecture/Ember Data sub-collection reads — the canonical pattern= for the four wiring points and anti-patterns.
+
+Why: each remaining urlForQuery + store.query pair is the same silent-no-op landmine — Ember Data won't populate the hasMany without a relationships block, so any future caller that switches from store.query to a relationship reference gets an empty list with no error. Better to migrate while the pattern is fresh.
+
+Candidates (verified by grep on 2026-05-13):
+
+- =frontend/app/adapters/screenshot.js= — sub-collection =Scrape :id/screenshots/=. Consumer: =components/scrapes/item.js=. Refactor: declare =@hasMany('screenshot')= on Scrape model; serializer emits relationships block; route uses =include: 'screenshots'= when needed. Drop =store.query('screenshot', { scrape_id })= in favor of =scrape.screenshotsList=.
+- =frontend/app/adapters/scrape-status.js= — sub-collection =Scrape :id/graph-trace/=. Returns ordered ScrapeStatus rows for the source-scrape *chain* plus =meta.chain=. Computed-relationship pattern (chain spans multiple scrapes): mirror duplicate-candidates approach — =@hasMany('scrape-status', { ... })= on Scrape with a =get_related= override that walks the chain and stashes per-row metadata, plus a serializer-emitted virtual relationship =graph-trace=. The =meta.chain= envelope can flow back via JSON:API top-level =meta=.
+
+Not candidates (different pattern, leave as-is):
+
+- =frontend/app/adapters/career-data.js= — =urlForQueryRecord= for the =/career-data= aggregate. This is a Report (CLAUDE.md pattern #4), not a parent/child sub-collection. Use =reportFetch= if it ever gets reworked.
+- =frontend/app/adapters/user.js= — =urlForQueryRecord= for =/users/me=. Singleton-by-identity pattern; not a sub-collection.
+- =frontend/app/adapters/onboarding.js= — =urlForQueryRecord= for =/users/me/onboarding=. Singleton-per-user; not a sub-collection.
+
+*** Pros / cons per candidate (added 2026-05-13 for tomorrow's review)
+For each REAL candidate: pros, cons, recommendation. Non-candidates get a quick sanity check at the bottom in case any of them deserves promotion.
+
+**** screenshot.js
+Endpoint: =GET /api/v1/scrapes/:scrape_id/screenshots/=. Adapter: =urlForQuery= → =buildURL('scrape', id) + 'screenshots/'=. Consumer: =components/scrapes/item.js _loadScreenshotList()= called from the constructor (already a separate code-smell — violates =feedback_no_logic_in_component_constructors=).
+
+***** Pros of refactor
+- Consumer becomes a pure renderer over =scrape.screenshotsList= — kills the constructor side-effect at the same time.
+- Scrape model already declares =scrapeStatuses= hasMany; =screenshots= as a sibling matches the established pattern on the same parent.
+- Single round-trip: =scrapes/show= already does =include: 'company,job-post,scrape-statuses'=. Adding =,screenshots= piggybacks on the existing fetch with zero new requests.
+- Eliminates the =urlForQuery= adapter file entirely (consistent with the deletion of =adapters/job-post.js= yesterday once it became vestigial).
+- Future callers that want screenshots get them via relationship reference (=scrape.screenshots=) — no chance of the silent-no-op landmine if someone migrates from =store.query= later.
+
+***** Cons of refactor
+- Screenshots are *staff-only* and frequently empty for non-debug scrapes. Eager sideload via =?include=screenshots= adds an extra DB round-trip per scrape view even when the user never expands the dropdown. Today's lazy-load is on-demand and skipped entirely for non-staff.
+- Screenshot is a *virtual* model (id =scrape_id/filename=, no DB row). Wiring requires a =get_related= override in =ScrapeSerializer= that walks the disk + stashes per-row metadata. Doable (we did the same dance for duplicate-candidates) but adds API surface for one consumer.
+- The component-constructor smell can be fixed independently with =modifier @did-insert= or by hoisting the load into a route =model()= — without touching the adapter at all. The adapter is not the actual bug.
+- The =scrapes/show= include= line gets longer and tied to a staff-only relationship; non-staff requests would need to omit =screenshots= or the API needs to no-op the include for non-staff users (extra branching).
+
+***** Recommendation
+Refactor only if staff-on-scrapes-show happens often enough that the eager sideload is a clear UX win. Otherwise: leave the adapter, fix the constructor smell on its own track. Borderline.
+
+**** scrape-status.js
+Endpoint: =GET /api/v1/scrapes/:scrape_id/graph-trace/=. Adapter: =urlForQuery= → =buildURL('scrape', id) + 'graph-trace/'=. Consumer: =routes/scrapes/graph.js= which reads =result.meta.chain= for the redirect lineage. Note: the parent Scrape *also* exposes =@hasMany('scrape-status', { inverse: 'scrape' })= for the local-statuses set, sideloaded via =include=scrape-statuses= in =scrapes/show= and =job-posts/show/scrapes/show=. Two endpoints, two shapes.
+
+***** Pros of refactor
+- Uniformity with the new pattern. The inbox entry's proposed approach (computed-relationship + =get_related= override + pass =meta.chain= via JSON:API top-level =meta=) matches the duplicate-candidates wiring and stays inside the framework.
+- The graph route's awkward =traceResult.toArray()= + composition into flat dicts becomes =scrape.graphTraceList= or similar synced-array getter on the Scrape model — kills the manual mapping.
+- =meta.chain= still flows through; JSON:API allows top-level =meta= alongside =included=.
+
+***** Cons of refactor
+- *Scrape already has =scrape-status= as a hasMany.* The /graph-trace/ projection returns ScrapeStatus rows, but they're *cross-scrape* — the redirect chain spans multiple Scrape ids. If we sideload them under =include=graph-trace= as ScrapeStatus resources, Ember Data's identity-map will conflict / merge them with the parent's local =scrapeStatuses= set, depending on the order. Hard to reason about.
+- The escape hatch is exactly what duplicate-candidates did: a *separate virtual type* (=job-post-duplicate-candidate=) with its own JSON:API =type=. Means a new model =graph-trace-row= or similar — same DB row class, different =type= tag — with its own attribute shape. That's three new files (model, serializer, type registration) for one consumer.
+- =meta.chain= via top-level =meta= works, but reading top-level meta off a =findRecord(scrape).meta= response is more awkward than off a =store.query(...).meta= response. The route would need to inspect =store.peekRecord('scrape', id).errors=-style internals or change the route to capture the raw payload. Minor but real.
+- The current adapter is *small and obvious*. Comment explains exactly why it exists. Cost-of-staying is near zero.
+
+***** Recommendation
+Lean *do not refactor*. The inbox entry's framing assumes the duplicate-candidates pattern transfers cleanly; it almost does, but =scrapeStatuses= already exists as a hasMany so the new virtual type has to be carefully named to avoid identity-map collision. Cost > benefit unless we're forced to touch this code for another reason. If we do touch it, do the work as proposed (virtual type + meta) but don't open it just for uniformity.
+
+**** Non-candidates — sanity check (in case any of these deserves promotion)
+- *career-data.js* — confirmed not a sub-collection. It's a per-user aggregate computed across many models. CLAUDE.md classifies as Report (pattern #4). Would need =reportFetch= migration for a full conversion to canonical patterns; that's a different audit. *Leave for now.*
+- *user.js* — =urlForQueryRecord({me}) → /users/me=. The currentUser service uses =findRecord('user', jwt-id)= — the JWT-id path obviates =/me=. Worth one =grep= sweep to confirm no live caller passes ={me: true}=; if none, the adapter is dead code and can be deleted entirely. *Action: 30-second grep; delete if zero callers.*
+- *onboarding.js* — =urlForQueryRecord= AND =urlForUpdateRecord= both → =/users/me/onboarding=. Singleton-by-design (URL is per-user, not per-id). Could be expressed as a =hasOne= on User and sideloaded on boot, but onboarding is mutated frequently and =urlForUpdateRecord= still has to be overridden — so the adapter doesn't go away. *Leave as-is.*
+
+*** Suggested order of operations
+1. Confirm canon: =frontend/CLAUDE.md= pattern #3 is the *legacy* description; the new pattern (declared hasMany + include= sideload) is the migration target. Update CLAUDE.md text after the first migration lands so the doc and the memory stop drifting.
+2. =user.js= grep audit (cheap; possibly delete adapter — net negative LOC).
+3. =screenshot.js= refactor *only if* you want to fix the constructor smell at the same time AND staff-on-scrapes-show is hot enough to justify the eager load.
+4. =scrape-status.js= — no action unless something else forces a touch on this code path.
+5. =career-data.js= / =onboarding.js= — defer indefinitely; not sub-collections.
+
+*** Net assessment
+Two real candidates (=screenshot.js= borderline, =scrape-status.js= lean-no), one cheap delete-or-not check (=user.js=), two leave-alone. Most of the value of this audit is *avoiding the refactor* — the inbox entry's bullet list reads like five candidates but only one is clearly worth the effort, and even that one has a separate code-smell that probably matters more than the adapter shape.
+
+** STRT When Clicking on possible duplicate link, the resulting job-post is the duplicate but the possible duplicate warning never chagnes to the other d
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-13]
 :END:
 ** TODO https://chromewebstore.google.com/detail/career-caddy-sender/pjdajamkhjkemoaogohehcdpfkocofhd
-** TODO Extension API-key sprawl: dedupe on Connect or auto-expire server-side
-Each popup Connect mints a fresh =Career Caddy Sender — YYYY-MM-DD= key; Disconnect best-effort revokes. Leaks happen on uninstall, profile reset, or offline disconnect. Severity is low — keys are scoped to the minting user — but the API-keys list grows unbounded.
-
-Two paths, in order of cheapness:
-1. Popup-side: before POST /api/v1/api-keys/, GET /api/v1/api-keys/?filter[name]= and reuse the existing key (or revoke-then-mint). Two requests on Connect instead of one. No server change.
-2. Server-side: cap active keys per (user, name-prefix) to 1 — newer mint auto-revokes prior. Or expire keys with =last_used_at IS NULL= AND =created > 30d=.
-
-Neither blocks store submission. Revisit when there are paid users.
-** TODO Dedupe miss: email-source posts keep wrapper canonical_link, no ATS click-through :api:agents:
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-06]
-:END:
-Repro: jp 1409 (source=email) and jp 1782 (source=extension) are the same Talkdesk Senior Security Engineer post. duplicate_of_id null on both.
-
-1409 canonical_link = SendGrid click-tracking URL (u52508838.ct.sendgrid.net/ls/click?...). Never resolved to careers.talkdesk.com.
-
-1782 canonical_link = careers.talkdesk.com/jobs?id=7858488 — extension correctly normalized the greenhouse embed URL.
-
-Root cause (per user): the scrape pipeline does not click through ATS chains (SendGrid -> talkdesk careers -> greenhouse embed -> final). With no follow-through, email-ingested posts keep their wrapper as canonical_link and any future post on the real URL cant match.
-
-Secondary: fingerprint-based dedupe also missed despite ~95% identical description text. Worth checking why.
-
-Fix surfaces: agents scrape graph (ATS click-through), api dedupe pipeline (fingerprint match strength). Not an extension bug.
-** TODO delete -> delete everything should scroll to section with popup.
-job-post.show.delete
-** TODO buy me coffee.  cofee leaderborad :frontend:
-** TODO Vertical slide animation for jp.show.questions index <-> detail :frontend:
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-12]
-:END:
-Desired UX: going from =jp.show.questions.index= to a detail route
-(=questions.show.<id>=, =questions.show.answers.{new,id}=, etc.), the
-detail content rises up from the bottom of the viewport while the list
-slides off the top. On back navigation, the inverse — list drops down
-from the top while detail slides off the bottom. Mirrors the existing
-horizontal tab-swipe pattern in =controllers/job-posts/show.js= but on
-the Y axis.
-
-Tried 2026-05-12 with =animated-each= keyed on activeSubKey in a new
-=templates/job-posts/show/questions.hbs= parent template (+ controller).
-Failed: a single ={{outlet}}= can only render one route's template at a
-time, so by the time activeSubKey flips, the outlet has already swapped
-to the destination content. ember-animated then captures the
-destination content as BOTH the removed and inserted sprite — user sees
-"motion on top of existing", i.e. the destination self-replaces.
-
-routeWillChange instead of routeDidChange didn't help — the route
-transition and outlet swap race in the same Glimmer flush and the
-outlet wins.
-
-Path forward (needs its own focused branch, ~1-2h):
-1. Refactor: extract =questions/index.hbs= and =questions/show.hbs= as
-   components rendered DIRECTLY in the parent template via
-   ={{#if (eq this.activeSubKey "index")}}=. No outlet inside the
-   animation — animated-each then sees two distinct DOM subtrees and
-   captures sprites cleanly.
-2. Move model loading from the index/show routes into the parent
-   route's model() hook (or have the parent's controller proxy to the
-   child models via =modelFor=).
-3. Either reuse the same vertical-slide motion described above, OR use
-   the browser View Transitions API as a thinner alternative.
-
-Reverted commit: templates/job-posts/show/questions.hbs and
-controllers/job-posts/show/questions.js were deleted before ship.
-** KILL omarchy themer needs to change the background highlight darker.
-/home/oldbones/Pictures/screenshot-2026-05-05_09-16-12.png
-** TODO Verify cookie seeding still works after session-token sharing landed
-ResidentBrowser._ensure_context calls ctx.add_cookies once per domain (resident.py:57-65). Untested since the session-token-sharing changes. Verify by: launch attended poller, point at a known auth-walled site (linkedin.com), confirm logged-in state is reached without manual login. If broken, check whether session_store.load() format still matches what add_cookies expects.
+** TODO https://addons.mozilla.org/en-US/developers/addons
 ** Idea
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
@@ -164,6 +178,7 @@ Implementation sketch (in =~/.config/doom/config.org=):
 Background context: came up while discussing how non-Emacs contributors would use the new variadic =cc-todo-read= / =cc-notes-read= helpers (they couldnt). Wiki publishing is the portable-docs answer.
 
 Tags: docs, infra
+*** TODO capture prompt used. :medium:
 ** Enhancement
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
@@ -356,6 +371,54 @@ Apply to: =cc-todo-read=, =cc-todo-children=, =cc-todo-append=-style writers, pl
 Backcompat: when called with a single string arg, fall back to =(split-string s "/")= so existing callers and the Skill prompts keep working until they migrate.
 
 Lives in =~/.config/doom/config.org=.
+
+*** TODO Extension API-key sprawl: dedupe on Connect or auto-expire server-side
+Each popup Connect mints a fresh =Career Caddy Sender — YYYY-MM-DD= key; Disconnect best-effort revokes. Leaks happen on uninstall, profile reset, or offline disconnect. Severity is low — keys are scoped to the minting user — but the API-keys list grows unbounded.
+
+Two paths, in order of cheapness:
+1. Popup-side: before POST /api/v1/api-keys/, GET /api/v1/api-keys/?filter[name]= and reuse the existing key (or revoke-then-mint). Two requests on Connect instead of one. No server change.
+2. Server-side: cap active keys per (user, name-prefix) to 1 — newer mint auto-revokes prior. Or expire keys with =last_used_at IS NULL= AND =created > 30d=.
+
+Neither blocks store submission. Revisit when there are paid users.
+*** PLAN buy me coffee.  cofee leaderborad :frontend:
+*** TODO Vertical slide animation for jp.show.questions index <-> detail :frontend:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-12]
+:END:
+Desired UX: going from =jp.show.questions.index= to a detail route
+(=questions.show.<id>=, =questions.show.answers.{new,id}=, etc.), the
+detail content rises up from the bottom of the viewport while the list
+slides off the top. On back navigation, the inverse — list drops down
+from the top while detail slides off the bottom. Mirrors the existing
+horizontal tab-swipe pattern in =controllers/job-posts/show.js= but on
+the Y axis.
+
+Tried 2026-05-12 with =animated-each= keyed on activeSubKey in a new
+=templates/job-posts/show/questions.hbs= parent template (+ controller).
+Failed: a single ={{outlet}}= can only render one route's template at a
+time, so by the time activeSubKey flips, the outlet has already swapped
+to the destination content. ember-animated then captures the
+destination content as BOTH the removed and inserted sprite — user sees
+"motion on top of existing", i.e. the destination self-replaces.
+
+routeWillChange instead of routeDidChange didn't help — the route
+transition and outlet swap race in the same Glimmer flush and the
+outlet wins.
+
+Path forward (needs its own focused branch, ~1-2h):
+1. Refactor: extract =questions/index.hbs= and =questions/show.hbs= as
+   components rendered DIRECTLY in the parent template via
+   ={{#if (eq this.activeSubKey "index")}}=. No outlet inside the
+   animation — animated-each then sees two distinct DOM subtrees and
+   captures sprites cleanly.
+2. Move model loading from the index/show routes into the parent
+   route's model() hook (or have the parent's controller proxy to the
+   child models via =modelFor=).
+3. Either reuse the same vertical-slide motion described above, OR use
+   the browser View Transitions API as a thinner alternative.
+
+Reverted commit: templates/job-posts/show/questions.hbs and
+controllers/job-posts/show/questions.js were deleted before ship.
 ** Bug
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
@@ -483,52 +546,9 @@ Projects
 {%- endfor -%}
 {% endfor %}
 {% endif %}
-* Active                                             :IMPORTANT:
+* Active :IMPORTANT:
 Work that should happen. Categories carry =[done/total]= cookies.
 
-** KILL wrong job-post :scrape:
-CLOSED: [2026-05-12]
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-04]
-:END:
-https://www.ziprecruiter.com/jobs/v2/eyJsaXN0aW5nX2tleSI6InIzTzNkcWV2TUMyU3NEci1GNkQ4MGciLCJtYXRjaF9pZCI6IjAxOWRlZjM5LWY2YmEtNzY5Yy1iMWQwLTA0YWYyMmNjYzc4MSIsImJpZF90cmFja2luZ19kYXRhIjoiQUFHM3lPbGhZOWlVbEZlVTI3X3BkTk5HNFNRRkFaeHVPOVhESmo2VTdldE1Tb1ZyVXV1UXc0UV9mMWRreHBJcnNNQW9maWFMIiwic291cmNlX3BsYWNlbWVudF9pZCI6NDMwMjR9?tsid=111000153
-/home/oldbones/Pictures/screenshot-2026-05-04_12-41-24.png
-I put that in the extention and it said it already existed https://careercaddy.online/job-posts/1668
-but this one is more closely aligned
-https://careercaddy.online/job-posts/1667
-what happened?
-
-KILL rationale [2026-05-12]: investigated via MCP, the original
-diagnosis was based on a misread of which JP was the right match.
-
-- The pasted =/jobs/v2/<base64>?tsid=...= base64 decodes to
-  =listing_key=r3O3dqevMC2SsDr-F6D80g=, =source_placement_id=43024=
-  — a *Senior Product Manager II at Redfin* listing, not the
-  Software Developer I (1667) or Software Engineer II (1668) the
-  user thought it was. That listing now lives at job-post 1690,
-  created cleanly via from-text on 2026-05-04 16:04 (scrape 300:
-  pending → extracting → updating_profile → completed in 8s, no
-  409). =complete=true=, =top_score=30=, salary $118.8–145.2k Seattle.
-- The =from-text= dedupe gate (=Q(link=...) | Q(canonical_link=...)=)
-  could not have matched 1668 — neither 1667's nor 1668's =/km/<token>=
-  link/canonical equals or canonicalizes to the pasted /jobs/v2/
-  URL. Whatever the popup told the user that day was not the 409
-  path that exists in code.
-- Most plausible source of the "1668" misread: the extension's
-  open-time =lookupExistingJobPost(tab.url)= (popup.js:310) reads
-  the active tab's URL, not the user's clipboard. If the tab was a
-  still-redirecting =/km/AAF8hsLm.../?auth_token=...= link, that's
-  literally 1668's stored link and the popup would correctly say
-  "Tracked" — then a separate paste of the /jobs/v2/<base64> URL
-  proceeded and minted 1690.
-- The earlier-proposed code change (teach =canonicalize_link= about
-  =/jobs/v2/<base64>= + =/km/<token>=) does not address the
-  user-reported confusion (which had no real dedupe miss to fix).
-  The /km/ side is also non-fixable without HEAD resolution against
-  long-expired auth_tokens. If a future incident shows the same
-  listing being scraped via two different shapes and producing dups,
-  capture a fresh entry from concrete evidence.
-** TODO UI fixes
 ** TODO https:  careercaddy.online job-posts 1667 scrapes 309 :scrape:
 https://www.ziprecruiter.com/jobs/v2/eyJsaXN0aW5nX2tleSI6InIzTzNkcWV2TUMyU3NEci1GNkQ4MGciLCJtYXRjaF9pZCI6IjAxOWRlZjM5LWY2YmEtNzY5Yy1iMWQwLTA0YWYyMmNjYzc4MSIsImJpZF90cmFja2luZ19kYXRhIjoiQUFHM3lPbGhZOWlVbEZlVTI3X3BkTk5HNFNRRkFaeHVPOVhESmo2VTdldE1Tb1ZyVXV1UXc0UV9mMWRreHBJcnNNQW9maWFMIiwic291cmNlX3BsYWNlbWVudF9pZCI6NDMwMjR9?tsid=111000153
 The graph trace actually shows DetectObstacle completed quickly (29ms) and routed to ResolveFinalUrl — so the scrape moved past DetectObstacle. The issue is it's now stuck in ResolveFinalUrl and the overall status is still running.
@@ -545,26 +565,23 @@ What I'd recommend:
 
 Do you have the direct job post link, or would you like me to check the job post (ID 1667) for any other URL we can use?
 
-** TODO ResolveApplyUrl: short-circuit on internal_apply_markers (Easy Apply false-fail) :scrape:agents:bug:
-   :PROPERTIES:
-   :CREATED:  2026-05-04
-   :END:
-   On scrape 298's 08:49 success run, =ResolveApplyUrl= reported
-   =reason=no_selector_matched apply_url_status=failed= even though
-   the page rendered an Easy Apply button (visible in the extract-fail
-   screenshot, and the LinkedIn profile's =apply_resolver_config.internal_apply_markers=
-   includes =.jobs-apply-button--easy-apply=). The resolver should
-   short-circuit when an =internal_apply_markers= selector matches
-   and return =internal/easy-apply= (or equivalent) rather than
-   =failed=. Minor telemetry bug — JobPost still saved — but it
-   pollutes the apply-url failure metric and hides genuine resolver
-   misses on external-apply jobs. Split out from the SDUI partial-render
-   TODO above (scrape 298).
-
-** TODO [#A] Extracting-state safety net: try finally + sweeper :api:bug:scrape:
+** SHIPPED [#A] Extracting-state safety net: try finally + sweeper :api:bug:scrape:
+CLOSED: [2026-05-13]
 :PROPERTIES:
 :CREATED:  [2026-05-02]
 :END:
+*Shipped 2026-05-13.* Two layers of defense against scrapes stuck in =extracting=/=updating_profile= forever (scrape 273 case):
+
+1. =api/job_hunting/lib/parsers/job_post_extractor.py= — wrapped =parse_scrape._run= in try/except/finally with a =reached_terminal= flag. The flag is set at all three early-bail returns (scrape not found / already linked / no content) and at every terminal status flip (=completed=, =failed=, review_rejected→failed). If anything between =extracting= and the terminal flip raises (uncaught exception, container restart racing the LLM call, OOM mid-=_update_scrape_profile=), the finally branch flips the row to =failed= with note ="parse_scrape died before terminal — see api logs"=. Defensive inner try/except around the safety-net flip itself so even a broken =_log_scrape_status= can't propagate.
+2. =api/job_hunting/management/commands/sweep_stuck_extracting.py= — new management command for the SIGKILL-class case where finally itself can't run. Cutoff is computed from =Max(scrape_statuses__logged_at)= (the model has no =updated_at= field). Args: =--min-age-minutes= (default 15), =--dry-run=. Wire to cron separately.
+
+Tests at =api/job_hunting/tests/test_parse_scrape_safety.py= (6 tests, all green): unhandled exception flips stuck-extracting to failed via finally; safety net itself doesn't crash when =_log_scrape_status= raises; early-bail returns don't spuriously flip; sweep flips old extracting rows but not recent ones; sweep handles =updating_profile= state too; =--dry-run= reports without flipping.
+
+Verification: focused tests 6/6 pass; =make ci= green (api 869/869, frontend 350/350, lint clean).
+
+Out of scope (deferred): cron schedule for the sweep (run manually from =make shell-api= for now); migrating off daemon-thread architecture to a real worker queue.
+
+
 *Trigger:* scrape 273 stuck at =extracting= even though =parse_scrape='s
 =_run= function (=api/job_hunting/lib/parsers/job_post_extractor.py:733-795=)
 already wraps =parser.parse()= in try/except (line 760-763). The =extracting=
@@ -731,118 +748,6 @@ class TestSweepStuckExtractingCommand(TestCase):
 - Changing the underlying daemon-thread architecture to a real worker
   queue (Celery / Django-Q). That's a larger refactor.
 
-** TODO Extension allFrames capture for iframe-embedded ATS (greenhouse, dat.com class) :extension:frontend:scrape:
-:PROPERTIES:
-:CREATED:  [2026-05-02]
-:END:
-*Trigger:* scrape 273 from =https://careers.dat.com/jobs/?gh_jid=5741667004&gh_src=fd81f4a54us=
-captured page chrome only (~1.1KB of nav/footer + DAT marketing copy, no
-job description body). Root cause: dat.com embeds the actual job description
-inside a greenhouse iframe (host: =boards.greenhouse.io=). The extension's
-=grabPayload= (=frontend/public/extensions/career-caddy-sender/popup.js:336-342=)
-calls =scripting.executeScript= on the active tab without =allFrames=, so
-=document.body.innerText= only sees the parent document — iframe contents
-are invisible.
-
-This pattern is widespread: any ATS that gets embedded into a company's
-own careers page (greenhouse, lever, workday, jobvite) hits the same gap.
-
-*** File :scrape:
-
-=frontend/public/extensions/career-caddy-sender/popup.js= — =grabPayload=
-(line 336-342). Bump version in =manifest.json= to 0.3.7 and add a
-README.md version-history entry.
-
-*** Change :scrape:
-
-#+begin_src js
-// BEFORE
-async function grabPayload(tabId) {
-  const results = await api.scripting.executeScript({
-    target: { tabId },
-    func: () => ({ url: location.href, text: document.body.innerText }),
-  });
-  return results && results[0] && results[0].result;
-}
-
-// AFTER
-async function grabPayload(tabId) {
-  const results = await api.scripting.executeScript({
-    target: { tabId, allFrames: true },
-    func: () => ({
-      url: location.href,
-      // Frame metadata so the API side can debug when something goes wrong.
-      frameUrl: location.href,
-      text: document.body ? document.body.innerText : '',
-    }),
-  });
-  if (!results || !results.length) return null;
-  // results[0] is the top frame (per chrome.scripting docs); the rest
-  // are subframes in unspecified order. Top frame's URL is the canonical
-  // link for the scrape.
-  const top = results[0];
-  if (!top || !top.result) return null;
-  // Concatenate every frame's text with a separator the LLM can use to
-  // distinguish chrome from embedded ATS body.
-  const allText = results
-    .map((r) => r && r.result && r.result.text)
-    .filter(Boolean)
-    .join('\n\n--- frame ---\n\n');
-  return { url: top.result.url, text: allText };
-}
-#+end_src
-
-Notes for the implementer:
-- =allFrames: true= requires =host_permissions= covering the iframe origin.
-  Manifest already declares =host_permissions: ["<all_urls>"]= so any
-  cross-origin iframe is reachable.
-- In Firefox MV3 with =<all_urls>= host_permissions and =activeTab=,
-  =allFrames= works for both same- and cross-origin frames.
-- If the page uses a sandboxed iframe (=sandbox= attribute without
-  =allow-same-origin=), =executeScript= will fail for that frame; the
-  result entry will have =frameId= but no =result=. The =filter(Boolean)=
-  drops them silently — acceptable.
-- The =--- frame ---= separator is a hint to the LLM that there are
-  multiple text regions; the prompt doesn't currently mention it but
-  Tier1Mini will benefit from any structural delimiter.
-
-*** Test plan (manual — extension testing is hard to automate) :scrape:
-
-1. Load extension from =frontend/public/extensions/career-caddy-sender/=
-   in Firefox via =about:debugging= → Load Temporary Add-on.
-2. Navigate to a known greenhouse-embedded page:
-   - =https://careers.dat.com/jobs/?gh_jid=5741667004&gh_src=fd81f4a54us=
-     (the scrape 273 case)
-   - =https://join.com/companies/...= (similar pattern, different ATS)
-3. Click the extension icon → Send.
-4. Open prod/local job-posts list, find the new scrape, confirm
-   =job_content= contains the actual job description body
-   (responsibilities, qualifications) — not just nav + "About DAT".
-5. Confirm =job_content= length > 2KB (sanity check; chrome alone was 1.1KB).
-6. Confirm Tier1Mini extraction yielded a populated =description= on the
-   resulting JobPost.
-
-*** Acceptance criteria :scrape:
-1. Extension version bumped to 0.3.7 in =manifest.json= + README version-history.
-2. Submitting from a greenhouse-iframed page captures the iframe contents.
-3. Existing single-frame pages (linkedin, indeed direct, paste-only sites)
-   continue to work — no regression.
-4. Same-origin frames still captured correctly (sanity check).
-5. Cross-origin iframe failure (sandboxed iframes) is graceful — popup
-   doesn't crash, just sends what it can.
-
-*** Out of scope :scrape:
-- Detecting and rewriting tracker URLs (=?gh_jid== → =boards.greenhouse.io/{org}/jobs/{id}=)
-  before navigation. Could be a follow-up if the iframe approach
-  proves flaky, but iframe walking is the cleaner answer.
-- Cleaning chrome out of the captured text in JS. The LLM does that;
-  don't duplicate the work client-side.
-- Updating =~/Sandbox/cc-ext-local/= (it points to localhost:4200 and
-  has its own gecko id; user maintains it manually).
-- Building a new XPI artifact. Once popup.js + manifest.json change,
-  rebuild via:
-  =cd frontend/public/extensions/career-caddy-sender && zip -r ~/Sandbox/career-caddy-sender-0.3.7.xpi . --exclude "*.DS_Store"=
-
 ** TODO Ingest abuse defense — Phase 2 (provenance + pipeline) :api:agents:security:scrape:
 Phase 2 follow-up. Single deliverable for vector I5
 (client-asserted (link, text) pair). Plan at
@@ -979,45 +884,13 @@ upstream of the fork. UI shows scrape 257 as forever in-flight.
 - Repo: =agents/scrape_graph/nodes/resolve_final_url.py= or its
   caller in =runner.py=.
 
-** TODO Backfill linkedin  comm  duplicate jp 1315 ↔ jp 1550 :api:data:scrape:
-:PROPERTIES:
-:CREATED:  2026-05-01
-:END:
-Scrape #251 (linkedin.com, 2026-05-01) created jp 1550 from a
-=https://www.linkedin.com/comm/jobs/view/4383047961/= source while jp
-1315 (same role, Lululemon Senior Cybersecurity Engineer) sat as a
-stub on the =/comm/= URL. Root cause + fix tracked in Scrape Log
-entry =[2026-05-01] linkedin.com — /comm/ dedup miss=; profile id 2
-now carries a =url_rewrites= rule that strips =/comm/= before
-Navigate, so *new* scrapes won't repeat the split.
-
-This todo is *only* the data backfill:
-- Confirm jp 1315 and jp 1550 describe the same posting (link IDs
-  match: =4383047961=).
-- Decide retention: keep jp 1315 (older id, has stub interaction
-  history) and copy the description / metadata from jp 1550 onto it,
-  then delete jp 1550 — *or* the inverse, whichever has more
-  attachments. Default: keep the older id, hard-delete the newer.
-- Re-point any related rows (Scrapes, Applications, Scores) from the
-  losing id to the winning id before delete. Use the canonical
-  =/jobs/view/4383047961/= URL on the survivor.
-- Repeat the audit for any other linkedin.com JobPost pairs whose
-  links differ only by =/comm/= — quick: =SELECT id, link FROM
-  job_posts WHERE link LIKE '%linkedin.com/comm/jobs/view/%';= and
-  for each row, look for a sibling on the bare-path form.
-
-Out of scope: code changes — the prevention fix is already in the
-profile.
-
-** TODO when pasting a url for a new job-post :bug:scrape:
+** TODO [#A] when pasting a url for a new job-post :bug:scrape:
 https://careercaddy.online/job-posts/1481
 the url submitted and I was taken to the job post.
 I should be taken to job-post.show.scrapes.show
 however I had to go to job-post.show.scrapes.index and I did not see my scrape there
 I refreshed the page and saw it then in "hold"
 when it completed, I had to reload the page to see the updated job-post.description
-** LOOP result from scrape https:  careercaddy.online scrapes 218: :scrape:
-If are copying this link from a mail reader please ensure that you have copied all the lines in the link.
 ** TODO Scrape diagnostic panel on  scrapes <id> :frontend:scrape:
 :PROPERTIES:
 :CREATED: [2026-04-30]
@@ -1239,6 +1112,9 @@ the existing stub has a NULL company (Microsoft regression #22 in the
 =stage5.fingerprint_null_risk= warnings once the introspection PR
 (E+F+H) ships, so we'll have data on how often the precondition fires
 before designing the fix.
+** TODO delete -> delete everything should scroll to section with the aditional dialog.
+job-post.show.delete
+
 * Backlog
 ** PROJ [#C] Electron desktop app feasibility :PENDING_APPROVAL:
 :PROPERTIES:
@@ -1382,5 +1258,3 @@ api-1       | 172.19.0.1 - - [30/Apr/2026:16:57:50 -0700] "POST /api/v1/scrapes/
 *** who is calling llm-extract? :scrape:
 *** what is the error for? :scrape:
 *** My resume never parsed :( :scrape:
-
-
