@@ -1,5 +1,5 @@
 #+TITLE: career_caddy todo board
-#+TODO: TODO(t) STRT(s) PLAN(p) WAIT(w) LOOP(l)| KILL(k) SHIPPED(p) DONE(d)
+#+TODO: TODO(t) STRT(s) PLAN(p) WAIT(w) LOOP(l) | KILL(k) SHIPPED(p) DONE(d)
 #+TAGS: scrape(s) frontend(f) api(a) agents(g) bugs(b) infra(i) chore(C) chat(c) dedupe(d) extension(e) mcp(m)
 #+startup: overview
 
@@ -39,8 +39,8 @@ Archive (1)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
-** TODO capture prompt used.
-** TODO new user, no wizard on localhost:4200
+** TODO capture prompt used. :medium:
+** KILL new user, no wizard on localhost:4200
 ** TODO When Clicking on possible duplicate link, the resulting job-post is the duplicate but the possible duplicate warning never chagnes to the other d
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-08]
@@ -76,7 +76,7 @@ Fix surfaces: agents scrape graph (ATS click-through), api dedupe pipeline (fing
 :END:
 ** TODO delete -> delete everything should scroll to section with popup.
 job-post.show.delete
-** TODO ai chat promonent url showing.  user confused about context.
+** TODO ai chat display context for user.  user confused about context.
 ** TODO buy me coffee.  cofee leaderborad :frontend:
 ** TODO Vertical slide animation for jp.show.questions index <-> detail :frontend:
 :PROPERTIES:
@@ -116,7 +116,7 @@ Path forward (needs its own focused branch, ~1-2h):
 
 Reverted commit: templates/job-posts/show/questions.hbs and
 controllers/job-posts/show/questions.js were deleted before ship.
-** TODO omarchy themer needs to change the background highlight darker.
+** KILL omarchy themer needs to change the background highlight darker.
 /home/oldbones/Pictures/screenshot-2026-05-05_09-16-12.png
 ** TODO Verify cookie seeding still works after session-token sharing landed
 ResidentBrowser._ensure_context calls ctx.add_cookies once per domain (resident.py:57-65). Untested since the session-token-sharing changes. Verify by: launch attended poller, point at a known auth-walled site (linkedin.com), confirm logged-in state is reached without manual login. If broken, check whether session_store.load() format still matches what add_cookies expects.
@@ -400,7 +400,26 @@ changes) on the target file before inserting.
 :LAST_TOUCHED: [2026-05-04]
 :END:
 what jp.show.job-application.show
-** TODO jp.show.questions.new doesn't allow me to pick the job application.
+** DONE jp.show.questions.new doesn't allow me to pick the job application. :frontend:bug:
+CLOSED: [2026-05-12]
+=Questions::Form= had a single =hasLockedContext= getter that locked
+the JobPost, Company, AND JobApplication pickers whenever the
+question came in with a JobPost pre-filled. On
+=jp.show.questions.new= that meant the JobApp field rendered as a
+disabled input showing "None" — no way to attach the question to any
+of the JP's existing applications.
+
+What shipped (frontend submodule):
+- =frontend/app/components/questions/form.js= — capture
+  =_initialJobAppLocked= in the constructor (true only when the
+  question came in with a =jobApplication= belongsTo id). New
+  =jobAppLocked= getter exposes that.
+- =frontend/app/components/questions/form.hbs= — JobApplication
+  field gates on =this.jobAppLocked= instead of the broader
+  =this.hasLockedContext=. JobPost + Company still gate on
+  =hasLockedContext=, so the locked-context routes
+  (=ja.show.questions.new=, =jp.show.ja.show.questions.new=) are
+  unchanged.
 ** TODO spc o c should reload the file before adding capture
 ** TODO I can only see one user in ai-spend
 ** TODO ban 84.32.70.55
