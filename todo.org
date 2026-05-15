@@ -183,8 +183,64 @@ Tags: docs, infra
 https://www.hyperui.dev/components/application/tabs/#component-5-dark
 ** Enhancement
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-05]
+:LAST_TOUCHED: [2026-05-15]
 :END:
+*** TODO extension/ccsender-structured-prefill — pull css_selectors at submit time :extension:scrape:agents:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-15]
+:PRIORITY: P2
+:END:
+Today ccsender posts =body.innerText= and the api LLM re-extracts everything from scratch — even on hosts where =ScrapeProfile.css_selectors.job_data= already names where title/company/location/salary/description live. Since the extension now fetches the profile on send anyway (=GET /scrape-profiles/extension-selectors/=), it is trivial to also ship =css_selectors.job_data= in the same response and have the extension run those selectors in the active tab.
+
+Outcome shape, sent alongside =text=:
+- =structured_prefill: {title, company_name, location, salary, description}= — null per field where the selector misses
+- Server-side: when =structured_prefill= arrives with high coverage on a host that has a current/non-probation profile, the scrape-graph can either (a) skip Tier1 entirely and PersistJobPost directly, or (b) feed the prefill into =ParsedJobData= validators as a prior and run a lighter extraction pass that just sanity-checks. Pick (b) first; (a) only after dogfood proves the prefill is reliable.
+
+Wins:
+- Cuts an LLM call on hosts with mature profiles (the long tail — boards we scrape often).
+- Faster perceived send: structured fields render before the LLM finishes.
+- Per-host selector probation already exists; this just adds a new consumer.
+
+Risks / open questions:
+- Stale selectors silently yield wrong data. Mitigation: ALWAYS send the raw =text= too so the server can reconcile / fall back / promote a selector-miss into the probation counter.
+- =description= via =.job-description= is rarely the canonical full posting body — it usually omits headers/footers. Sending the prefill alongside =text= sidesteps this; the LLM still owns the description.
+- ATS hosts (greenhouse, lever) often need =allFrames= for body capture — does that change here? Probably keep allFrames for =text=, structured selectors run only on the top frame.
+
+Plumbing:
+1. Extend =GET /scrape-profiles/extension-selectors/= response with =css_selectors= (just =job_data= subset).
+2. =popup.js#grabHints= → add structured-prefill extraction next to the apply/canonical extractors. Inject =job_data= selectors via =executeScript= args, same pattern as today.
+3. =POST /scrapes/from-text/= accepts optional =structured_prefill= dict; persisted on =Scrape= (new JSONField), surfaced as a Tier1 prior in the extractor.
+
+Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md= for the parent context — this is the natural next step after =extension_selectors= proves the api-as-source-of-truth model works.
+*** TODO dedupe/canonicalize-direct-create — POST /job-posts/ pre-canonicalize :api:dedupe:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-15]
+:PRIORITY: P1
+:END:
+=POST /api/v1/job-posts/= creates a JP without calling =canonicalize_link()= before =find_duplicate=. Direct API creates therefore bypass the host-rewrite + tracking-strip pass that =/scrapes/from-text/= does, so a /comm/jobs/view/ POST silently creates a duplicate of an existing /jobs/view/ row. Five-line fix in =views/jobs.py= =create()=. Evidence: jp 1315 ↔ jp 1550 (linkedin /comm/ duplicate, see notes.org).
+
+Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md= for context. Deferred out of the cross-platform-dedup-hints PR because the from-text path already canonicalizes; this closes the silent hole on the other create endpoint.
+*** TODO extension/multi-host-extractors — Indeed/Glassdoor/ZipRecruiter apply-button :extension:dedupe:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-15]
+:PRIORITY: P2
+:END:
+Once ccsender 1.2.0 has 2 weeks of dogfood and the LinkedIn safety/go decoder proves out the model, add per-host apply-button extractors for the next tier of job boards: Indeed, Glassdoor, ZipRecruiter. Each is a small extractor block in =popup.js#grabHints=, hostname-gated like the LinkedIn one. Cost: small per-host code + one extension release each.
+
+Don't fan out before LinkedIn has shipped dedup wins in production. Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md=.
+*** TODO dedupe/dogfood-eval-pr2 — 2-week empirical re-eval after PR1 :dedupe:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-15]
+:PRIORITY: P2
+:END:
+After 2 weeks of cross-platform-dedup-hints in dogfood: did per-row merge / dismiss actions earn build cost? Did =document.referrer= hints catch real cross-platform pairs? The full plan (DuplicateRejection table, merge mutations, ccsender 1.3.0 richer hints) was scoped down via outside-voice T5. Re-evaluate empirically rather than guessing.
+
+Concrete signals to track:
+- Did you ever wish you could mark a candidate as "not a duplicate" persistently? → DuplicateRejection table earned.
+- Did referrer hints ever surface a real cross-platform pair that wasn't already caught by apply_url_hint? → keep the referrer extractor; otherwise drop it.
+- Did stub JPs cause more confusion than they solved? → tighten the stub-creation gate.
+
+Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md=.
 *** TODO remove expand caret on sidebar
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
