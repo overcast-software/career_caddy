@@ -185,6 +185,16 @@ https://www.hyperui.dev/components/application/tabs/#component-5-dark
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :END:
+*** TODO dedupe/backfill-hints-on-409 — process hints even when from-text returns 409
+When POST /api/v1/scrapes/from-text/ returns 409 because an existing complete JP at the link already exists, the request body's apply_url_hint / referrer_url are discarded — _resolve_hint_match never runs. Result: re-submitting an existing LinkedIn JP after the apply-button-hint feature shipped does NOT bind the LinkedIn JP to the canonical ATS JP, even when ccsender now correctly extracts and forwards the decoded ATS URL.
+
+Concrete missed binding: JP 2045 (LinkedIn, Stripe Backend/API Engineer, created 2026-04-28 pre-feature) and JP 2140 (Stripe canonical, created 2026-05-15 via direct ccsend) — different host pair, same role, never linked.
+
+Why P-low: only affects backfilling hints onto pre-feature JPs. Going-forward all real binding paths work (new LinkedIn submit creates ATS stub; ATS-first submit handled via referrer or apply_url_hint on the symmetric leg).
+
+Fix sketch: in views/scrapes.py from_text, if hints are present and 409 would fire, still call _resolve_hint_match for the hint pair AND create a hint-only Scrape on the existing JP with apply_url_from_hint / referrer_url set (no job_content, status=completed). Return the matches in 409 response meta so the frontend can route the user to canonical_redirect.
+
+Tag: dedupe extension api
 *** TODO extension/ccsender-structured-prefill — pull css_selectors at submit time :extension:scrape:agents:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
