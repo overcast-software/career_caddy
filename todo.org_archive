@@ -7407,3 +7407,52 @@ CLOSED: [2026-05-13 Wed 09:58]
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
 Closed [2026-05-13]: After logout (=store.unloadAll=) or per-record =destroyRecord=, the cached =InfinityModel= in =frontend/app/utils/list-model.js= still held references to destroyed records. On next visit the template walked an =@belongsTo= async proxy whose target was gone — Ember Data threw =Cannot read properties of undefined (reading '_graph')= in prod (Chromium), Glimmer threw =Cannot create a new tag for `<(unknown):emberNNN>` after it has been destroyed= in dev (Firefox). Symptom: only the FIRST row in =/job-posts= rendered. Fix: =infinityModel()= now also discards the cache when any cached record is =isDestroyed= or =isDestroying=. Architecture note: =Architecture/list-model.js cache — list-route InfinityModel + destroyed-record invalidation=. Punted side effect tracked separately as =Inbox/Bug/stagger-rows replays after logout-and-back...=
+
+* TODO SHIPPED application-flow sankey: circular link crash from misread-status corrections
+CLOSED: [2026-05-20]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-20 Wed 09:11
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Bug
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: TODO
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+Prod-only crash. The /reports/application-flow page threw Uncaught
+(in promise) Error: circular link from d3-sankey computeNodeDepths.
+Network was clean (api returned 1.06 KB OK); the cycle was in the
+payload itself.
+
+Root cause: api/job_hunting/lib/services/application_flow.py
+_app_bucket_sequence walked status logs chronologically with no
+monotonicity check. Real-world prod logs like Applied → Rejected →
+Interview Scheduled (a correction to a mis-logged Rejection) emitted
+back-edges that produced cycles in the aggregate Sankey graph.
+Local/test data never generated corrections so the bug never
+reproduced.
+
+Fix: STAGE_RANKS (applied=1 / interview=2 / offer=3 / terminals=4),
+then pop-on-backward in _app_bucket_sequence — a status with rank ≤
+top of sequence is read as a correction to a mis-logged prior status
+and pops it. Latest log wins; resulting per-app sequence is
+monotonic, aggregate is always a DAG. Ghost-gate uses surviving tail
+timestamp, not popped one.
+
+Frontend defensive guard: components/reports/application-flow-sankey.{js,hbs}
+now wraps layout(...) in try/catch and renders an inline amber
+banner instead of crashing the route if a cycle slips through.
+
+Skeleton: templates/reports/application-flow/loading.hbs replaced
+with a layout-matching shimmer (subnav, header + counts, filter bar,
+5-column funnel-shaped sankey placeholder). Pure Tailwind, no JS.
+Makes the page feel snappy during the ~2s api call.
+
+Tests:
+- api: 5 new application-flow tests (correction drops misread,
+  mid-funnel correction, terminal→terminal correction, cross-app
+  DAG aggregate, aged-correction ghost timestamp). 21/21 pass.
+- frontend: 3 new sankey integration tests (DAG happy path, cyclic
+  rescue, empty payload). All in tests/integration/components/reports/.
+
+Verify: make ci → frontend 328/328, api 891/891.
