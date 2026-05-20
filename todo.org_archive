@@ -7456,3 +7456,40 @@ Tests:
   rescue, empty payload). All in tests/integration/components/reports/.
 
 Verify: make ci → frontend 328/328, api 891/891.
+
+* DONE Phase 1: jp.edit form — canonical_link readonly + apply_url editable :frontend:dedupe:
+CLOSED: [2026-05-20 Wed 12:07]
+:PROPERTIES:
+:PHASE:    1
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:ARCHIVE_TIME: 2026-05-20 Wed 12:11
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: surface =canonical_link= read-only and =apply_url= editable on =job-posts.edit= so users can correct cross-platform dups by hand. Edit permission: =created_by= + staff for now — revisit when usage shows pain.
+
+*Acceptance*:
+- [X] =canonical_link= rendered read-only with helper "computed from URL on save".
+- [X] =apply_url= editable text input with helper "Employer ATS destination. Used to detect cross-platform duplicates."
+- [X] PATCH persists =apply_url=; =canonical_link= re-derives from =link= on save.
+- [X] Backend gate: only =request.user == jp.created_by= OR =request.user.is_staff= may PATCH =apply_url=. 403 otherwise.
+- [X] Uses =panel-card=, =field-label=, =field-input=, =@tracked= intermediary, =.then/.catch= chain.
+
+*Files*:
+- =frontend/app/components/job-posts/form.hbs=
+- =frontend/app/components/job-posts/form.js=
+- =api/job_hunting/api/views/jobs.py= — permission gate.
+- =api/job_hunting/api/serializers.py= — confirm =apply_url= in writable allowlist.
+
+*Tests*:
+- =frontend/tests/integration/components/job-posts/form-test.js= — render + PATCH.
+- =api/job_hunting/tests/test_job_post_viewset.py= — non-staff non-owner = 403; owner/staff = 200.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Job-post edit page additions
+
+*Shipped*: jp.edit now exposes =canonical_link= read-only (styled div, never an input) and =apply_url= editable with a tracked-intermediary input so fast typing isn't clobbered. Backend gate on
+=JobPost.update/partial_update= relaxed from owner-only to =owner OR staff= (matches =destroy()=). The model save()'s "set once" guard for =canonical_link= stayed put — keeps the email-stub regression test passing — and the viewset clears =canonical_link= when a PATCH changes =link=, so the readonly display refreshes. Five new api tests (TestJobPostEditApplyUrlCanonical) + four new frontend integration tests. =api 896/0=, =frontend 332/0=, ruff + prettier clean.
