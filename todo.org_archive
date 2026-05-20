@@ -7382,3 +7382,28 @@ Do you have the direct job post link, or would you like me to check the job post
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
 Fixed [2026-05-13]: Spinner gate moved from session-scoped =pollable.pendingIds= Set to per-model =isPending= getter on Score / CoverLetter / Summary / Scrape models that reads server =status= directly (=status && !TERMINAL.has(status)=). =TERMINAL= now exported from =services/pollable.js=. Templates read =record.isPending= directly — no controller =@action isPending=, no =@isPending= arg threading. F5 cold reload + chat-agent-created scores + hold-poller-created scrapes now spin correctly without re-introducing the cross-contamination bug that =b7009ca= (2026-04-16) added =pendingIds= for. Architecture note updated: =Architecture/AI-Generated Resource Polling — async create + pollable service=. Shipped: PR #154 (frontend) merge =ee027f44=, PR #169 (parent) merge =098b8adb=.
+
+* DONE dedupe/backfill-hints-on-409 — process hints even when from-text returns 409 :dedupe:extension:api:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-19]
+:CLOSED:  [2026-05-19]
+:ARCHIVE_TIME: 2026-05-20 Wed 07:58
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Backlog
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:END:
+Supplanted by the one-channel collapse — ccsender no longer needs the 409 backfill because the dup-rebind case is a plain JSON:API PATCH on =JobPost.apply_url=. The 409 short-circuit on =/scrapes/from-text/= stays as-is. See =notes.org= =Plans/Cross-platform dedup — collapse two-channel apply_url into JobPost.apply_url=.
+
+* SHIPPED list-model cache held destroyed records — login broken in prod :frontend:
+CLOSED: [2026-05-13 Wed 09:58]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-13]
+:ARCHIVE_TIME: 2026-05-20 Wed 07:58
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Bug
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Closed [2026-05-13]: After logout (=store.unloadAll=) or per-record =destroyRecord=, the cached =InfinityModel= in =frontend/app/utils/list-model.js= still held references to destroyed records. On next visit the template walked an =@belongsTo= async proxy whose target was gone — Ember Data threw =Cannot read properties of undefined (reading '_graph')= in prod (Chromium), Glimmer threw =Cannot create a new tag for `<(unknown):emberNNN>` after it has been destroyed= in dev (Firefox). Symptom: only the FIRST row in =/job-posts= rendered. Fix: =infinityModel()= now also discards the cache when any cached record is =isDestroyed= or =isDestroying=. Architecture note: =Architecture/list-model.js cache — list-route InfinityModel + destroyed-record invalidation=. Punted side effect tracked separately as =Inbox/Bug/stagger-rows replays after logout-and-back...=

@@ -15,11 +15,11 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
 Inbox (21)
-  Bug (8)
+  Bug (7)
   Enhancement (30)
   Feature (4)
   Idea (0)
-Backlog [1/4]
+Backlog [0/3]
 Active [0/25]
 Icebox [0/6]
 Archive (1)
@@ -492,12 +492,6 @@ Diagnosing the JP 2045 description-clobber required pulling a gpt-5 scorer span 
 :LAST_TOUCHED: [2026-05-13]
 :END:
 ScrapeProfile id=2 (linkedin.com) =extraction_hints= emits =[DESCRIPTION NOT CAPTURED]= whenever ="Use AI to assess how you fit"= appears followed by ="Looking for talent?"=. That gate is correct for Camoufox poller partial-hydration captures (added 2026-05-03) but misfires on EVERY cc_sender extension capture of a LinkedIn jobs/view page — top card always carries the AI button, LinkedIn footer always carries ="Looking for talent?"=, and the full description sits BETWEEN them. The rule is presence-only and never measures body length / absence-of-description tokens. Concrete repro: JP 2045 / scrape 422 — Stripe Backend/API Engineer, ~9KB cc_sender capture, scorer correctly scored 82 from =Scrape.job_content= but extractor wrote the placeholder into =JobPost.description=. Fix shape: tighten extraction_hints to require body between company-name and LinkedIn-footer is <~500 chars OR contains NONE of {Responsibilities, Qualifications, About the job, What you'll do, Who you are, Minimum Requirements} BEFORE emitting the placeholder. Belt-and-suspenders: =parse_scrape= should bypass the partial-render heuristic when =scrape.source = 'extension'=. Verification: re-run =parse_scrape= against scrape 422 post-fix; JP 2045 description should land as the real Stripe body, not the placeholder. Architecture note exists in =Operations/Scrape Log= [2026-05-13 14:35].
-*** SHIPPED list-model cache held destroyed records — login broken in prod :frontend:
-CLOSED: [2026-05-13 Wed 09:58]
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-13]
-:END:
-Closed [2026-05-13]: After logout (=store.unloadAll=) or per-record =destroyRecord=, the cached =InfinityModel= in =frontend/app/utils/list-model.js= still held references to destroyed records. On next visit the template walked an =@belongsTo= async proxy whose target was gone — Ember Data threw =Cannot read properties of undefined (reading '_graph')= in prod (Chromium), Glimmer threw =Cannot create a new tag for `<(unknown):emberNNN>` after it has been destroyed= in dev (Firefox). Symptom: only the FIRST row in =/job-posts= rendered. Fix: =infinityModel()= now also discards the cache when any cached record is =isDestroyed= or =isDestroying=. Architecture note: =Architecture/list-model.js cache — list-route InfinityModel + destroyed-record invalidation=. Punted side effect tracked separately as =Inbox/Bug/stagger-rows replays after logout-and-back...=
 *** TODO stagger-rows replays after logout-and-back or row delete on list pages :frontend:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
@@ -1010,13 +1004,6 @@ I don't know if that's in the edit page or the show page.
 show page does have a lot of actions, but we hide complexity in the edit page.
 ***
 * Backlog
-** DONE dedupe/backfill-hints-on-409 — process hints even when from-text returns 409 :dedupe:extension:api:
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-19]
-:CLOSED:  [2026-05-19]
-:END:
-Supplanted by the one-channel collapse — ccsender no longer needs the 409 backfill because the dup-rebind case is a plain JSON:API PATCH on =JobPost.apply_url=. The 409 short-circuit on =/scrapes/from-text/= stays as-is. See =notes.org= =Plans/Cross-platform dedup — collapse two-channel apply_url into JobPost.apply_url=.
-
 ** PROJ [#C] Electron desktop app feasibility :PENDING_APPROVAL:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-04]
