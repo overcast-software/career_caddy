@@ -16,10 +16,10 @@ TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
 Inbox (21)
   Bug (8)
-  Enhancement (26)
+  Enhancement (30)
   Feature (4)
   Idea (0)
-Backlog [0/3]
+Backlog [1/4]
 Active [0/25]
 Icebox [0/6]
 Archive (1)
@@ -185,16 +185,6 @@ https://www.hyperui.dev/components/application/tabs/#component-5-dark
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :END:
-*** TODO dedupe/backfill-hints-on-409 — process hints even when from-text returns 409
-When POST /api/v1/scrapes/from-text/ returns 409 because an existing complete JP at the link already exists, the request body's apply_url_hint / referrer_url are discarded — _resolve_hint_match never runs. Result: re-submitting an existing LinkedIn JP after the apply-button-hint feature shipped does NOT bind the LinkedIn JP to the canonical ATS JP, even when ccsender now correctly extracts and forwards the decoded ATS URL.
-
-Concrete missed binding: JP 2045 (LinkedIn, Stripe Backend/API Engineer, created 2026-04-28 pre-feature) and JP 2140 (Stripe canonical, created 2026-05-15 via direct ccsend) — different host pair, same role, never linked.
-
-Why P-low: only affects backfilling hints onto pre-feature JPs. Going-forward all real binding paths work (new LinkedIn submit creates ATS stub; ATS-first submit handled via referrer or apply_url_hint on the symmetric leg).
-
-Fix sketch: in views/scrapes.py from_text, if hints are present and 409 would fire, still call _resolve_hint_match for the hint pair AND create a hint-only Scrape on the existing JP with apply_url_from_hint / referrer_url set (no job_content, status=completed). Return the matches in 409 response meta so the frontend can route the user to canonical_redirect.
-
-Tag: dedupe extension api
 *** TODO extension/ccsender-structured-prefill — pull css_selectors at submit time :extension:scrape:agents:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
@@ -247,7 +237,7 @@ After 2 weeks of cross-platform-dedup-hints in dogfood: did per-row merge / dism
 
 Concrete signals to track:
 - Did you ever wish you could mark a candidate as "not a duplicate" persistently? → DuplicateRejection table earned.
-- Did referrer hints ever surface a real cross-platform pair that wasn't already caught by apply_url_hint? → keep the referrer extractor; otherwise drop it.
+- Did referrer hints ever surface a real cross-platform pair that wasn't already caught by =JobPost.apply_url=? → keep the referrer extractor; otherwise drop it.
 - Did stub JPs cause more confusion than they solved? → tighten the stub-creation gate.
 
 Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md=.
@@ -492,16 +482,16 @@ Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-conf
 
 *** TODO sweep_stuck_scoring cron — paired with model.isPending gate
 Now that the spinner gate reads =status= directly off the record (per-model =isPending= getter, shipped 2026-05-13), a Score / CoverLetter / Summary / Scrape that gets stuck in a non-terminal state on the server (worker dies mid-flight, OOM, exception bypasses the =finally=) will spin forever in the UI on every visit. We already have =sweep_stuck_extracting= for Scrape; need the equivalent for Score (and probably CoverLetter / Summary). Two-prong: (1) wrap the worker entrypoints in =try / except / finally= that ALWAYS sets a terminal status, (2) periodic management command (cron) that flips records older than N minutes in pending states to =error= with a reason. Surfaces as =/api/v1/sweep_stuck_<resource>/= mgmt commands; runs on the api container schedule. Should mirror =sweep_stuck_extracting= shape exactly so ops behavior is consistent.
-*** TODO from-text inline scorer span detached from parent request :api:agents: 
+*** TODO from-text inline scorer span detached from parent request :api:agents:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
-Diagnosing the JP 2045 description-clobber required pulling a gpt-5 scorer span (id 4254ad0101bf8519) whose =parent_span_id= was null even though it was kicked off inline by =POST /scrapes/from-text/=. Naive logfire trace queries by trace_id miss it; you have to widen by user/time. This hid the score-vs-extract ordering on the from-text path and matters anytime we investigate any score/extract race on extension-sourced scrapes. Fix shape: when =/scrapes/from-text/= triggers the inline scorer, propagate the request's span context so the scorer span attaches to its parent. Affects =api/job_hunting/api/views/scrapes.py= from-text handler + the scorer kickoff. Verification: a new from-text POST should show the scorer span as a child of the request span in logfire. 
-*** TODO linkedin.com extraction_hints overfires on rich extension captures :scrape:extension: 
+Diagnosing the JP 2045 description-clobber required pulling a gpt-5 scorer span (id 4254ad0101bf8519) whose =parent_span_id= was null even though it was kicked off inline by =POST /scrapes/from-text/=. Naive logfire trace queries by trace_id miss it; you have to widen by user/time. This hid the score-vs-extract ordering on the from-text path and matters anytime we investigate any score/extract race on extension-sourced scrapes. Fix shape: when =/scrapes/from-text/= triggers the inline scorer, propagate the request's span context so the scorer span attaches to its parent. Affects =api/job_hunting/api/views/scrapes.py= from-text handler + the scorer kickoff. Verification: a new from-text POST should show the scorer span as a child of the request span in logfire.
+*** TODO linkedin.com extraction_hints overfires on rich extension captures :scrape:extension:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
-ScrapeProfile id=2 (linkedin.com) =extraction_hints= emits =[DESCRIPTION NOT CAPTURED]= whenever ="Use AI to assess how you fit"= appears followed by ="Looking for talent?"=. That gate is correct for Camoufox poller partial-hydration captures (added 2026-05-03) but misfires on EVERY cc_sender extension capture of a LinkedIn jobs/view page — top card always carries the AI button, LinkedIn footer always carries ="Looking for talent?"=, and the full description sits BETWEEN them. The rule is presence-only and never measures body length / absence-of-description tokens. Concrete repro: JP 2045 / scrape 422 — Stripe Backend/API Engineer, ~9KB cc_sender capture, scorer correctly scored 82 from =Scrape.job_content= but extractor wrote the placeholder into =JobPost.description=. Fix shape: tighten extraction_hints to require body between company-name and LinkedIn-footer is <~500 chars OR contains NONE of {Responsibilities, Qualifications, About the job, What you'll do, Who you are, Minimum Requirements} BEFORE emitting the placeholder. Belt-and-suspenders: =parse_scrape= should bypass the partial-render heuristic when =scrape.source = 'extension'=. Verification: re-run =parse_scrape= against scrape 422 post-fix; JP 2045 description should land as the real Stripe body, not the placeholder. Architecture note exists in =Operations/Scrape Log= [2026-05-13 14:35]. 
+ScrapeProfile id=2 (linkedin.com) =extraction_hints= emits =[DESCRIPTION NOT CAPTURED]= whenever ="Use AI to assess how you fit"= appears followed by ="Looking for talent?"=. That gate is correct for Camoufox poller partial-hydration captures (added 2026-05-03) but misfires on EVERY cc_sender extension capture of a LinkedIn jobs/view page — top card always carries the AI button, LinkedIn footer always carries ="Looking for talent?"=, and the full description sits BETWEEN them. The rule is presence-only and never measures body length / absence-of-description tokens. Concrete repro: JP 2045 / scrape 422 — Stripe Backend/API Engineer, ~9KB cc_sender capture, scorer correctly scored 82 from =Scrape.job_content= but extractor wrote the placeholder into =JobPost.description=. Fix shape: tighten extraction_hints to require body between company-name and LinkedIn-footer is <~500 chars OR contains NONE of {Responsibilities, Qualifications, About the job, What you'll do, Who you are, Minimum Requirements} BEFORE emitting the placeholder. Belt-and-suspenders: =parse_scrape= should bypass the partial-render heuristic when =scrape.source = 'extension'=. Verification: re-run =parse_scrape= against scrape 422 post-fix; JP 2045 description should land as the real Stripe body, not the placeholder. Architecture note exists in =Operations/Scrape Log= [2026-05-13 14:35].
 *** SHIPPED list-model cache held destroyed records — login broken in prod :frontend:
 CLOSED: [2026-05-13 Wed 09:58]
 :PROPERTIES:
@@ -1020,6 +1010,13 @@ I don't know if that's in the edit page or the show page.
 show page does have a lot of actions, but we hide complexity in the edit page.
 ***
 * Backlog
+** DONE dedupe/backfill-hints-on-409 — process hints even when from-text returns 409 :dedupe:extension:api:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-19]
+:CLOSED:  [2026-05-19]
+:END:
+Supplanted by the one-channel collapse — ccsender no longer needs the 409 backfill because the dup-rebind case is a plain JSON:API PATCH on =JobPost.apply_url=. The 409 short-circuit on =/scrapes/from-text/= stays as-is. See =notes.org= =Plans/Cross-platform dedup — collapse two-channel apply_url into JobPost.apply_url=.
+
 ** PROJ [#C] Electron desktop app feasibility :PENDING_APPROVAL:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-04]
