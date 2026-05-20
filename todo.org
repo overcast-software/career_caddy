@@ -14,10 +14,10 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (21)
+Inbox (22)
   Bug (7)
-  Enhancement (30)
-  Feature (4)
+  Enhancement (31)
+  Feature (22)
   Idea (0)
 Backlog [0/3]
 Active [0/25]
@@ -133,9 +133,481 @@ Two real candidates (=screenshot.js= borderline, =scrape-status.js= lean-no), on
 :LAST_TOUCHED: [2026-05-05]
 :END:
 ** Feature
+*** TODO Phase 5: infra — ActivityPub activity dispatch worker (django-q2 candidate) :api:infra:
+:PROPERTIES:
+:PHASE:    5
+:STATUS:   deferred
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:END:
+*Goal*: background worker dispatches outbound Activities to all followers / subscribers.
+
+*Acceptance*:
+- [ ] Worker reads pending outbox rows; POSTs each to the recipient's inbox with HTTP signatures; retries with backoff on failure.
+- [ ] Pinned to django-q2 (per the archived =Job Queue Integration Plan=).
+- [ ] Status visible from a staff-only admin page.
+- [ ] Dead-letter queue for retry-exhausted Activities.
+
+*Files*:
+- =api/job_hunting/tasks/activitypub_dispatch.py= (new).
+- =api/job_hunting/admin.py= — admin view.
+- =api/pyproject.toml= — add =django-q2=.
+- =api/job_hunting/management/commands/qcluster.py= or compose service entry.
+
+*Tests*:
+- Round-trip a synthetic Activity to a mock follower; retry budget exhausted ⇒ alert + dead-letter row.
+
+*Status*: deferred placeholder.
+
+*Dependency*: HTTP signatures + Outbox tickets.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
+*** TODO Phase 5: api — WebFinger endpoint :api:
+:PROPERTIES:
+:PHASE:    5
+:STATUS:   deferred
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: let remote instances discover our Actor by handle.
+
+*Acceptance*:
+- [ ] =GET /.well-known/webfinger?resource=acct:careercaddy@careercaddy.online= returns the standard WebFinger JRD document pointing at the local Actor URI.
+- [ ] Caddy / Nginx route hits Django; not a static file.
+- [ ] 404 for unknown handles.
+- [ ] =Content-Type: application/jrd+json=.
+
+*Files*:
+- =api/job_hunting/api/views/webfinger.py= (new).
+- =api/job_hunting/api/urls.py= — route at =.well-known/webfinger=.
+- Caddyfile / reverse-proxy entry.
+
+*Tests*:
+- 200 for the local handle; correct JRD shape.
+- 404 otherwise; missing =resource= param = 400.
+
+*Status*: deferred placeholder.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
+*** TODO Phase 5: api — HTTP signatures (RFC 9421) for ActivityPub :api:
+:PROPERTIES:
+:PHASE:    5
+:STATUS:   deferred
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: sign outbound ActivityPub HTTP traffic and verify inbound signatures.
+
+*Acceptance*:
+- [ ] Sign outbound POSTs to remote inboxes with our local Actor's private key.
+- [ ] Verify inbound POSTs against the sender's published public key. Cache fetched public keys with a short TTL.
+- [ ] Bad signature → 401.
+- [ ] Vendored lib choice documented in =api/pyproject.toml= comments (candidates: =python-http-message-signatures=, =httpsig=, =cryptography= manual).
+
+*Files*:
+- =api/job_hunting/lib/http_signatures.py= (new).
+
+*Tests*:
+- Round-trip sign/verify against a fixed Actor + payload.
+- Bad signature rejected with 401.
+- Public key cache invalidation on key rotation.
+
+*Status*: deferred placeholder.
+
+*Dependency*: Actor model.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
+*** TODO Phase 5: api — ActivityPub Outbox + Inbox endpoints :api:
+:PROPERTIES:
+:PHASE:    5
+:STATUS:   deferred
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: announce + receive ActivityPub Activities.
+
+*Acceptance*:
+- [ ] =GET /outbox/= paginated list of Activities we have announced.
+- [ ] =POST /inbox/= accepts inbound Activities; verifies HTTP signature; routes by =type= (Create, Update, Delete, Announce, Follow, Undo).
+- [ ] Inbound =Delete= for a federated JP flips =posting_status=closed= and writes =source_deleted_at= (per =ActivityPub-readiness — minimum prep/Federated JP deletion handling= in the plan).
+- [ ] Inbound =Create= for a JobPost ⇒ create a local mirror row with =source_instance= = sender, =created_by= = the local service user.
+- [ ] All writes pass through =find_duplicate= so duplicates collapse.
+
+*Files*:
+- =api/job_hunting/api/views/activitypub.py=.
+- =api/job_hunting/lib/activitypub_inbox.py= (new dispatcher).
+
+*Tests*:
+- One per Activity type; bad signature = 401; bad shape = 400; =Delete= flips =posting_status= without dropping the row.
+
+*Status*: deferred placeholder.
+
+*Dependency*: Actor model + HTTP signatures tickets.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
+*** TODO Phase 5: api — per-instance ActivityPub Actor model + actor URI :api:
+:PROPERTIES:
+:PHASE:    5
+:STATUS:   deferred
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: every Career Caddy instance gains an Actor identity so remote instances can route Activities to us.
+
+*Acceptance*:
+- [ ] =Actor= model with =type=, =preferredUsername=, =inbox=, =outbox=, =publicKey=. One row per local instance for now (later: optionally per-user).
+- [ ] =GET /actor/= returns the Actor as JSON-LD =Content-Type: application/activity+json=.
+- [ ] Generate + persist the RSA keypair on first startup; refuse to start if the private key is missing in prod.
+- [ ] Public key surfaced under the Actor's =publicKey= property so remote instances can verify our HTTP signatures.
+
+*Files*:
+- =api/job_hunting/models/activitypub_actor.py= (new).
+- =api/job_hunting/api/views/activitypub.py= (new).
+- =api/job_hunting/migrations/00XX_actor.py= (new).
+- =api/job_hunting/management/commands/generate_actor_keys.py= (new — idempotent).
+
+*Tests*:
+- Actor JSON-LD shape conforms; keypair generated on bootstrap; missing key in prod = startup error.
+
+*Status*: deferred placeholder. Pick up when Phase 5 is greenlit.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
+*** TODO Phase 4: api — visibility audit for federated rows :api:
+:PROPERTIES:
+:PHASE:    4
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: confirm the five-clause visibility filter returns zero federated rows by default; subscribed users see rows from subscribed instances only.
+
+*Acceptance*:
+- [ ] Extend the five-clause filter at =api/job_hunting/api/views/jobs.py::JobPostViewSet.list= (and every mirror site listed in =Architecture/JobPost universal — visibility & dedupe contracts/The five visibility clauses=) with an additional clause: =OR source_instance IN (request.user.federation_subscriptions.values('instance_url'))=.
+- [ ] By default (no subscriptions), federated rows are invisible.
+- [ ] Staff bypass still applies.
+- [ ] Tests at every mirror site (=retrieve()=, =CompanySerializer.get_related("job-posts")=, =companies.job_posts=, =reports._user_scoped_job_posts=).
+
+*Files*:
+- =api/job_hunting/api/views/jobs.py= (list, retrieve).
+- =api/job_hunting/api/serializers.py= (CompanySerializer.get_related, _build_included).
+- =api/job_hunting/api/views/companies.py= (.job_posts).
+- =api/job_hunting/api/views/reports.py= (._user_scoped_job_posts).
+
+*Tests*:
+- One per mirror site — user with no subscriptions sees zero federated rows; user with subscription sees rows from that instance only; staff sees all.
+
+*Dependency*: =FederationSubscription= ticket (Phase 4) merged.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 4 — ActivityPub readiness
+*** TODO Phase 4: api — opt-in federation subscription stub endpoints :api:
+:PROPERTIES:
+:PHASE:    4
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: user-facing surface for federation subscriptions lands now; Phase 5 wires the backend.
+
+*Acceptance*:
+- [ ] =POST /api/v1/federation/subscriptions/= body =instance_url=. Creates a =FederationSubscription= row owned by =request.user=.
+- [ ] =DELETE /api/v1/federation/subscriptions/:id/= removes it.
+- [ ] =GET /api/v1/federation/subscriptions/= lists the caller's subscriptions.
+- [ ] No outbound HTTP yet — endpoint just persists the intent.
+- [ ] Frontend ships a barebones management UI at =/settings/federation/= (one input + a list).
+
+*Files*:
+- =api/job_hunting/models/federation_subscription.py= (new).
+- =api/job_hunting/api/views/federation.py= (new).
+- =api/job_hunting/migrations/00XX_federation_subscription.py= (new).
+- =frontend/app/routes/settings/federation.js= (new).
+- =frontend/app/templates/settings/federation.hbs= (new).
+
+*Tests*:
+- =api/job_hunting/tests/test_federation.py= — CRUD; user can only see their own.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 4 — ActivityPub readiness
+*** TODO Phase 4: api — /api/v1/job-posts/:id/as-object/ JSON-LD adapter view :api:
+:PROPERTIES:
+:PHASE:    4
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: round-trip a JobPost as ActivityStreams 2.0 JSON-LD so a future Outbox just plumbs the same shape outward.
+
+*Acceptance*:
+- [ ] =GET /api/v1/job-posts/:id/as-object/= returns =Content-Type: application/activity+json=.
+- [ ] Body shape: =@context= = AS2, =type= = =JobPosting= (schema.org-compatible; document the choice), =id= = full canonical URI, =attributedTo= = the source instance Actor URI (placeholder until Actor model lands), =published= = =created_at=, =content= = =description=, =inReplyTo= = canonical URI of =duplicate_of= when set.
+- [ ] Respects the same visibility filter as the JSON:API endpoint.
+- [ ] No federation wiring yet — serializer-only ticket.
+
+*Files*:
+- =api/job_hunting/api/views/jobs.py= — new action method.
+- =api/job_hunting/lib/activitypub.py= (new) — shape helpers.
+
+*Tests*:
+- =api/job_hunting/tests/test_activitypub.py= — shape conforms; visibility filter applied; =duplicate_of= round-trips as =inReplyTo=.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 4 — ActivityPub readiness
+*** TODO Phase 4: api — JobPost.source_instance + source_deleted_at columns :api:
+:PROPERTIES:
+:PHASE:    4
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: mark federated rows with their origin instance + tombstone inbound =Delete= events without dropping the row.
+
+*Acceptance*:
+- [ ] =JobPost.source_instance= CharField(max=253, db_index=True), defaults to env =CAREER_CADDY_INSTANCE= (e.g. =careercaddy.online=). Migration backfills existing rows with the local hostname.
+- [ ] =JobPost.source_deleted_at= DateTimeField nullable.
+- [ ] Serializer exposes both fields read-only.
+- [ ] =jp.show= renders a banner when =source_deleted_at IS NOT NULL=: "Original posting withdrawn on <date>. Your application record is intact."
+- [ ] Follow-up visibility-audit ticket is separately filed (see =Phase 4 visibility audit=).
+
+*Files*:
+- =api/job_hunting/models/job_post.py=.
+- =api/job_hunting/migrations/00XX_jp_federation_columns.py= (new).
+- =api/job_hunting/api/serializers.py=.
+- =frontend/app/templates/job-posts/show.hbs= — banner.
+
+*Tests*:
+- =api/job_hunting/tests/test_job_post_model.py= — default =source_instance= populates; backfill correct.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 4 — ActivityPub readiness
+*** TODO Phase 3: frontend — staff-only /reports/dedupe-feedback report :frontend:dedupe:
+:PROPERTIES:
+:PHASE:    3
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: surface the three reports the audit unlocks — missed signals, over-eager canonicalization, promote patterns.
+
+*Acceptance*:
+- [ ] Route =reports.dedupe-feedback= behind a staff gate.
+- [ ] Three tables on the page:
+  1. Manual =mark= with =signal_state= containing zero auto signals → flags missed =find_duplicate= rules.
+  2. Manual =unlink= where =signal_state.canonical_link_match=true= → flags over-eager canonicalization.
+  3. Manual =promote= grouped by =from_jp.source= → reveals which sources users treat as authoritative.
+- [ ] Data source: =GET /api/v1/duplicate-annotations/= with the right filters per table.
+- [ ] HyperUI + Tailwind only; no custom CSS.
+
+*Files*:
+- =frontend/app/routes/reports/dedupe-feedback.js= (new).
+- =frontend/app/templates/reports/dedupe-feedback.hbs= (new).
+- =frontend/app/router.js= — add route.
+
+*Tests*:
+- =frontend/tests/acceptance/reports/dedupe-feedback-test.js= — staff sees rows; non-staff gets redirected.
+
+*Dependency*: Phase 3 api ticket merged.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Manual dedup → learning loop
+*** TODO Phase 3: api — DuplicateAnnotation model + backfill + writes from duplicate verbs :api:dedupe:
+:PROPERTIES:
+:PHASE:    3
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: capture every manual dedupe gesture so we can learn the auto-dedup rules from human corrections.
+
+*Acceptance*:
+- [ ] New =DuplicateAnnotation= model with =from_jp= FK, =to_jp= FK (nullable), =previous_to= FK (nullable), =action= in (=mark=, =unlink=, =promote=, =historical=), =set_by= FK, =set_at= datetime, =signal_state= JSONField.
+- [ ] Migration backfills one =action=historical= row per existing =JobPost.duplicate_of= FK.
+- [ ] Each of the three Phase 2 verb endpoints writes an annotation row on every state change.
+- [ ] =signal_state= snapshots current =compute_duplicate_candidates= signals between from_jp and to_jp at write time (canonical_link match, fingerprint match, apply_url reciprocity, etc.).
+- [ ] Staff-only =GET /api/v1/duplicate-annotations/= exposes annotations as JSON:API with filters by =action=, =from_jp=, =to_jp=, =set_by=, =set_at__gte=.
+
+*Files*:
+- =api/job_hunting/models/duplicate_annotation.py= (new).
+- =api/job_hunting/migrations/00XX_duplicate_annotation.py= (new, with backfill data migration).
+- =api/job_hunting/api/views/jobs.py= — wire into verb endpoints.
+- =api/job_hunting/api/views/duplicate_annotations.py= (new).
+- =api/job_hunting/api/serializers.py= — new serializer.
+
+*Tests*:
+- =api/job_hunting/tests/test_duplicate_annotation.py= — backfill count matches historical FK count; each verb writes the correct =action=; =signal_state= round-trips.
+
+*Dependency*: Phase 2 api verb-endpoints ticket merged.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Manual dedup → learning loop
+*** TODO Phase 2.5: ops — MX record + catchall mail server for *@careercaddy.online :infra:cc_auto:
+:PROPERTIES:
+:PHASE:    2.5
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: deliver mail to a catchall mailbox cc_auto can read over Tailscale.
+
+*Acceptance*:
+- [ ] MX record for =careercaddy.online= points at our mail server.
+- [ ] Catchall config (Postfix / Maddy / equivalent) routes =*@careercaddy.online= to a single mailbox.
+- [ ] cc_auto reads via IMAP (or whatever the chosen MTA exposes); no public IMAP — Tailscale-only.
+- [ ] Spam filter (rspamd?) trims obvious garbage before cc_auto sees it.
+- [ ] DKIM + SPF on outbound so we can later send replies / bounces without ending up in spam.
+- [ ] Runbook entry under =notes.org Operations= via =claude/cc-notes-add-child=.
+
+*Files*:
+- DNS provider — MX + DKIM + SPF entries.
+- =docker-compose.prod.yml= or a separate compose file for the mailserver.
+- =notes.org Operations= runbook node.
+
+*Out of scope*: outbound SMTP for app email (registration, password reset) — separate ops concern.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Operational pieces (out of model scope but tracked here)
+*** TODO Phase 2.5: cc_auto — inbox poller + To-address resolver + bounce on unknown local-part :cc_auto:
+:PROPERTIES:
+:PHASE:    2.5
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: cc_auto polls the catchall inbox and posts to api via the new =discover_for_user_id= attribute.
+
+*Acceptance*:
+- [ ] New cc_auto poller (=src/pollers/email_catchall.py= or similar) reads the catchall inbox over IMAP.
+- [ ] Resolves =To:= header local-part → CC =username= via =GET /api/v1/users/?filter[username]==.
+- [ ] Unknown local-part → bounce with a clear "unknown Career Caddy username" body + log.
+- [ ] Extracts JobPost candidates using existing =url_extractor= / =span_validator= infrastructure from the multi-job digest work.
+- [ ] POSTs to =/api/v1/job-posts/= with =source=email-forward=, =discover_for_user_id=<resolved>=, =forwarded_via_address=<localpart>@careercaddy.online= on each discovery row.
+- [ ] Per-mail audit row in cc_auto: source mail-id, To address, resolved user id, JPs touched, dedup hits vs new rows.
+- [ ] Quota: cap forwards per user per day (configurable env; default 100). Over-quota → bounce.
+
+*Files (cc_auto)*:
+- =~/Network/syncthing/Projects/career_caddy_automation/src/pollers/email_catchall.py= (new).
+- =~/Network/syncthing/Projects/career_caddy_automation/src/client/api_client.py= — add =create_job_post(..., discover_for_user_id=...)= path.
+- =~/Network/syncthing/Projects/career_caddy_automation/tests/test_email_catchall.py= (new).
+
+*Dependency*: Phase 2.5 api tickets must ship first (=discover_for_user_id= and =email-forward= source + =forwarded_via_address=).
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest
+*** TODO Phase 2.5: api — email-forward source + JobPostDiscovery.forwarded_via_address + JSON:API discoveries hasMany :api:dedupe:cc_auto:
+:PROPERTIES:
+:PHASE:    2.5
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: surface forwarder provenance via the JSON:API =discoveries= relationship; the column lives where it logically belongs (=JobPostDiscovery=).
+
+*Acceptance*:
+- [ ] Add =email-forward= to =JobPost.source= enum and the trust ranking in =JobPostOverwriteDecision= (slot between =paste= and =scrape=; document the choice).
+- [ ] =JobPostDiscovery.forwarded_via_address= CharField(max=254, null=True). Required when =source=email-forward=; null otherwise. Serializer-level validation.
+- [ ] =JobPost= JSON:API resource exposes =discoveries= as =hasMany=. Per-discovery resource includes =source=, =forwarded_via_address=, =requested_by=.
+- [ ] Ember: =frontend/app/models/job-post.js= adds =@hasMany('job-post-discovery')=.
+
+*Files*:
+- =api/job_hunting/models/job_post.py= (source choices).
+- =api/job_hunting/models/job_post_discovery.py= (new column).
+- =api/job_hunting/api/serializers.py= (discovery serializer + JobPost relationship).
+- =api/job_hunting/migrations/00XX_jpd_forwarded_via.py= (new).
+- =frontend/app/models/job-post.js= (hasMany).
+- =frontend/app/models/job-post-discovery.js= (new model).
+
+*Tests*:
+- =api/job_hunting/tests/test_job_post_discovery.py= — column required for email-forward source; rejected otherwise.
+- =api/job_hunting/tests/test_job_post_viewset.py= — relationship serializes on jp.show.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Surfacing forwarder provenance
+*** TODO Phase 2.5: api — discover_for_user_id on POST job-posts + staff-or-self RBAC + audit column :api:cc_auto:
+:PROPERTIES:
+:PHASE:    2.5
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: let staff-level API keys (cc_auto's key) attribute =JobPostDiscovery= to an arbitrary user. No new endpoint; same =POST /api/v1/job-posts/= with a new attribute + RBAC.
+
+*Acceptance*:
+- [ ] =POST /api/v1/job-posts/= JSON:API attribute =discover_for_user_id= (optional; defaults to =request.user.id=).
+- [ ] RBAC: 403 unless =request.user.is_staff= OR =discover_for_user_id == request.user.id=.
+- [ ] =JobPostDiscovery= gains =requested_by_user_id= FK (nullable; null for legacy rows).
+- [ ] Migration backfills existing rows with =requested_by_user_id = user_id= (best-effort historical guess).
+- [ ] Discovery serializer exposes =requested_by= as a belongsTo relationship.
+
+*Files*:
+- =api/job_hunting/api/views/jobs.py= — create path.
+- =api/job_hunting/models/job_post_discovery.py= — new column.
+- =api/job_hunting/api/serializers.py= — discovery serializer.
+- =api/job_hunting/migrations/00XX_jpd_requested_by.py= (new).
+
+*Tests*:
+- =api/job_hunting/tests/test_job_post_viewset.py= — staff key attributes to other user; non-staff cannot; self always allowed.
+- =api/job_hunting/tests/test_job_post_discovery.py= — column populated correctly.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Why this changes the visibility math
+*** TODO Phase 2.5: api — username catchall validator + audit_usernames mgmt command :api:cc_auto:
+:PROPERTIES:
+:PHASE:    2.5
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: ensure =username= is safe to use as an email local-part before the catchall ingest lands.
+
+*Acceptance*:
+- [ ] Serializer validator on =User.username= enforces =[a-z0-9._-]+= (lowercase only) going forward.
+- [ ] =python manage.py audit_usernames= prints existing rows that fail the constraint, with =id=, =username=, =email=. Read-only; no auto-rename.
+- [ ] Client-side: signup form lowercases + validates before submit; setup wizard does the same.
+- [ ] Documentation entry in =/docs= explaining the catchall constraint.
+
+*Files*:
+- =api/job_hunting/api/serializers.py= or =api/job_hunting/serializers.py=.
+- =api/job_hunting/management/commands/audit_usernames.py= (new).
+- =frontend/app/components/users/signup-form.hbs= / =frontend/app/routes/setup.js=.
+
+*Tests*:
+- =api/job_hunting/tests/test_users.py= — validator accepts =foo.bar=, rejects =Foo Bar=, =foo@bar=, =foo+bar=.
+- Smoke the mgmt command against demo data via =make demo-data=.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Model implications
+*** TODO Phase 2: frontend jp.edit — duplicate picker + reverse-dups list + promote button :frontend:dedupe:
+:PROPERTIES:
+:PHASE:    2
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: UI on =job-posts.edit= for setting and clearing =duplicate_of= and listing reverse-FK duplicates.
+
+*Acceptance*:
+- [ ] PowerSelect picker searches visible JPs via =store.query('job-post', ...)= (visibility-scoped server-side).
+- [ ] Selecting a target calls =mark-duplicate-of= verb.
+- [ ] If =duplicate_of= already set: show target + "Unlink" button → =unlink-duplicate= verb.
+- [ ] "Duplicates of this post" reverse-FK list: rows render =source= badge + per-row "Unlink" button.
+- [ ] "Promote canonical" button shown only when =duplicate_of= is set; confirm before swap.
+- [ ] All verb calls use =.then/.catch=; refresh model on success.
+
+*Files*:
+- =frontend/app/components/job-posts/form.hbs= — new =panel-card= sections.
+- =frontend/app/components/job-posts/form.js= — verb action handlers.
+- =frontend/app/adapters/job-post.js= or model — wire the verb URLs.
+
+*Tests*:
+- =frontend/tests/integration/components/job-posts/form-test.js= — picker renders + verb calls fire.
+
+*Dependency*: api verb-endpoints ticket (Phase 2 api) merged first.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Job-post edit page additions
+*** TODO Phase 2: api JobPostViewSet — mark-duplicate-of / unlink-duplicate / promote-canonical :api:dedupe:
+:PROPERTIES:
+:PHASE:    2
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: three verb endpoints that let users curate =duplicate_of= relationships from the UI, gated by visibility.
+
+*Acceptance*:
+- [ ] =POST /api/v1/job-posts/:id/mark-duplicate-of/= body =target_id=. Sets =self.duplicate_of_id = target_id=.
+- [ ] =POST /api/v1/job-posts/:id/unlink-duplicate/=. Sets =self.duplicate_of_id = NULL=.
+- [ ] =POST /api/v1/job-posts/:id/promote-canonical/=. Swaps roles with =self.duplicate_of= so =self= becomes the root.
+- [ ] All three require both JPs in the caller's visibility set (five-clause filter at =JobPostViewSet.list=). Staff bypass. 403 otherwise.
+- [ ] Cycle guard on promote-canonical: never =duplicate_of_id = self.id=.
+- [ ] Each verb returns JSON:API resource document for the updated JP (and the affected sibling on promote).
+
+*Files*:
+- =api/job_hunting/api/views/jobs.py=
+- =api/job_hunting/api/serializers.py= (likely no changes; =duplicate_of_id= already writable).
+
+*Tests*:
+- =api/job_hunting/tests/test_job_post_viewset.py= — one test per verb covering happy path, visibility rejection, cycle guard.
+
+*Out of scope*: DuplicateAnnotation audit rows — that's the Phase 3 ticket.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Proposed duplicate model — keep parent-child + add affordances
 *** TODO Extension settings screen
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-09]
+:LAST_TOUCHED: [2026-05-20]
 :END:
 Dedicated settings/preferences screen inside the popup, separate from the main Send / Tracked flows. Promotes preferences out of the connected screen and gives a place for upcoming options.
 
@@ -185,9 +657,39 @@ https://www.hyperui.dev/components/application/tabs/#component-5-dark
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :END:
+*** DONE Phase 1: jp.edit form — canonical_link readonly + apply_url editable :frontend:dedupe:
+CLOSED: [2026-05-20 Wed 12:07]
+:PROPERTIES:
+:PHASE:    1
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-20]
+:END:
+*Goal*: surface =canonical_link= read-only and =apply_url= editable on =job-posts.edit= so users can correct cross-platform dups by hand. Edit permission: =created_by= + staff for now — revisit when usage shows pain.
+
+*Acceptance*:
+- [X] =canonical_link= rendered read-only with helper "computed from URL on save".
+- [X] =apply_url= editable text input with helper "Employer ATS destination. Used to detect cross-platform duplicates."
+- [X] PATCH persists =apply_url=; =canonical_link= re-derives from =link= on save.
+- [X] Backend gate: only =request.user == jp.created_by= OR =request.user.is_staff= may PATCH =apply_url=. 403 otherwise.
+- [X] Uses =panel-card=, =field-label=, =field-input=, =@tracked= intermediary, =.then/.catch= chain.
+
+*Files*:
+- =frontend/app/components/job-posts/form.hbs=
+- =frontend/app/components/job-posts/form.js=
+- =api/job_hunting/api/views/jobs.py= — permission gate.
+- =api/job_hunting/api/serializers.py= — confirm =apply_url= in writable allowlist.
+
+*Tests*:
+- =frontend/tests/integration/components/job-posts/form-test.js= — render + PATCH.
+- =api/job_hunting/tests/test_job_post_viewset.py= — non-staff non-owner = 403; owner/staff = 200.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Job-post edit page additions
+
+*Shipped*: jp.edit now exposes =canonical_link= read-only (styled div, never an input) and =apply_url= editable with a tracked-intermediary input so fast typing isn't clobbered. Backend gate on
+=JobPost.update/partial_update= relaxed from owner-only to =owner OR staff= (matches =destroy()=). The model save()'s "set once" guard for =canonical_link= stayed put — keeps the email-stub regression test passing — and the viewset clears =canonical_link= when a PATCH changes =link=, so the readonly display refreshes. Five new api tests (TestJobPostEditApplyUrlCanonical) + four new frontend integration tests. =api 896/0=, =frontend 332/0=, ruff + prettier clean.
 *** TODO extension/ccsender-structured-prefill — pull css_selectors at submit time :extension:scrape:agents:
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-15]
+:LAST_TOUCHED: [2026-05-20]
 :PRIORITY: P2
 :END:
 Today ccsender posts =body.innerText= and the api LLM re-extracts everything from scratch — even on hosts where =ScrapeProfile.css_selectors.job_data= already names where title/company/location/salary/description live. Since the extension now fetches the profile on send anyway (=GET /scrape-profiles/extension-selectors/=), it is trivial to also ship =css_selectors.job_data= in the same response and have the extension run those selectors in the active tab.
@@ -522,6 +1024,25 @@ claude session) the capture lands in a stale view and either
 clobbers recent edits or appears in the wrong place. Capture
 handler should =revert-buffer= (auto-confirmed when no local
 changes) on the target file before inserting.
+** PLAN ActivityPub prep and job-post adaptation
+*** i want frontend:job-posts.edit to allow me to edit canonical link, apply_url, and duplicates.
+*** There can be duplicates from more than one source, and this is a not a parent relationship as we coded up.  It feels more like a many-to-many is a many to many for me.  if we need to make a new jp for the apply_url that is a consideration.
+**** TODO Document all columns in job post and add comments to the model
+**** TODO validate this statement: are we saying an apply_url should be a job-post parent and that duplicates are ATS generated links?
+**** TODO question: how does canonical link help with deduping
+background: while working with ccsender it's obvious that we fail to grab this.
+**** TODO Document deduping as a mermaid uml diagram.  add the plaintext to the root
+***  i have documentation of research for making this application a [[file:~/.claude/plans/sequential-scribbling-wall.md][activitypub]] application (link in notes seems lost now)
+**** TODO please consult or recreate documentation for this appliction
+*** in activity pub job-posts would shared across instances.  with this in mind, re-architect a job post's relationship to other job posts.
+*** I want to be able to link items that are the same job post but came via different email  (linkedin, ziprecruiter, indeed etc.)
+*** While activity pub is a future roadmap item, I want it brought into consideration in anticipation of it's adoption.
+*** I also want the ability to record duplicates across activity pub (eventually)
+*** I want to apply from another instances job-post.
+*** with the ability to set duplications by hand I will be given better insight to understand the relationship between duplications.
+*** right now out deduping feels flawed
+**** I suspect that if I am able to set duplicates and see the relationships I will be better able to inform you how to setup deduplication logic
+*** job searching is going to be a collaborate effort between career caddy instances
 ** TODO https:  careercaddy.online job-posts 985 job-applications
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-04]
