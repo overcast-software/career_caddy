@@ -38,7 +38,44 @@ Archive (1)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** TODO job_post_extractor prompt anti-hallucination salary rules
+Prompt-level fix so hourly to annual conversion is forbidden globally, not per-domain
+
+- Background: ziprecruiter ASK Consulting Engineer 2 scrapes 453/454 had the LLM convert $60-65/hr into salary_min=124800 salary_max=135200 unprompted. ScrapeProfile id=1 ziprecruiter.com now carries an extraction_hints override telling it not to, but the same trap exists for every domain whose profile lacks that hint. The system prompt asks for minimum annual salary in USD and treats unit-conversion as fair game.
+- File to change: agents/job_hunting/lib/parsers/job_post_extractor.py around the prompt template, the get_user_message / analyze_with_ai call site near line 917. Same for the Tier 3 extractor if it is a separate file.
+- Required behaviour: if the source figure is per-hour, per-day, per-week, or per-month then leave salary_min and salary_max null AND quote the hourly figure inside description verbatim. Only annual figures become salary_min/salary_max. Same rule for Estimated pay chips: never canonical salary.
+- Also worth fixing in the same touch: the extraction_date field came back as 2023-10-06T00:00:00 from gpt-4o on both attempts; the prompt should say extraction_date = now today so the date is real rather than a model-pretrained snapshot.
+- Smallest test: a parser unit-test feeding contractor-style content with $60 - $65/hr and asserting salary_min is None, salary_max is None, and the hourly tokens survive in description.
+- Acceptance: removing the per-domain extraction_hints override on ziprecruiter still produces null salary for hourly postings.
+
+Tags suggestion: :agents:scrape:prompt:
+*** TODO Followup 2026-05-25 — flip strategy to field-tolerant validation
+Per user (2026-05-25): the prompt-engineering framing above is the weaker lever. The durable fix is field-tolerant validation in the extractor output layer, NOT begging the LLM to behave.
+
+- Principle: salary_min/salary_max are nullable on JobPost (api/job_hunting/models/job_post.py:31-32). A hallucinated salary should be DROPPED per-field to null, not used to reject the whole JobPost. The model allows it; the validation layer was being too strict.
+- Required behaviour:
+  - If the LLM returns an annualized salary but the source content shows hourly / daily / weekly / monthly figures, coerce salary_min/salary_max to None at the parser layer. Quote the rate verbatim in description.
+  - extraction_date sanity: if the returned date is more than ~30 days behind today (e.g. the recurring 2023-10-06 hallucination), coerce to None (or to today). Do not reject.
+  - Generalize: only reject a JP when title AND company AND description are all missing. Any other nullable field that came back implausible gets coerced to None and the JP still persists.
+- Where the rejection happens today: parse_scrape._run in api/job_hunting/lib/parsers/job_post_extractor.py — the structured-output validation step before persistence. Field-level coercion lives there.
+- Smallest test (revised): feed contractor content with $60-65/hr; assert the JP IS PERSISTED with salary_min=None, salary_max=None, and the hourly tokens preserved in description. The previous spec asserted rejection-with-nulls; flip to assert persistence-with-nulls.
+- The original prompt-rule approach stays as a parallel improvement (cheaper LLM round-trips when the model knows the rule) but is no longer the primary lever. The ScrapeProfile hints patch on ziprecruiter that tried this caused a second-order silent-bail; see Inbox/scrapes-from-text silently swallows post-extract failures followup.
+** TODO scrapes-from-text silently swallows post-extract failures
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-25]
+:END:
+from-text path lands scrape in failed status without surfacing why
+
+- Repro: POST /api/v1/scrapes/from-text/ for the ziprecruiter ASK Consulting Engineer 2 posting, scrapes 453 + 454, 2026-05-26 05:59 UTC. The view returns HTTP 202, the inner Responses-API call at job_post_extractor.py:917 returns valid structured data, yet the scrape ends in failed with no JobPost and there is no PATCH-to-failed span in logfire, no exception, no validator log message. The extension popup just says could not parse and the operator has no diagnostic surface.
+- Files to inspect: api/scrapes/views.py the from_text view, api/scrapes/serializers.py creating the JobPost from the extractor result, agents/job_hunting/lib/parsers/job_post_extractor.py the analyze_with_ai call site, and the place that calls set_scrape_status failed on the from-text path.
+- Smallest test that catches it: a from_text endpoint test where the LLM stub returns a Pydantic-validatable JobPost payload that nevertheless fails downstream JobPost creation (e.g. bogus extraction_date past, salary outside model bounds) — assert that the scrape row carries a non-empty failure reason and that a logfire span fires with the rejection cause.
+- Acceptance: a failed-from-text scrape carries a a failure_reason field readable by the extension popup, b a logfire span tagged with the rejection cause, and c ideally the rejected payload preserved as scrape graph_payload so the next agent can diff input vs output.
+
+Tags suggestion: :scrape:agents:obs:bug:
 ** SHIPPED jp.show duplicate-candidates banner — Ember Data sub-collection sideload :api:frontend:bug:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-25]
+:END:
 Closed [2026-05-13]: jp.show banner was empty even when /duplicate-candidates/ returned candidates, because the JP payload had no relationships.duplicate-candidates block — Ember Data hasMany.reload() silently no-op'd.
 
 Fix is the canonical Ember Data sub-collection pipeline:
