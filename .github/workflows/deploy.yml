@@ -45,12 +45,16 @@ jobs:
         run: curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=v0.20.8 BIN_DIR=/usr/local/bin sh
 
       - name: Publish images to GHCR
+        # --frontend-api-host pins prod to cross-origin (api.careercaddy.online).
+        # When prod's outer Caddy gains a /api/* path rule, drop this flag and
+        # the same-origin default takes over.
         run: |
           dagger -m ./dagger call publish \
             --registry-token=env:GHCR_TOKEN \
             --org=overcast-software \
             --tag=${{ github.sha }} \
-            --registry-username=${{ github.actor }}
+            --registry-username=${{ github.actor }} \
+            --frontend-api-host=https://api.careercaddy.online
         env:
           GHCR_TOKEN: ${{ github.token }}
 
