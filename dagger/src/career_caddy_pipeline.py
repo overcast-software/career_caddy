@@ -358,6 +358,7 @@ class CareerCaddy:
         org: str = "overcast-software",
         tag: str = "latest",
         registry_username: str = "",
+        frontend_api_host: str = "https://api.careercaddy.online",
     ) -> list[str]:
         """Build all images and push to GHCR. Returns list of pushed image refs.
 
@@ -366,6 +367,9 @@ class CareerCaddy:
             org: GitHub organization (used in image path)
             tag: Image tag (use git SHA for immutable tags)
             registry_username: GitHub actor username for GHCR auth (defaults to org)
+            frontend_api_host: API origin baked into the frontend production
+                build. Matches the frontend/Dockerfile ARG default. Pass an
+                empty string for same-origin (proxy in front of both apps).
         """
         username = registry_username or org
         api_ref = f"{REGISTRY}/{org}/{API_IMAGE}:{tag}"
@@ -381,7 +385,7 @@ class CareerCaddy:
 
         pushed_frontend = await (
             frontend_src
-            .docker_build()
+            .docker_build(build_args=[dagger.BuildArg("API_HOST", frontend_api_host)])
             .with_registry_auth(REGISTRY, username, registry_token)
             .publish(frontend_ref)
         )
