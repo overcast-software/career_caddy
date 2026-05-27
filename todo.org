@@ -768,6 +768,9 @@ https://www.hyperui.dev/components/application/tabs/#component-5-dark
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :END:
+*** SHIPPED Phase 3 dedupe-feedback audit — DuplicateAnnotation model and staff report
+CLOSED: [2026-05-27]
+API: DuplicateAnnotation model (from_jp, to_jp, previous_to, action, set_by, set_at, signal_state) + migration 0080 + backfill 0081 + write annotations from mark/unlink/promote verbs + GET /api/v1/reports/dedupe-feedback/ with silent_marks/canonical_unlinks/promote_pairs buckets + 13 tests. Frontend: reports.dedupe-feedback route + template (3 sections, count chips, LinkTo per row) + reports.index staff card + 2 route unit tests. Plan node: notes.org Plans/PLAN ActivityPub prep + job-post adaptation/Phased rollout/Phase 3.
 *** TODO cc_auto inline-post mailto link from verified recruiter email
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-27]
