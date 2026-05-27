@@ -1039,9 +1039,6 @@ controllers/job-posts/show/questions.js were deleted before ship.
 :END:
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
-*** SHIPPED Resume favorite PATCH 500 from effective_section_order property setter
-CLOSED: [2026-05-27]
-Logfire showed AttributeError: property effective_section_order of Resume object has no setter on PATCH /api/v1/resumes/{25,36}/ at 15:10Z 2026-05-27. Cause: ResumeSerializer.attributes lists effective_section_order (read field) but read_only_attributes is empty, so BaseSerializer.parse_payload round-trips the value back to setattr. Frontend Ember Data PATCH includes every declared @attr on save, so favorite toggle (resume.save) trips it every time. Fix: add read_only_attributes = [effective_section_order] in api/job_hunting/api/serializers.py ResumeSerializer; new regression test test_patch_ignores_effective_section_order in api/job_hunting/tests/test_resume.py mimicking the real Ember Data PATCH payload. api 924/924 pass, ruff clean.
 *** TODO sweep_stuck_scoring cron — paired with model.isPending gate
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-27]

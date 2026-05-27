@@ -7537,3 +7537,15 @@ CLOSED: [2026-05-27]
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
 Plan node: notes.org Plans/PLAN ActivityPub prep + job-post adaptation/Phased rollout/Phase 2. API: _visible_jobpost_qs helper + POST mark-duplicate-of (cycle-protected) + POST unlink-duplicate (idempotent) + POST promote-canonical (atomic swap + sibling repoint) + GET duplicates list (visibility-filtered) + duplicate-of serializer relationship + 17 tests. Frontend: markDuplicateOf/unlinkDuplicate/promoteCanonical apiAction methods + duplicateOf belongsTo + Duplicate-handling panel on jp.edit (banner with Promote/Unlink + PowerSelect picker) + 4 QUnit tests. Reverse-list UI deferred to Phase 3.
+
+* SHIPPED Resume favorite PATCH 500 from effective_section_order property setter
+CLOSED: [2026-05-27]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-27 Wed 11:19
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Bug
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Logfire showed AttributeError: property effective_section_order of Resume object has no setter on PATCH /api/v1/resumes/{25,36}/ at 15:10Z 2026-05-27. Cause: ResumeSerializer.attributes lists effective_section_order (read field) but read_only_attributes is empty, so BaseSerializer.parse_payload round-trips the value back to setattr. Frontend Ember Data PATCH includes every declared @attr on save, so favorite toggle (resume.save) trips it every time. Fix: add read_only_attributes = [effective_section_order] in api/job_hunting/api/serializers.py ResumeSerializer; new regression test test_patch_ignores_effective_section_order in api/job_hunting/tests/test_resume.py mimicking the real Ember Data PATCH payload. api 924/924 pass, ruff clean.
