@@ -7525,3 +7525,15 @@ Follow-up: existing JP pairs (like 2882/2923) are not retroactively merged. Manu
 Removed --frontend-api-host=https://api.careercaddy.online from .github/workflows/deploy.yml Publish step. Next prod rebuild bakes API_HOST="" (same-origin default from frontend/Dockerfile). SPA will emit /api/v1/... to its own host; racknerd Caddy frontend label caddy.handle: /api/* routes those to the api container, preserving the /api prefix for Django.
 
 Pairs with racknerd ansible playbook change that added the handle label + careercaddy.online to ALLOWED_HOSTS default. Verified pre-ship via curl https://careercaddy.online/api/v1/healthcheck/ returning 200.
+
+* SHIPPED Phase 2 manual dup UI — mark, unlink, promote verb endpoints and jp.edit panel
+CLOSED: [2026-05-27]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-27 Wed 10:58
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Plan node: notes.org Plans/PLAN ActivityPub prep + job-post adaptation/Phased rollout/Phase 2. API: _visible_jobpost_qs helper + POST mark-duplicate-of (cycle-protected) + POST unlink-duplicate (idempotent) + POST promote-canonical (atomic swap + sibling repoint) + GET duplicates list (visibility-filtered) + duplicate-of serializer relationship + 17 tests. Frontend: markDuplicateOf/unlinkDuplicate/promoteCanonical apiAction methods + duplicateOf belongsTo + Duplicate-handling panel on jp.edit (banner with Promote/Unlink + PowerSelect picker) + 4 QUnit tests. Reverse-list UI deferred to Phase 3.
