@@ -9,14 +9,15 @@ Read: =(cc-todo-toc)=, =(cc-todo-children PATH)=, =(cc-todo-read PATH)=, =(cc-to
 Write: =(cc-todo-add-inbox T B)=, =(cc-todo-add-inbox-kind KIND T B)=, =(cc-todo-add PATH T B)=, =(cc-todo-set-state PATH STATE)=, =(cc-todo-move FROM TO)=, =(cc-todo-rebuild-toc)=.
 States: TODO STRT WAIT SHIPPED DONE.
 Sections: Inbox (capture; sub-headings Bug/Enhancement/Feature/Idea) → Backlog (queued) → Active (in flight) → Icebox (parked) → Archive.
+Workflow: agent dispatch + per-repo worktree protocol (see =* Workflow= section below).
 Tags (cross-cutting; mirror notes.org tags): scrape frontend api agents bugs infra chore chat dedupe extension mcp.
 Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (24)
+Inbox (25)
   Bug (7)
-  Enhancement (30)
+  Enhancement (31)
   Feature (22)
   Idea (0)
 Backlog [0/3]
@@ -24,6 +25,62 @@ Active [0/25]
 Icebox [0/6]
 Archive (1)
 #+end_example
+* Workflow                                           :IMPORTANT:
+Dispatch protocol for the four agents (=cc-orchestrator=, =cc-api=, =cc-frontend=, =cc-auto=). Mirrors =~/Sandbox/mailgun= pattern adapted to career_caddy's submodule layout. Claim a task on =main= before spawning a worktree so two dispatches cannot race for the same heading.
+
+** Agents and their repos
+| Agent              | Repo / worktree base                                       | Owns                                                                                                                              |
+|--------------------+------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------|
+| =cc-orchestrator= | parent =~/Network/syncthing/Projects/career_caddy=          | Dagger, Makefile, docker-compose, =.github/workflows/=, submodule pin bumps, =/ship= flow, parent =notes.org= + =todo.org= curation |
+| =cc-api=           | =api/= submodule                                            | Django + DRF + MCP servers, dedupe pipeline, migrations                                                                            |
+| =cc-frontend=      | =frontend/= submodule                                       | Ember 6.x + Tailwind/HyperUI + QUnit                                                                                                |
+| =cc-auto=          | =~/Network/syncthing/Projects/career_caddy_automation=      | Email triage, pipelines, span_validator, =caddy-web= copilot                                                                       |
+
+** Per-repo worktrees
+Each agent worktrees =off its own repo's main= — never off the parent for submodule work. Submodules push to their own GHCR remotes, not the parent's.
+
+| Repo target | Worktree root                                                                  | Branch convention   |
+|-------------+--------------------------------------------------------------------------------+---------------------|
+| parent      | =~/Network/syncthing/Projects/career_caddy-worktrees/task-NNN=                  | =agent/task-NNN=   |
+| api         | =~/Network/syncthing/Projects/career_caddy/api-worktrees/task-NNN=              | =agent/task-NNN=   |
+| frontend    | =~/Network/syncthing/Projects/career_caddy/frontend-worktrees/task-NNN=         | =agent/task-NNN=   |
+| cc-auto     | =~/Network/syncthing/Projects/career_caddy_automation-worktrees/task-NNN=       | =agent/task-NNN=   |
+
+Create: =git -C <repo> worktree add -b agent/task-NNN <worktree-root>/task-NNN main=
+Remove: =git -C <repo> worktree remove <worktree-root>/task-NNN && git -C <repo> branch -d agent/task-NNN=
+List:   =git -C <repo> worktree list=
+
+** Dispatch protocol
+1. =cc-orchestrator= reads =todo.org=, picks the next claimable heading (state =TODO= under Backlog or Active; Inbox items get triaged first via =cc-todo-move=).
+2. Edit the heading on =main=: flip =TODO= → =STRT=, set =:CLAIMED:= to today's date and =:OWNER:= to the agent id (=cc-api=, =cc-frontend=, =cc-auto=, or self for parent-scope work).
+3. Commit on =main= (parent or submodule, whichever repo owns the heading): =STRT: <task title>=. That commit is the dispatch lock.
+4. Invoke the =Agent= tool with =subagent_type: "<owner>"=, =isolation: "worktree"=, and a self-contained brief (peer-file paths, acceptance, lint/test commands).
+5. Sub-agent works in its worktree, runs file-level lint + focused tests, commits, returns worktree path + branch.
+6. =cc-orchestrator= reviews =git -C <repo> diff main..agent/task-NNN=, opens PR via =gh pr create -R overcast-software/career_caddy_<sub>=, merges with =--merge --delete-branch=false= (so the SHA the parent pin will reference stays reachable from main).
+7. **Submodule merge order is non-negotiable**: child first → parent pin bump last, always. Parent merge is its own PR after the child PR has landed.
+8. Cleanup: =git -C <repo> checkout main && pull --ff-only && branch -d agent/task-NNN && push origin --delete agent/task-NNN && worktree remove <root>/task-NNN=.
+
+** Task lifecycle
+| State    | Meaning                                                      | Set by                                              |
+|----------+--------------------------------------------------------------+-----------------------------------------------------|
+| =TODO=    | Ready to claim                                               | Captor (Inbox) or triager (Backlog)                |
+| =STRT=    | Claimed; an agent is working in a worktree                   | =cc-orchestrator= at dispatch time                 |
+| =WAIT=    | Blocked on external input (verification, contract, decision) | Worktree agent                                      |
+| =SHIPPED= | Merged to =main=; in prod / on pibu for test                 | Worktree agent on merge; confirmed by parent-pin bump |
+| =DONE=    | Verified in prod; ready for archive                          | =cc-orchestrator= post-=/ship=                     |
+| =KILL=    | Dropped from scope                                           | Anyone                                              |
+
+=/ship= Phase 5b archives DONE entries via =cc-todo-archive-*= helpers.
+
+** Race-avoidance
+The =STRT= commit on =main= is the lock. Before dispatching:
+- =git -C <repo> log --oneline -5 main= — look for a recent =STRT: <task>= line that matches.
+- =git -C <repo> worktree list= — confirm no active worktree on that branch.
+If a heading is already =STRT= and a worktree exists, do NOT dispatch a fresh agent — either resume the existing worktree or wait. Never two worktrees on the same heading.
+
+** When work crosses repo boundaries
+Some changes touch multiple repos (e.g. API contract change ripples into frontend and cc_auto). =cc-orchestrator= splits these into separate per-repo headings under one umbrella, dispatches them in dependency order, and only bumps the parent pin after all child PRs have merged. Each per-repo heading carries its own =:OWNER:= so the dispatch protocol's per-agent claim still applies.
+
 * Inbox                                              :IMPORTANT:
 - AW is a term referring to Agent Wizard for the agent that is focused on onboarding
 - Leave notes for the other agent using sub-headers
@@ -38,7 +95,24 @@ Archive (1)
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** TODO wellfound profile needs hydrated capture + url_rewrites canonical rule
+State: TODO
+Scope: ScrapeProfile id=6 (wellfound.com)
+
+Context: enhancer 2026-05-26 audit found the static HTML for /jobs/job_listing_slug=4250970-senior-security-engineer is a Cloudflare-gated Next.js shell (65 lines, 0 job-content keywords). Current selectors (title:h1, location:[data-testid*=location]) work only against post-hydration DOM captured by the running browser; success_rate=0.947 is real but fragile and tier0_miss_count is already 5/19.
+
+What needs doing:
+1. Capture a post-hydration HTML snapshot via the in-tree Camoufox/Playwright path (NOT plain fetch) for a wellfound detail URL — save under agents/fixtures/ so the next enhancer pass can read selectors directly.
+2. From that hydrated DOM, derive (a) a stable main-container selector that excludes Similar jobs / About the company / Featured jobs sidebars, (b) explicit company + description selectors so the profile no longer relies on raw h1+location alone, (c) confirm whether the apply CTA opens an in-app modal (internal) or links to an ATS (external) — this decides apply_resolver_config shape.
+3. Collect ≥2 sample URLs to confirm the canonical token. From this sample the slug is 4250970-senior-security-engineer (numeric prefix looks stable, prose tail looks SEO-flavored). Hypothesis: rewrite /jobs/job_listing_slug=NNNNNNN-* → /jobs/NNNNNNN. Do not encode until verified with a second URL.
+4. Consider a profile flag (requires_render or similar) for hosts whose static HTML is an SPA shell — the hardcoded Cloudflare Turnstile <head> script is a clean fingerprint.
+
+Files: agents/scrape_graph/, agents/browser/, ScrapeProfile id=6.
+Non-goal: do NOT pad extraction_hints — ZR incident showed >400-char hints silently bail prompt assembly; the durable fix for hallucinated salary/equity is the field-tolerant parser already speced in Inbox/job_post_extractor prompt anti-hallucination salary rules.
 ** TODO job_post_extractor prompt anti-hallucination salary rules
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-26]
+:END:
 Prompt-level fix so hourly to annual conversion is forbidden globally, not per-domain
 
 - Background: ziprecruiter ASK Consulting Engineer 2 scrapes 453/454 had the LLM convert $60-65/hr into salary_min=124800 salary_max=135200 unprompted. ScrapeProfile id=1 ziprecruiter.com now carries an extraction_hints override telling it not to, but the same trap exists for every domain whose profile lacks that hint. The system prompt asks for minimum annual salary in USD and treats unit-conversion as fair game.
@@ -694,6 +768,21 @@ https://www.hyperui.dev/components/application/tabs/#component-5-dark
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :END:
+*** TODO cc_auto inline-post mailto link from verified recruiter email
+Today: JP 2914 (Ruby on Rails Developer, source=email_direct, link=null) prompted a fix attempt at career_caddy_automation/scripts/inbox_triage.py _create_inline_job_post — parse the email out of InlinePostResult.recruiter_contact (which the LLM is prompted to emit as "Name <email>" or "Name <email> | phone"), build link=mailto:<email>, pass to the api. Reverted before commit: user's principle is "rather blank than wrong" — an unverified LLM-extracted email could send Apply traffic to a fabricated address, which is worse than the current blank-link state. Same family of concern as the parent's Inbox/job_post_extractor prompt anti-hallucination salary rules followup (drop bad fields per-field; don't trust LLM output for fields with real downstream impact).
+
+Blocker: independent verification surface. The orchestrator scripts/inbox_triage.py only has EmailMeta (id/subject/tags/thread_id) in scope — no From: header, no raw body. To verify the parsed mailto address against the source, the orchestrator needs either:
+- EmailSource protocol expansion: add async get_headers(email_id) -> dict or get_from_address(email_id) -> str | None to both NotmuchSource and ImapSource. Lightest touch; gives the orchestrator a verification seam without an MCP roundtrip.
+- Or wire an MCP read_email client into the orchestrator (heavier; the LLM agents already have one).
+
+Verification rule once the seam exists: parsed email address from recruiter_contact must equal the email's From: address (case-insensitive). If yes, set link=mailto:<address>. If no, leave link=null. Do NOT fall back to substring-in-body match — recruiters quote each other in threaded replies; that introduces a different kind of wrong.
+
+Files to touch when picked up:
+- src/email_source/__init__.py — add the new EmailSource Protocol method.
+- src/email_source/notmuch_source.py + src/email_source/imap_source.py — implement it.
+- scripts/inbox_triage.py — _create_inline_job_post fetches From: from the source, compares to parsed recruiter_contact email, sets link conditionally. Helper _mailto_from_contact ("<email>" regex) was already drafted in the reverted change; pull it from this todo's diff history if useful.
+
+Backfill: JP 2914 specifically can be patched via update_job_post once we know the recruiter's actual From: address. Not blocking; the post is usable via the description prefix that already names Lovely.yadav@excelonsolutions.com.
 *** TODO extension/ccsender-structured-prefill — pull css_selectors at submit time :extension:scrape:agents:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-26]
