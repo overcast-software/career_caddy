@@ -7561,3 +7561,15 @@ CLOSED: [2026-05-27]
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
 2026-05-27 hiring.cafe JP 2981: link stored as https://hiring.cafe/job/5fsbbgitg82ev1ar with trailing double-quote that the LLM URL extractor in career_caddy_automation pulled from the HTML attribute. Frontend URL-encoded the quote to %22 and hiring.cafe 404 since the slug literally included %22. Fix: new strip_url_trailing_junk helper in api/job_hunting/models/job_post_dedupe.py strips trailing HTML/markdown delimiter slop ([quote, apostrophe, less/greater, parens, brackets, braces, backtick, comma, whitespace]) from URLs. canonicalize_link calls it first, JobPost.save sanitizes link and apply_url before storage. Migration 0079 backfills existing rows. 9 new tests cover the helper, canonicalize_link integration, and save-time scrub.
+
+* SHIPPED Phase 3 dedupe-feedback audit — DuplicateAnnotation model and staff report
+CLOSED: [2026-05-27]
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-05-27 Wed 12:46
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+API: DuplicateAnnotation model (from_jp, to_jp, previous_to, action, set_by, set_at, signal_state) + migration 0080 + backfill 0081 + write annotations from mark/unlink/promote verbs + GET /api/v1/reports/dedupe-feedback/ with silent_marks/canonical_unlinks/promote_pairs buckets + 13 tests. Frontend: reports.dedupe-feedback route + template (3 sections, count chips, LinkTo per row) + reports.index staff card + 2 route unit tests. Plan node: notes.org Plans/PLAN ActivityPub prep + job-post adaptation/Phased rollout/Phase 3.
