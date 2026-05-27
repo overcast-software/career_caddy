@@ -768,6 +768,9 @@ https://www.hyperui.dev/components/application/tabs/#component-5-dark
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :END:
+*** SHIPPED Phase 2 manual dup UI — mark, unlink, promote verb endpoints and jp.edit panel
+CLOSED: [2026-05-27]
+Plan node: notes.org Plans/PLAN ActivityPub prep + job-post adaptation/Phased rollout/Phase 2. API: _visible_jobpost_qs helper + POST mark-duplicate-of (cycle-protected) + POST unlink-duplicate (idempotent) + POST promote-canonical (atomic swap + sibling repoint) + GET duplicates list (visibility-filtered) + duplicate-of serializer relationship + 17 tests. Frontend: markDuplicateOf/unlinkDuplicate/promoteCanonical apiAction methods + duplicateOf belongsTo + Duplicate-handling panel on jp.edit (banner with Promote/Unlink + PowerSelect picker) + 4 QUnit tests. Reverse-list UI deferred to Phase 3.
 *** TODO cc_auto inline-post mailto link from verified recruiter email
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-27]
