@@ -7511,3 +7511,17 @@ Concrete repro: JP 2882 (wellfound.com listing) had apply_url=pindrop.com/.../?g
 Shape: api/job_hunting/models/job_post_dedupe.py gains find_apply_url_matches(post, base_qs=None), a private-ish primitive returning a distinct queryset across both reciprocity directions. find_duplicate calls it as stage 2 (between canonical_link and fingerprint). api/job_hunting/api/serializers.py compute_duplicate_candidates replaces its inline apply_url filter with the same helper — single source of truth for the apply_hint signal.
 
 Follow-up: existing JP pairs (like 2882/2923) are not retroactively merged. Manual cleanup or a one-off backfill is a separate task.
+
+* SHIPPED deploy.yml — drop --frontend-api-host flag for same-origin prod
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-27]
+:ARCHIVE_TIME: 2026-05-27 Wed 09:02
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Removed --frontend-api-host=https://api.careercaddy.online from .github/workflows/deploy.yml Publish step. Next prod rebuild bakes API_HOST="" (same-origin default from frontend/Dockerfile). SPA will emit /api/v1/... to its own host; racknerd Caddy frontend label caddy.handle: /api/* routes those to the api container, preserving the /api prefix for Django.
+
+Pairs with racknerd ansible playbook change that added the handle label + careercaddy.online to ALLOWED_HOSTS default. Verified pre-ship via curl https://careercaddy.online/api/v1/healthcheck/ returning 200.
