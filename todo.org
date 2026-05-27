@@ -17,7 +17,7 @@ TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
 Inbox (25)
   Bug (7)
-  Enhancement (31)
+  Enhancement (17)
   Feature (22)
   Idea (0)
 Backlog [0/3]
@@ -844,29 +844,29 @@ Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md=.
 :LAST_TOUCHED: [2026-05-13]
 :END:
 remove the expand carrot on the sidebar
-*** TODO Profile-as-resource: split User/Profile JSON:API conformity :api:frontend:chore:
+*** TODO Profile-as-resource — split User and Profile JSON-API conformity :api:frontend:chore:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-08]
 :END:
 Currently Profile fields (phone, linkedin, github, address, links, auto_score) are flattened into the User serializer's attributes and PATCHed via /api/v1/users/:id/. Backend has a Profile model; wire and Ember Data both treat them as one merged blob.
 
-*** Decided shape
+**** Decided shape
 Option A: Profile and Onboarding are *peer* resources, not nested.
 - /api/v1/profile/ — GET / PATCH the authenticated user's profile (singleton). JSON:API shape with type=profile, id=<user_id>.
 - /api/v1/onboarding/ — already a peer resource (shipped Phase 3a).
 - User keeps identity-only fields (first_name, last_name, username, email, password, is_staff).
 - ProfileModel on the frontend with belongsTo user (or matching the user's id directly as a singleton).
 
-*** Why peers, not nested
+**** Why peers, not nested
 Profile holds personal contact stuff; Onboarding is a wizard-state machine. Treating them as peers means either can evolve without cascading. Nesting onboarding inside profile would force two-step fetches and tie the wizard's lifecycle to profile mutations.
 
-*** Scope
+**** Scope
 - API: split user serializer; new ProfileViewSet/endpoint; update PATCH /users/:id/ to reject profile fields (or keep permissive for compat).
 - Frontend: new app/models/profile.js, new app/adapters/profile.js (singleton), update settings/profile/edit to use store.queryRecord("profile", {}).
 - Migration: every template that reads user.linkedin / user.phone / etc. → user.profile.linkedin.
 - Tests: profile-edit, settings page, user serializer.
 
-*** Punt
+**** Punt
 Deferred — touches every settings page, dozens of templates, the user serializer, and a chunk of tests. Not blocking AW or any current customer flow. Onboarding-as-resource (Phase 3a) ships independently because Option A keeps them decoupled.
 
 Tag: =:api:= =:frontend:= =:chore:=.
@@ -881,7 +881,7 @@ Related: notes.org Plans/ccsender as the gateway/Phase 3a — ships onboarding-a
 
 The =cc-extension-present= postMessage today fires from a content script regardless of API key (it should — the script has no key dependency). Verify before doing more: this entry was filed assuming the present-signal was auth-gated, which may have been wrong.
 
-*** Fix (if still needed after verification)
+**** Fix (if still needed after verification)
 Two postMessage signals from the extension content script:
 - =cc-extension-present= — fires on *every* page load. Confirms install.
 - =cc-extension-authed= — fires once the extension has a valid =jh_*= key in =chrome.storage.local=. Confirms capture-ready.
@@ -891,52 +891,10 @@ The SPA's application.js =_handleExtensionPresent= handler already mirrors the p
 - Present, not authed → "Click its icon — it'll sign in using your Career Caddy session."
 - Both → "Click the extension icon on any job posting to capture it."
 
-*** Related
+**** Related
 Paired with =Extension SSO via SPA localStorage — no login dialog= (now SHIPPED): SSO makes the not-authed state self-healing on first popup-open, so this two-signal split is no longer urgent. Likely Icebox unless real users complain.
 
 Tag: =:extension:= =:auth:=.
-
-*** Reproduce
-- Sign in as a staff user, expand the =Documentation= section in the sidebar.
-- Sidebar exceeds viewport height; scroll down.
-- Visible: Admin / Settings / Quick Copy / theme switcher render against the page background instead of the sidebar's surface color.
-
-*** Likely cause
-=app/components/sidebar.hbs= sets the sidebar's =bg-white= / dark-mode equivalent on the outer =<aside>= but not on the inner scrollable container. When the inner div scrolls beyond the aside's painted area, the missing fill is visible.
-
-*** Fix sketch
-Either move the bg color onto the scrolling container, or make the aside =h-screen overflow-y-auto= so its background extends the full scroll length. Verify against both light and dark themes (the existing =theme= service toggles classes on the aside).
-
-Tag: =:frontend:= =:bug:=.
-
-*** Flow
-1. Extension content script runs on careercaddy.online.
-2. Reads =ember_simple_auth-session= from =window.localStorage=. If absent, link the user to =careercaddy.online/login= from the popup — *no in-extension login dialog*.
-3. Extracts =access_token= (and =refresh_token= as a fallback for expiry).
-4. POSTs =/api/v1/api-keys/= with =Authorization: Bearer <access_token>= and =name="ccsender-auto-<date>"=. Returns the long-lived =jh_*= key.
-5. Extension stashes the key in =chrome.storage.local=. Discards the JWT immediately.
-
-*** Why this works
-- Same trust boundary the user already accepted by installing the extension with host permissions on careercaddy.online — analogous to a password manager reading a login form.
-- =/api/v1/api-keys/= already accepts JWT auth and lets the user mint keys for themselves; no new endpoint.
-- The "ccsender-auto-<date>" naming convention keeps auto-issued keys identifiable in the API-keys admin so they can be revoked separately from manual ones.
-
-*** Scope
-- *Extension repo* (=overcast-software/career_caddy_chrome=, also Firefox once AMO ships): content script reads localStorage, mints key, removes the popup login form for the happy path. Keep manual login as a fallback when the user isn't logged in to the SPA.
-- *No SPA changes.* The SPA is a dumb participant — its session lives in localStorage, the extension reads it.
-- *Privacy policy update*: one sentence — "the extension reads your active SPA session to issue itself a long-lived API key, then never reads it again." Honest disclosure, low policy surface.
-
-*** Edge cases
-- *Not logged in*: extension popup links to careercaddy.online/login. User logs in, extension's content script picks up the new session on the next navigation.
-- *JWT expired*: use the stored refresh_token to refresh, then mint. Or just nudge the user to navigate to any SPA page (ESA refreshes on its own).
-- *Multi-account*: ESA points at one user at a time — that's the active account the extension picks up. Matches user expectation.
-- *ESA storage adapter swap*: =ember_simple_auth-session= is the default key; if anyone changes the storage adapter the extension's read breaks silently. Treat missing key as "not logged in" and prompt manually.
-
-*** Why not now
-This is an extension-side change, not a wizard skeleton change. Phase 3b.1 ships the wizard against the existing extension login flow; this enhancement makes the wizard's "install the extension" step genuinely one-click on a logged-in tab. Land Phase 3b first; tackle this as a follow-up under =extension/auth=.
-
-Tag: =:extension:= =:auth:=.
-Related: notes.org Plans/ccsender as the gateway/Phase 3 — Post-install AW handoff. Improves the install→AW handoff by removing the second-login friction.
 
 *** TODO DOCX export — archetype-specific resume templates
 :PROPERTIES:
