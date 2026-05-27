@@ -7493,3 +7493,21 @@ CLOSED: [2026-05-20 Wed 12:07]
 
 *Shipped*: jp.edit now exposes =canonical_link= read-only (styled div, never an input) and =apply_url= editable with a tracked-intermediary input so fast typing isn't clobbered. Backend gate on
 =JobPost.update/partial_update= relaxed from owner-only to =owner OR staff= (matches =destroy()=). The model save()'s "set once" guard for =canonical_link= stayed put — keeps the email-stub regression test passing — and the viewset clears =canonical_link= when a PATCH changes =link=, so the readonly display refreshes. Five new api tests (TestJobPostEditApplyUrlCanonical) + four new frontend integration tests. =api 896/0=, =frontend 332/0=, ruff + prettier clean.
+
+* SHIPPED find_duplicate catches cross-platform apply_url reciprocity
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-26]
+:ARCHIVE_TIME: 2026-05-26 Tue 17:33
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Promote the apply_url-reciprocity signal from compute_duplicate_candidates (presentation only) into find_duplicate (decision-time). Cross-platform duplicates where one JP's apply_url points at another JP's link now collapse at create time instead of being only surfaced as a post-create hint banner.
+
+Concrete repro: JP 2882 (wellfound.com listing) had apply_url=pindrop.com/.../?gh_jid=7943713. ccsender (extension) later POSTed JP 2923 with link=pindrop.com/.../?gh_jid=7943713 — byte-identical to 2882.apply_url — and 2923 was created as new because find_duplicate only checked canonical_link (different domains) and content_fingerprint (locations differed: "Remote only • United States" vs "United States").
+
+Shape: api/job_hunting/models/job_post_dedupe.py gains find_apply_url_matches(post, base_qs=None), a private-ish primitive returning a distinct queryset across both reciprocity directions. find_duplicate calls it as stage 2 (between canonical_link and fingerprint). api/job_hunting/api/serializers.py compute_duplicate_candidates replaces its inline apply_url filter with the same helper — single source of truth for the apply_hint signal.
+
+Follow-up: existing JP pairs (like 2882/2923) are not retroactively merged. Manual cleanup or a one-off backfill is a separate task.
