@@ -768,7 +768,17 @@ https://www.hyperui.dev/components/application/tabs/#component-5-dark
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :END:
+*** SHIPPED deploy.yml — drop --frontend-api-host flag for same-origin prod
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-27]
+:END:
+Removed --frontend-api-host=https://api.careercaddy.online from .github/workflows/deploy.yml Publish step. Next prod rebuild bakes API_HOST="" (same-origin default from frontend/Dockerfile). SPA will emit /api/v1/... to its own host; racknerd Caddy frontend label caddy.handle: /api/* routes those to the api container, preserving the /api prefix for Django.
+
+Pairs with racknerd ansible playbook change that added the handle label + careercaddy.online to ALLOWED_HOSTS default. Verified pre-ship via curl https://careercaddy.online/api/v1/healthcheck/ returning 200.
 *** TODO cc_auto inline-post mailto link from verified recruiter email
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-27]
+:END:
 Today: JP 2914 (Ruby on Rails Developer, source=email_direct, link=null) prompted a fix attempt at career_caddy_automation/scripts/inbox_triage.py _create_inline_job_post — parse the email out of InlinePostResult.recruiter_contact (which the LLM is prompted to emit as "Name <email>" or "Name <email> | phone"), build link=mailto:<email>, pass to the api. Reverted before commit: user's principle is "rather blank than wrong" — an unverified LLM-extracted email could send Apply traffic to a fabricated address, which is worse than the current blank-link state. Same family of concern as the parent's Inbox/job_post_extractor prompt anti-hallucination salary rules followup (drop bad fields per-field; don't trust LLM output for fields with real downstream impact).
 
 Blocker: independent verification surface. The orchestrator scripts/inbox_triage.py only has EmailMeta (id/subject/tags/thread_id) in scope — no From: header, no raw body. To verify the parsed mailto address against the source, the orchestrator needs either:
