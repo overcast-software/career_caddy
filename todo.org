@@ -1039,9 +1039,6 @@ controllers/job-posts/show/questions.js were deleted before ship.
 :END:
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
-*** SHIPPED URL trailing junk in JobPost.link from LLM extractor breaks apply hrefs
-CLOSED: [2026-05-27]
-2026-05-27 hiring.cafe JP 2981: link stored as https://hiring.cafe/job/5fsbbgitg82ev1ar with trailing double-quote that the LLM URL extractor in career_caddy_automation pulled from the HTML attribute. Frontend URL-encoded the quote to %22 and hiring.cafe 404 since the slug literally included %22. Fix: new strip_url_trailing_junk helper in api/job_hunting/models/job_post_dedupe.py strips trailing HTML/markdown delimiter slop ([quote, apostrophe, less/greater, parens, brackets, braces, backtick, comma, whitespace]) from URLs. canonicalize_link calls it first, JobPost.save sanitizes link and apply_url before storage. Migration 0079 backfills existing rows. 9 new tests cover the helper, canonicalize_link integration, and save-time scrub.
 *** TODO sweep_stuck_scoring cron — paired with model.isPending gate
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-27]
