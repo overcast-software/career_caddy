@@ -7573,3 +7573,91 @@ CLOSED: [2026-05-27]
 :ARCHIVE_ITAGS: IMPORTANT
 :END:
 API: DuplicateAnnotation model (from_jp, to_jp, previous_to, action, set_by, set_at, signal_state) + migration 0080 + backfill 0081 + write annotations from mark/unlink/promote verbs + GET /api/v1/reports/dedupe-feedback/ with silent_marks/canonical_unlinks/promote_pairs buckets + 13 tests. Frontend: reports.dedupe-feedback route + template (3 sections, count chips, LinkTo per row) + reports.index staff card + 2 route unit tests. Plan node: notes.org Plans/PLAN ActivityPub prep + job-post adaptation/Phased rollout/Phase 3.
+
+* TODO ActivityPub Phase 4 — audience + source_instance + as-object adapter
+:PROPERTIES:
+:CREATED:       [2026-05-28]
+:CLOSED:        [2026-05-28]
+:LAST_TOUCHED:  [2026-05-28]
+:ARCHIVE_TIME: 2026-05-28 Thu 09:47
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: TODO
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Scope shipped*
+Phase 4 of Plans/ActivityPub prep + job-post adaptation. Content-shape
+foundation for ActivityPub federation; no actor/outbox/follow protocol yet
+(that is Phase 5).
+
+*api branch* =feature/activitypub-phase-4= (commits =8c9d584=, =06a2864=)
+- =JobPost.audience= field — AS2 audience URI list, defaults to
+  =[AS2_PUBLIC]=. =is_public()= helper + JSON:API round-trip. Migration
+  =0083_jobpost_audience.py=.
+- =JobPost.source_instance= field — origin instance hostname, defaults
+  to =settings.CAREER_CADDY_INSTANCE= (=localhost= local, env var in
+  prod). Read-only via serializer. Migration =0084_jobpost_source_instance.py=.
+- New =settings.CAREER_CADDY_INSTANCE= env-driven setting.
+- =GET /api/v1/job-posts/:id/as-object/= action — returns AS2 JSON-LD
+  Note for the JobPost. Visibility-scoped via =_visible_jobpost_qs=.
+  Backing adapter in =job_hunting/lib/as_object.py= so non-HTTP callers
+  (Phase 5 federation worker) can reuse the shape.
+- Visibility audit confirmed via test: federated rows
+  (=source_instance != local=) invisible to non-staff users; a
+  =JobPostDiscovery= promotes them to visible (Discovery is the
+  subscription primitive today).
+- 44 new + updated tests in =test_job_post= + new
+  =test_job_post_as_object.py=, all green via =make ci=.
+
+*frontend branch* =feature/jobpost-audience-ui= (commit =ed0409f=)
+- Visibility selector in jp.edit form backed by =JobPost.audience=.
+- =isPublic= getter mirroring the api =is_public()= helper.
+- Private badge on jp.show when audience does not contain AS2 Public.
+- New QUnit coverage for the form interaction.
+
+*Not shipped (Phase 5 follow-up)*
+Actor model, WebFinger, Outbox, Inbox, Follow handling, HTTP
+Signatures, Create-activity dispatch. Subscribable-by-Mastodon requires
+all of those — what shipped is the content shape only.
+
+*Local verification*
+=make ci= → api 977 tests OK, frontend 342/342 pass, ruff + prettier clean.
+
+* SHIPPED canonicalize_link: normalize trailing slash on path-only URLs
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-28]
+:ARCHIVE_TIME: 2026-05-28 Thu 09:47
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*State*: TODO
+*Tags*: :dedupe:api:bug:
+
+*Symptom*
+JP 715 (canonical_link https://www.linkedin.com/jobs/view/4335567500/) and JP 2963 (canonical_link https://www.linkedin.com/jobs/view/4335567500) are the same LinkedIn posting (id 4335567500), survived url_rewrites stripping /comm/, but were never recognized as duplicates because their canonical_links differ by exactly one trailing slash.
+
+*Root cause*
+api/job_hunting/services/url_canonicalize.canonicalize_link does not normalize trailing slashes on the path. After url_rewrites collapses /comm/jobs/view/ -> /jobs/view/, the suffix of the original link (slash vs no-slash) is preserved verbatim. find_duplicate stage 1 does exact canonical_link match (no normalization on read side either), so /jobs/view/4335567500/ != /jobs/view/4335567500.
+
+*Why dedupe still missed it*
+- canonical_link stage: trailing-slash mismatch (this bug).
+- apply_url stage: both rows have apply_url=null; nothing to match.
+- fingerprint stage: titles differ (Staff IAM Engineer vs LinkedIn Login, Sign in | LinkedIn -- 2963 is a stub captured from the LinkedIn account-chooser page). Location differs (Seattle, WA vs null). Almost certainly different company_id too. So fingerprint will never match these two until one is rescraped.
+- Even after a successful rescrape of 2963, the fingerprint stage would only fire if both rows ended up with the same company row -- the trailing-slash bug is the only signal that could match TODAY.
+
+*Proposed fix*
+In api/job_hunting/services/url_canonicalize.py (or wherever canonicalize_link lives), after url_rewrites/tracking-param strip, rstrip a single trailing / from path. Edge case: root URL https://host/ should remain https://host/. So: if urlparse(u).path in {, /} leave alone; else rstrip(/) from path. Apply on both write side (JobPost.save -> canonicalize_link) AND read side (find_duplicate stage 1 lookup) so already-stored rows still match incoming writes.
+
+Also need a one-off backfill / data migration that recomputes canonical_link for every existing JobPost using the now-fixed canonicalize_link. The trailing-junk migration (0079) already established the pattern.
+
+*Test that would have caught it*
+find_duplicate(JobPost(link="https://www.linkedin.com/comm/jobs/view/4335567500")) given an existing row with link="https://www.linkedin.com/comm/jobs/view/4335567500/?trackingId=X" should return that row. Today: returns None.
+
+*Files*
+- api/job_hunting/services/url_canonicalize.py (canonicalize_link)
+- api/job_hunting/models/job_post_dedupe.py (find_duplicate stage 1)
+- new migration alongside 0079_strip_url_trailing_junk
