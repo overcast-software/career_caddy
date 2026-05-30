@@ -77,6 +77,52 @@ services:
       retries: 3
     mem_limit: 512m
 
+  # ── Worker ──────────────────────────────────────────────────────────────
+  # django-q2 task worker — Phase 1 of Plans/Job-queue integration. Shares
+  # the api image (same SHA, same code, same env) so a tagged deploy moves
+  # api + worker together. No HTTP surface; consumes django_q_ormq off the
+  # same Postgres DB. No behavior change in Phase 1 — only the
+  # `health_check` task is wired in. Subsequent phases migrate the 9
+  # daemon-thread spawn points + 2 polling daemons (hold-poller
+  # atomic-deleted in Phase 4).
+  worker:
+    image: ghcr.io/overcast-software/career_caddy_api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    entrypoint: ""
+    command: python manage.py qcluster
+    environment:
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@db:5432/${DB_NAME:-job_hunting}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-api.careercaddy.online,localhost,127.0.0.1,worker}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SCRAPING_ENABLED: ${SCRAPING_ENABLED:-False}
+      SA_SCHEMA_ON_POST_MIGRATE: "False"  # api runs migrations; worker just consumes
+      USE_MCP_BROWSER_AGENT: "False"
+      CHAT_SERVICE_URL: "http://chat:8000"
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:?EMAIL_HOST is required}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:?EMAIL_HOST_USER is required}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:?EMAIL_HOST_PASSWORD is required}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-noreply@careercaddy.online}
+      FRONTEND_URL: ${FRONTEND_URL:-https://careercaddy.online}
+      SCREENSHOT_DIR: /app/screenshots
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      CAREER_CADDY_INSTANCE: ${CAREER_CADDY_INSTANCE:-careercaddy.online}
+    volumes:
+      - screenshots:/app/screenshots
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        # api owns the migration run on boot; worker waits for it to be
+        # at least started before trying to qcluster against the queue
+        # tables.
+        condition: service_started
+    mem_limit: 384m
+
   frontend:
     image: ghcr.io/overcast-software/career-caddy-frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
