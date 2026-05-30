@@ -1,5 +1,5 @@
 #+TITLE: career_caddy todo board
-#+TODO: TODO(t) STRT(s) PLAN(p) WAIT(w) LOOP(l) IDEA (i)| KILL(k) SHIPPED(P) DONE(d)
+#+TODO: TODO(t) STRT(s) PLAN(p) WAIT(w) LOOP(l) IDEA (i)| KILL(k) SHIPPED(P) DONE(d) [?](q) [x](a)
 #+TAGS: scrape(s) frontend(f) api(a) agents(g) bugs(b) infra(i) chore(C) chat(c) dedupe(d) extension(e) mcp(m)
 #+startup: overview
 
@@ -15,10 +15,10 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (25)
-  Bug (7)
+Inbox (26)
+  Bug (8)
   Enhancement (18)
-  Feature (23)
+  Feature (35)
   Idea (0)
 Backlog [0/3]
 Active [0/25]
@@ -95,9 +95,17 @@ Some changes touch multiple repos (e.g. API contract change ripples into fronten
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** TODO Surface staff-only inspect_scrape_html tools to scrape-profile-enhancer
+**** TODO Surface staff-only inspect_scrape_html / find_selectors_for_text / test_url_rewrite to scrape-profile-enhancer agent :scrape:mcp:obs:
+- Three new staff-only MCP tools landed today on mcp.careercaddy.online: =inspect_scrape_html(scrape_id, selector?, mode?)=, =find_selectors_for_text(scrape_id, text, ...)=, =test_url_rewrite(url, hostname?)=. They are documented as gated by =StaffOnlyToolFilter= on the public MCP server.
+- The scrape-profile-enhancer subagent (this one) is running as user id 2 (Doug, staff) per get_current_user, but the deferred-tool listing at session start did NOT include these three. =ToolSearch query="inspect_scrape_html"= and the other names returned "No matching deferred tools found".
+- Cost: I had to fall back to raw =get_scrapes(id=...)= → YAML parse → regex-grep on the html field, which is slow and brittle. The whole point of these tools is to collapse exactly that loop.
+- Hypothesis: the StaffOnlyToolFilter may key off something other than user.is_staff (e.g. the API-Key principal type used by MCP-over-HTTP). Or the agent's MCP client connects with a different identity than the human user.
+- Action: confirm whether the subagent's MCP client request is being filtered out, and if so, surface a staff principal to the agent. File paths to start: =agents/mcp_servers/public_server.py= (filter definition), the toolset registration where these three tools are added, and =frontend/CLAUDE.md=-equivalent agent-system-prompt that instructs the subagent it should "use the tools if visible".
+- Acceptance: a fresh scrape-profile-enhancer session sees the three tool names in its deferred-tool list and can ToolSearch +load them without ambiguity.
 ** TODO wellfound profile needs hydrated capture + url_rewrites canonical rule
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-27]
+:LAST_TOUCHED: [2026-05-28]
 :END:
 State: TODO
 Scope: ScrapeProfile id=6 (wellfound.com)
@@ -247,7 +255,512 @@ Two real candidates (=screenshot.js= borderline, =scrape-status.js= lean-no), on
 :LAST_TOUCHED: [2026-05-05]
 :END:
 ** Feature
+*** TODO Job-queue Phase 8 — Optional SSE push for long-running jobs
+:PROPERTIES:
+:CREATED: [2026-05-30]
+:CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
+:DEPENDS_ON: Phase 7 + observed user pain with polling cap
+:END:
+Canonical plan: =notes.org/Plans/Job-queue integration — django-q2 phased rollout=
+sub-phase Phase 8. OPT-IN. Only ship if Phases 2-7 surface real user
+pain with the 62s polling cap.
+
+*Scope*
+- =GET /api/v1/jobs/<task_id>/events/= SSE stream emits =completed= /
+  =failed= on task terminal transition.
+- Auth: short-lived signed token from =POST /events/grant/=. NOT
+  JWT-in-query (avoids token leaking to access logs).
+- Per-user filter at the view: only emit events for tasks the
+  requesting user can see.
+- Caddy reverse-proxy: disable buffering on this route (file a
+  =:cc:= ask in dc/todo.org for the caddy config change).
+- Frontend: =services/pollable.js= grows an =sse= mode. When in =sse=
+  mode, =EventSource= subscribes; falls back to polling on disconnect
+  or 4xx. Behind a feature flag for one release cycle.
+
+*Pre-conditions*
+- Phase 7 has shipped.
+- User pain with the polling cap has been observed (specific routes
+  documented in todo).
+*** TODO Job-queue Phase 7 — ActivityPub 5d dispatch wired on the queue
+:PROPERTIES:
+:CREATED: [2026-05-30]
+:CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
+:DEPENDS_ON: Phase 5 + ActivityPub Phase 5c shipped
+:LAST_TOUCHED: [2026-05-30]
+:END:
+Canonical plan: =notes.org/Plans/Job-queue integration — django-q2 phased rollout=
+sub-phase Phase 7. Pairs with =Plans/ActivityPub Phase 5 — federation proper=
+sub-phase 5d.
+
+*Scope*
+- New task =async_task('job_hunting.lib.tasks.dispatch_federation_activity', activity_id)=.
+- Retry sequence: 1m / 5m / 30m / 4h / 24h / 7d. Implementation: NOT
+  django-q2's flat-count =retry= kwarg — use re-enqueue with =delay==
+  to step through the sequence. Persist the attempt number on
+  =FederationActivity= so the task knows which delay to use next.
+- Dead-letter after the 7d attempt: =FederationActivity.status=
+  becomes =dead-lettered=; logfire alert on rate spike.
+- =sharedInbox= optimization: deliver once per peer instance when the
+  followers share a shared inbox.
+- Update / Delete activities for JP edits / deletions follow the same
+  retry pattern.
+
+*Pre-conditions*
+- ActivityPub Phase 5c has shipped (=FederationFollower= table
+  populated; HTTP Signatures outbound signing primitive available).
+
+*Test plan*
+- Outbound dispatch to a test Mastodon instance (or Pleroma docker
+  service for CI) shows the Create activity arrives signed.
+- Failure injection: target inbox returns 503 → retry with configured
+  backoff.
+- Permanent failure: target inbox returns 404 → after 6 attempts,
+  =FederationActivity= row marked =dead-lettered=.
+*** TODO Job-queue Phase 6 — Operational surface: heartbeat alert, failed-task UI, retention
+:PROPERTIES:
+:CREATED: [2026-05-30]
+:CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
+:DEPENDS_ON: Phase 1
+:NOTE: Should ship BEFORE Phase 4 so the failed-task surface exists for the atomic hold-poller cutover.
+:LAST_TOUCHED: [2026-05-30]
+:END:
+Canonical plan: =notes.org/Plans/Job-queue integration — django-q2 phased rollout=
+sub-phase Phase 6. Order-of-merge note: although Phase 6 is numbered
+after Phase 5, it should LAND BEFORE Phase 4 so the failed-task
+visibility exists at hold-poller cutover time. The phase number reflects
+scope, not order.
+
+*Scope*
+- New =WorkerHeartbeat= Django model (=worker_id=, =heartbeat_at=).
+  Worker writes a row every 30s via a periodic task or a custom
+  =worker= hook.
+- Logfire alert: query rows older than 2 minutes; fire on stale.
+- Staff-only failed-task surface: expose =/admin/django_q/= via
+  Django admin with =is_staff= gate. Built-in Task / Schedule /
+  Failure / OrmQ tables show with CRUD. Filter by task name.
+- Retention task: =delete_successful_tasks_older_than_30d= scheduled
+  daily. Failed tasks kept indefinitely (no auto-archive).
+
+*Test plan*
+- Kill the worker process; logfire alert fires within 2min.
+- Visit =/admin/django_q/Failure/= as a staff user; sees recent
+  failures.
+- 30d-old successful task rows disappear after the retention task
+  runs.
+*** TODO Job-queue Phase 5 — parse_scrape migration + score_poller deprecation
+:PROPERTIES:
+:CREATED: [2026-05-30]
+:CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
+:DEPENDS_ON: Phase 4
+:LAST_TOUCHED: [2026-05-30]
+:END:
+Canonical plan: =notes.org/Plans/Job-queue integration — django-q2 phased rollout=
+sub-phase Phase 5. The heaviest task migrates last so the queue infra
+is battle-tested.
+
+*Scope*
+- =api/job_hunting/lib/job_post_extractor.py= =parse_scrape= daemon
+  thread (~line 436) becomes
+  =async_task('job_hunting.lib.tasks.parse_scrape_job', scrape_id, retry=0, timeout=600)=.
+  Override timeout to 600s because tier-1/2/3 fallback can take longer
+  than the default 300s.
+- =agents/pollers/score_poller.py= replaced by django-q2 =schedule()=
+  registering =score_pending_posts= at the same cadence (or per
+  =[?]= score_poller cadence resolution).
+- Preserve =bounded_content= handling per
+  =Plans/Bounded content extraction — ScrapeProfile.content_containers=
+  if that work has landed by Phase 5 time. If not, leave the existing
+  pipeline shape and revisit when bounded ships.
+
+*Test plan*
+- Manual: =PATCH /scrapes/<id>= with new =job_content= still triggers
+  the extractor via the queue (not a daemon thread). Tier-1 LLM
+  success path verified; tier-2 fallback verified; tier-3 fallback
+  verified.
+- score_poller schedule fires at the configured cadence; processes the
+  same posts the poller would have.
+
+After this phase: final daemon thread and final poller both gone.
+*** TODO Job-queue Phase 4 — Scrape dispatch + hold-poller atomic deprecation
+:PROPERTIES:
+:CREATED: [2026-05-30]
+:CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
+:DEPENDS_ON: Phase 3
+:LAST_TOUCHED: [2026-05-30]
+:END:
+Canonical plan: =notes.org/Plans/Job-queue integration — django-q2 phased rollout=
+sub-phase Phase 4. THIS IS THE LARGEST SINGLE MIGRATION. Read the plan
+node's Hold-poller deprecation section carefully — it is atomic, not
+parallel.
+
+*Scope*
+- =POST /api/v1/scrapes/= stops creating =status=hold= rows. Instead
+  creates =status=pending= and enqueues
+  =async_task('job_hunting.lib.tasks.scrape_job', scrape_id)=.
+- Three =threading.Thread= spawn points in
+  =api/job_hunting/lib/scraper.py= become =async_task()= calls.
+- =agents/pollers/hold_poller.py= deleted in the same PR. omarchy
+  tmuxinator entry for hold-poller is removed.
+- The scrape-graph code that runs INSIDE the worker stays in
+  =agents/scrape_graph/= — only the dispatch layer changes.
+- =Scrape.status='hold'= becomes a no-longer-written enum value;
+  keep it in the schema for historical rows.
+
+*Test plan*
+- Manual end-to-end: =POST /scrapes/= creates a row that reaches
+  =completed= via the worker, with =agents/pollers/hold_poller.py=
+  not running anywhere. Logfire trace shows worker execution.
+- Confirm pibu cutover is now strictly simpler: pibu just runs the
+  worker container (=docker compose up worker=).
+
+*Critical*: this is atomic. No parallel/shadow mode with hold-poller.
+The plan node justifies why. Failure mode: scrape_job tasks failing
+shows up in the Phase 6 failed-task surface (Phase 6 must ship before
+Phase 4 or basic visibility is missing — see plan).
+
+*Out of scope*: parse_scrape (Phase 5), score_poller (Phase 5).
+*** TODO Job-queue Phase 3 — Cover Letter, Answer, Question, Resume migrations
+:PROPERTIES:
+:CREATED: [2026-05-30]
+:CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
+:DEPENDS_ON: Phase 2
+:LAST_TOUCHED: [2026-05-30]
+:END:
+Canonical plan: =notes.org/Plans/Job-queue integration — django-q2 phased rollout=
+sub-phase Phase 3.
+
+*Scope*: replace =threading.Thread= in:
+- =api/job_hunting/api/views/cover_letters.py= →
+  =async_task('job_hunting.lib.tasks.cover_letter_job', cover_letter_id)=
+- =api/job_hunting/api/views/answers.py= →
+  =async_task('job_hunting.lib.tasks.answer_job', answer_id)=
+- =api/job_hunting/api/views/questions.py= →
+  =async_task('job_hunting.lib.tasks.question_job', question_id)=
+- =api/job_hunting/api/views/resumes.py= →
+  =async_task('job_hunting.lib.tasks.resume_parse_job', resume_id)=
+
+Resume upload is the first migration that exercises worker volume
+access (parsing reads uploaded files). Verify the worker container has
+the same media volume mount as the api container.
+
+*Test plan*: same shape as Phase 2 for each work type. Resume upload
+end-to-end: file → parsed sections written → row =completed=. All four
+LLM-shaped daemon threads gone after this phase.
+
+*Out of scope*: scrape dispatch + hold-poller (Phase 4).
+*** TODO Job-queue Phase 2 — Score + Summary migration
+:PROPERTIES:
+:CREATED: [2026-05-30]
+:CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
+:DEPENDS_ON: Phase 1
+:LAST_TOUCHED: [2026-05-30]
+:END:
+Canonical plan: =notes.org/Plans/Job-queue integration — django-q2 phased rollout=
+sub-phase Phase 2. Read before starting.
+
+*Owning agent*: cc-api (replace daemon threads with =async_task()=) +
+cc-frontend (bump =maxPolls= on Score / Summary routes).
+
+*Scope*
+- Replace =threading.Thread= in =api/job_hunting/api/views/scores.py=
+  with =async_task('job_hunting.lib.tasks.score_job', score_id)=. New
+  task in =tasks.py= fetches Score by pk, runs the existing service
+  function, updates row.
+- Same for =api/job_hunting/api/views/summaries.py= →
+  =async_task('job_hunting.lib.tasks.summary_job', summary_id)=.
+- =api/job_hunting/api/views/scores.py:_auto_score_job_post= also goes
+  through the queue (used by JobPost creation auto-scoring).
+- Frontend: add a =longRunning: true= flag option to
+  =frontend/app/services/pollable.js= =poll= and =pollIfPending=
+  methods. When set, =poller.js= uses a linear or longer-cadence
+  backoff instead of the 32s exponential cap. Apply to
+  =controllers/job-posts/show/scores.js= and
+  =controllers/job-posts/show/summaries.js=.
+
+*Test plan*
+- Existing api tests pass.
+- Manual: create a score → row transitions =pending= → =completed= via
+  the worker (not via daemon thread). Logfire trace confirms worker
+  execution.
+- Same for summary.
+- Frontend: score creation on a slow LLM still updates the row within
+  the new cap without 'may still be processing' fallback message.
+
+*Out of scope*
+- Cover letter / answer / question / resume (Phase 3).
+- Scrape dispatch (Phase 4).
+*** TODO ActivityPub Phase 5e — Federated JobPost ingestion + dedup
+:PROPERTIES:
+:CREATED: [2026-05-29]
+:DEPENDS_ON: Phase 5d
+:LAST_TOUCHED: [2026-05-30]
+:END:
+*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
+sub-phase 5e. Placeholder; unblock after 5d.
+
+*Summary*: when a =Create(Note)= activity arrives in our inbox, construct
+a candidate JobPost (source_instance from attributedTo's host). Run
+=find_duplicate= via canonical_link / apply_url-reciprocity / fingerprint.
+If duplicate, link via duplicate_of_id + write DuplicateAnnotation with
+=action="federated_merge"=. If no duplicate, insert as federated row
+(visibility-gated behind JobPostDiscovery per the existing five-clause
+filter).
+
+*Pre-conditions before picking up*
+- 5d has shipped (so inbound activities have a stable
+  FederationActivity history to consult for dedup-on-replay).
+- Q7 in the plan resolved: dedup outcome (link / ignore / discovery-only).
+
+*Operational must-haves before merge*
+- Defensive parsing: treat every inbound field as untrusted. URL fields
+  through canonicalize_link + strip_url_trailing_junk. Title /
+  description size-capped. HTML sanitized.
+- Per-instance retention: federated JobPost rows older than 90d with
+  zero local JobPostDiscovery get archived (slim form retained for
+  audit).
+- Inbound dedup tie-in with Phase 3's DuplicateAnnotation reports —
+  surface federation merges in the dedupe-feedback report.
+
+*Closes the contract*: this is the point at which following a remote
+actor produces a visible federated post in the local user's feed.
+Everything before 5e is plumbing; 5e is the end-user surface.
+*** TODO ActivityPub Phase 5d — Outbound dispatch worker for new public JobPosts
+:PROPERTIES:
+:CREATED: [2026-05-29]
+:DEPENDS_ON: Phase 5c
+:LAST_TOUCHED: [2026-05-29]
+:END:
+*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
+sub-phase 5d. Placeholder; unblock after 5c.
+
+*Summary*: when a JobPost lands with =audience= containing AS2 Public,
+enqueue a Create(Note) activity for each FederationFollower of the
+post's =created_by=. Dispatch worker signs + POSTs to follower inboxes
+with exponential backoff retry; dead-letter at 7d.
+
+*Pre-conditions before picking up*
+- 5c has shipped (FederationFollower table populated; HTTP Signatures
+  outbound signing primitive available).
+- Q5 in the plan resolved: which job queue? Likely django-q2 — see the
+  archived =Plans/Job Queue Integration Plan= and revisit it as part
+  of this scoping pass.
+
+*Operational must-haves before merge*
+- Dispatch worker health heartbeat (=SchedulerHeartbeat= or equivalent);
+  stale heartbeat triggers an alert.
+- =FederationActivity= retention policy: delivered rows older than 30d
+  archived; failed/dead-letter rows kept indefinitely for audit.
+- =sharedInbox= optimization: deliver once per peer instance when the
+  followers there share a shared inbox.
+- Update / Delete activities for JP edits / deletions.
+*** TODO ActivityPub Phase 5c — Inbox + Follow + Follower model + HTTP Signatures
+:PROPERTIES:
+:CREATED: [2026-05-29]
+:DEPENDS_ON: Phase 5a + 5b
+:LAST_TOUCHED: [2026-05-29]
+:END:
+*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
+sub-phase 5c. Placeholder; unblock after 5a + 5b ship.
+
+*Summary*: =POST /actors/<username>/inbox= accepts =Follow= / =Undo(Follow)=
+/ =Create(Note)= activities with HTTP Signatures verification. New
+=FederationFollower= and =FederationActivity= models. Outbound
+=Accept(Follow)= signed responses.
+
+*Pre-conditions before picking up*
+- 5a + 5b have shipped.
+- Open questions 5, 6, 8 in the plan node MUST be resolved before
+  scoping this todo into work:
+  - Q5: Job queue infrastructure (only needed for 5d but the dispatch
+    primitives might land in 5c if =Accept(Follow)= is dispatched
+    inline vs queued)
+  - Q6: HTTP Signatures library — roll our own or pull dep
+  - Q8: Allowlist vs blocklist for inbound federation
+- Operator-side decision on per-instance allowlist surface: where does
+  the operator add a peer instance to the trust list? Admin UI? API
+  verb? Settings file? Need a path before 5c merges.
+
+*Out of scope*: outbound dispatch on new JobPost creation (=5d=);
+federated JobPost ingestion semantics (=5e=).
+
+*Security must-haves before merge*
+- HTTP Signatures verification on every inbound POST.
+- Replay protection: reject signed activities with =date= header
+  older than 1h; dedup activity ID within 24h window.
+- Rate limiting: 10 req/min per actor, 100 req/min per instance.
+- AS2 payload validation: parse-or-reject; 100KB size cap.
+- Allowlist enforcement: non-allowlisted instances 403 before signature
+  verification.
+*** TODO ActivityPub Phase 5b — Outbox endpoint (paginated public JPs as Create activities)
+:PROPERTIES:
+:CREATED: [2026-05-29]
+:DEPENDS_ON: Phase 5a
+:LAST_TOUCHED: [2026-05-29]
+:END:
+*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
+sub-phase 5b. Read that before starting. This is a placeholder; only
+unblock after 5a (Actor + WebFinger) has shipped + the Actor URIs are
+stable in prod.
+
+*Summary*: =GET /api/v1/actors/<username>/outbox= returns an AS2
+OrderedCollection of Create(Note) activities, each wrapping a public
+JobPost (=audience= contains AS2 Public, =created_by= = the actor's
+user). Paginated via AS2 paging URIs (=first=, =next=, =prev=). Sort:
+=published= descending.
+
+*Pre-conditions before picking up*
+- 5a has shipped to prod.
+- The Actor URI shape is stable (Q1 resolution in the plan).
+- The =/as-object/= adapter from Phase 4 builds the per-post AS2 Note;
+  5b wraps each in a Create activity envelope.
+
+*Out of scope*: persistence of Activity rows (that's 5d when dispatch
+needs stable Activity IDs). 5b regenerates each activity on every
+outbox read.
+
+*Open questions to resolve before 5b is buildable*: none from the plan.
+The 5b shape is well-trodden AS2 territory.
+*** TODO ActivityPub Phase 5a — Actor + WebFinger + Instance Actor + lazy RSA keypair
+:PROPERTIES:
+:CREATED: [2026-05-29]
+:LAST_TOUCHED: [2026-05-29]
+:END:
+*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
+sub-phase 5a. The =Resolved decisions= section there pins Q1 (URI shape),
+Q2 (Actor type), Q4 (lazy keypair). Read that whole node before starting;
+this todo is the actionable summary, the plan is the source of truth.
+
+*Owning agent*: cc-api (Django + DRF + the api submodule, plus a User-model
+migration). No frontend work in this todo — caddy reverse-proxy plumbing
+is a separate dc-side ask (file under =Inbox/cross-cutting= once 5a is
+ready to deploy).
+
+*Scope of 5a (do not expand without checking the plan)*
+- =GET /api/v1/actors/<username>/= returns AS2 Person object with these
+  fields exactly:
+  - =@context=: =["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"]=
+  - =id=: =https://<CAREER_CADDY_INSTANCE>/actors/<username>=
+  - =type=: ="Person"=
+  - =preferredUsername=: =user.username=
+  - =name=: =user.first_name + user.last_name= or fallback to =username=
+  - =summary=: empty string in V1 (user profile has no bio field today)
+  - =inbox=: =https://<host>/actors/<username>/inbox= (endpoint will 501 in 5a)
+  - =outbox=: =https://<host>/actors/<username>/outbox= (501 in 5a)
+  - =followers=: =https://<host>/actors/<username>/followers= (501 in 5a)
+  - =following=: =https://<host>/actors/<username>/following= (501 in 5a)
+  - =publicKey=: ={id: <actor>#main-key, owner: <actor>, publicKeyPem: <pem>}=
+  - =Content-Type: application/activity+json= in the response.
+- =GET /.well-known/webfinger?resource=acct:<username>@<host>= returns
+  JRD shape:
+  - =subject=: ="acct:<username>@<host>"=
+  - =aliases=: =[<actor URI>, <profile URI>]=
+  - =links=: =[{rel: self, type: application/activity+json, href: <actor URI>}, {rel: http://webfinger.net/rel/profile-page, type: text/html, href: <frontend profile URI>}]=
+  - Reject 400 on any resource that isn't =acct:<username>@<our host>=.
+  - Reject 404 on unknown username.
+  - =Content-Type: application/jrd+json= in the response.
+- =/.well-known/webfinger= must be served at the apex, not under
+  =/api/v1/=. Coordinate with dc to get the caddy reverse-proxy
+  routing right (separate cross-cutting todo).
+- Instance Actor at =GET /api/v1/actors/_instance/= (or similar — pick a
+  username that can't collide with a real user; underscore prefix is
+  safe). Same AS2 Person shape, =preferredUsername="_instance"=, owns
+  a separate keypair used later in 5c for fetching peer Actors when
+  the activity's signer isn't yet locally known. Land in 5a so the URI
+  is stable.
+- =/@<username>= route at the api edge: content-negotiates on Accept.
+  If =application/activity+json= → returns the Actor JSON. Otherwise →
+  302 to the frontend profile URL (=$FRONTEND_URL/users/<id>= or
+  whatever the frontend currently exposes for users; coordinate with
+  cc-frontend if uncertain).
+- New User model fields:
+  - =federation_private_key_pem= TextField, encrypted at rest (use
+    =django-cryptography= field wrapper OR =fernet= column-encryption
+    layer — pick one, document in the migration), nullable, default
+    null.
+  - =federation_public_key_pem= TextField, plaintext, nullable, default
+    null.
+  - Migration. Backfill is unnecessary (lazy generation handles it).
+- Lazy keypair generation in the Actor view:
+  - Wrap in =transaction.atomic()= + =select_for_update()= on the User
+    row to serialize concurrent first-hits.
+  - Generate RSA-2048 via
+    =cryptography.hazmat.primitives.asymmetric.rsa.generate_private_key(public_exponent=65537, key_size=2048)=.
+  - Serialize: private as =PEM / PKCS8 / NoEncryption()=, public as
+    =SubjectPublicKeyInfo=.
+  - Persist both fields, then return the Actor with the public key
+    embedded.
+- =manage.py generate_federation_keys= command: iterates Users where
+  =federation_private_key_pem IS NULL=, generates + persists keypairs.
+  Idempotent. Logs progress per N users.
+
+*Test plan*
+- =GET /api/v1/actors/<existing-username>/= returns 200 with the AS2
+  shape; verify =@context=, =id=, =type=, =publicKey.publicKeyPem=
+  parses as a valid RSA pubkey via cryptography.
+- =GET /api/v1/actors/<existing-username>/= twice on a never-fetched
+  user: first hit creates the keypair, second hit returns the same
+  pubkey (no re-generation).
+- Concurrent first-hits: spawn N threads hitting the same user; verify
+  exactly one keypair lands in DB (transaction.atomic +
+  select_for_update test).
+- =GET /api/v1/actors/<nonexistent>/= returns 404.
+- =GET /.well-known/webfinger?resource=acct:user@host= returns 200
+  JRD; =subject= matches request; =links[0].href= matches the Actor URI.
+- =GET /.well-known/webfinger?resource=acct:user@wrong.host= returns 400.
+- =GET /.well-known/webfinger?resource=https://example/foo= returns 400
+  (only acct: scheme accepted in V1).
+- =GET /.well-known/webfinger?resource=acct:nobody@host= returns 404.
+- =GET /api/v1/actors/_instance/= returns a valid Actor (separate from
+  any user); the keypair is per-instance, persisted somewhere
+  appropriate (a new singleton model row, or settings, or wherever fits
+  the codebase pattern — pick + document).
+- =GET /@user= with =Accept: application/activity+json= returns the
+  Actor JSON; with =Accept: text/html= 302s to the frontend profile
+  URL.
+- =manage.py generate_federation_keys= run twice in a row produces
+  zero work the second time (idempotent).
+
+*Files likely touched*
+- =api/job_hunting/api/views/federation.py= (new) — ActorView,
+  WebfingerView, InstanceActorView, AtUsernameRedirectView
+- =api/job_hunting/api/urls.py= — wire the new routes
+- =api/job_hunting/urls.py= (project-level) — wire =/.well-known/webfinger=
+  outside =/api/v1/=
+- =api/job_hunting/models/user.py= or wherever the auth User model
+  extension lives — add the two PEM fields
+- =api/job_hunting/migrations/0085_user_federation_keys.py= (next
+  unused number — confirm via =ls migrations/=)
+- =api/job_hunting/lib/federation.py= (new) — keypair generation +
+  serialization helpers; the Actor JSON-LD builder; the WebFinger JRD
+  builder
+- =api/job_hunting/management/commands/generate_federation_keys.py= (new)
+- Tests in =api/job_hunting/tests/test_federation.py= (new)
+
+*Out of scope for 5a (track in the plan's later sub-phases, do not pull in)*
+- Outbox endpoint (=5b=)
+- Inbox endpoint + HTTP Signatures verification (=5c=)
+- Follower model (=5c=)
+- Dispatch worker (=5d=)
+- Federated JobPost ingestion (=5e=)
+- Frontend follow / unfollow UI
+- Key rotation
+- Per-instance allowlist/blocklist
+
+*Definition of done*
+- All test plan items above pass via =make test-api PATHS="job_hunting.tests.test_federation"=
+- =make ci= green
+- Companion cross-cutting todo for dc (caddy reverse-proxy routing) is
+  filed before merge so prod deploy isn't blocked on missing /.well-known/
+  routing
+- Manual smoke: paste =acct:<your-username>@careercaddy.online= into
+  Mastodon's search (after prod deploy + dc's caddy work). Mastodon
+  should display the Actor card. Follow button shows but is expected
+  to error on click — that's 5c.
 *** TODO JobPost.audience for ActivityPub-aligned per-post visibility
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-29]
+:END:
 Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN ActivityPub plan, federation visibility belongs on each JobPost via AS2 audience primitives, not via a per-content-shape filter (avoids baking single-user assumptions like mailto=private into the data model). Spec: add JobPost.audience JSONField (Postgres JSONB), default [https://www.w3.org/ns/activitystreams#Public]. Helper JobPost.is_public() returns True iff the Public collection URI appears in audience. JSON:API serializer exposes audience. Migration adds the column and backfills existing rows to the public-default. Frontend: JobPost model gains audience attr; jp.edit form adds a Visibility selector with Public and Private for now (Public maps to [...#Public], Private maps to []). jp.show shows a small badge when non-public. Phase 4 /as-object/ adapter and Outbox dispatch will consult this field but those are not in scope here. Tests: model default + is_public + serializer round-trip + frontend form selector.
 *** TODO Phase 5: infra — ActivityPub activity dispatch worker (django-q2 candidate) :api:infra:
 :PROPERTIES:
@@ -767,7 +1280,7 @@ Implementation sketch (in =~/.config/doom/config.org=):
 Background context: came up while discussing how non-Emacs contributors would use the new variadic =cc-todo-read= / =cc-notes-read= helpers (they couldnt). Wiki publishing is the portable-docs answer.
 
 Tags: docs, infra
-*** TODO capture prompt used. :medium:
+*** TODO 'capture prompt used. :medium:
 *** TODO make pills so flex can stack nicely on mobile :frontend:
 https://www.hyperui.dev/components/application/tabs/#component-5-dark
 ** Enhancement
@@ -1047,9 +1560,30 @@ controllers/job-posts/show/questions.js were deleted before ship.
 :END:
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
+*** TODO inspect_scrape_html serialization crashes on BS4 class lists
+:PROPERTIES:
+:CREATED: [2026-05-28]
+:END:
+*Trigger*: scrape 475, selector =a[href^="https://www.linkedin.com/jobs/view/"][href$="/"]= → MCP tool errored with:
+
+#+begin_example
+Error calling tool 'inspect_scrape_html':
+('cannot represent an object',
+ ['_4e973f5f', '_56467f9d', '_497fc0a7', ...])
+#+end_example
+
+*Root cause*: =agents/lib/scrape_inspector.py= → =query_selector()= returns match.attrs verbatim. BS4 stores =class= as a list-like type (=AttributeValueWithCharsetSubstitution= or similar non-list iterable). The yaml/json serializer in =lib/api_tools._respond= can't represent it.
+
+*Repro*: any LinkedIn flagship-web SDUI capture (heavy CSS-in-JS hashed class names) trips it. =meta[]= / =link[]= selectors don't because those elements don't carry class lists in our captures.
+
+*Fix*: in =query_selector= (or in =_respond= as a defensive pass), coerce attr values: if =isinstance(v, list)= → =list(v)=, if other non-primitive → =str(v)=. Smallest viable change is in =scrape_inspector.query_selector= where the matches dict is built.
+
+*Test that would have caught it*: a fixture HTML with =<div class="a b c">= matched by a selector, asserted to round-trip through =yaml.safe_dump(query_selector(html, selector))= without raising.
+
+*Scope*: agents/lib/scrape_inspector.py + tests/test_scrape_inspector.py
 *** TODO sweep_stuck_scoring cron — paired with model.isPending gate
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-27]
+:LAST_TOUCHED: [2026-05-28]
 :END:
 Now that the spinner gate reads =status= directly off the record (per-model =isPending= getter, shipped 2026-05-13), a Score / CoverLetter / Summary / Scrape that gets stuck in a non-terminal state on the server (worker dies mid-flight, OOM, exception bypasses the =finally=) will spin forever in the UI on every visit. We already have =sweep_stuck_extracting= for Scrape; need the equivalent for Score (and probably CoverLetter / Summary). Two-prong: (1) wrap the worker entrypoints in =try / except / finally= that ALWAYS sets a terminal status, (2) periodic management command (cron) that flips records older than N minutes in pending states to =error= with a reason. Surfaces as =/api/v1/sweep_stuck_<resource>/= mgmt commands; runs on the api container schedule. Should mirror =sweep_stuck_extracting= shape exactly so ops behavior is consistent.
 *** TODO from-text inline scorer span detached from parent request :api:agents:

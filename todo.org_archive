@@ -7661,3 +7661,52 @@ find_duplicate(JobPost(link="https://www.linkedin.com/comm/jobs/view/4335567500"
 - api/job_hunting/services/url_canonicalize.py (canonicalize_link)
 - api/job_hunting/models/job_post_dedupe.py (find_duplicate stage 1)
 - new migration alongside 0079_strip_url_trailing_junk
+
+* TODO Job-queue Phase 1 — django-q2 plumbing, no behavior change
+:PROPERTIES:
+:CREATED: [2026-05-30]
+:CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
+:LAST_TOUCHED: [2026-05-30]
+:ARCHIVE_TIME: 2026-05-30 Sat 10:00
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: TODO
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Canonical plan node: =notes.org/Plans/Job-queue integration — django-q2 phased rollout=
+sub-phase Phase 1. Read that whole node before starting; this todo is
+the actionable summary.
+
+*Owning agent*: cc-api (django settings + new lib module + migration)
+plus cc-orchestrator for the docker-compose worker service.
+
+*Scope (do not expand without checking the plan)*
+- Add =django-q2= to =api/pyproject.toml=.
+- Add =django_q= to =INSTALLED_APPS= in =api/job_hunting/settings.py=.
+- Add =Q_CLUSTER= config block to settings (2 workers, 300s timeout,
+  4s poll, =orm= broker against the existing api DB).
+- Run =django_q_*= migrations (=manage.py migrate=).
+- Create =api/job_hunting/lib/tasks.py= with a single =health_check=
+  task used to smoke-test the worker. No application code calls
+  =async_task()= yet.
+- Add =worker= service to =docker-compose.yml= and
+  =docker-compose.prod.yml=. Same api image, =command: manage.py qcluster=,
+  depends on =db=, shares env file.
+- Healthcheck on the worker service: =qcluster process up + latest
+  WorkerHeartbeat <90s old= (heartbeat infra ships in Phase 6; for
+  Phase 1 just check the qcluster pid).
+
+*Test plan*
+- =docker compose up worker= comes up cleanly in dev compose.
+- Enqueueing =async_task('job_hunting.lib.tasks.health_check')= from a
+  Django shell results in the task executing within 10s.
+- =make ci= clean.
+- =make ci-ai= unchanged (worker doesn't touch agents image).
+- Prod compose: confirm pull/up works with the new service before
+  hold-poller is removed in Phase 4.
+
+*Out of scope*
+- Migrating any existing daemon thread (Phase 2+).
+- Frontend changes (none in Phase 1).
+- Worker heartbeat alert + retention (Phase 6).
