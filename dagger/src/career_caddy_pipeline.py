@@ -68,6 +68,36 @@ class CareerCaddy:
             .with_exec(["uv", "sync", "--frozen"])
         )
 
+    def _automation_base(self, src: dagger.Directory) -> dagger.Container:
+        # automation/ (cc_auto) is operator-side Python: uv + pymongo +
+        # pytest. No browser, no Camoufox, no postgres — its tests
+        # monkeypatch `_db_or_none` so they don't hit a real Mongo.
+        # Mirrors `_api_base`'s shape; the only diff is no libpq.
+        src = (
+            src
+            .without_directory(".venv")
+            .without_directory(".git")
+            .without_directory("var")
+        )
+        return (
+            dag.container()
+            .from_("python:3.11-slim")
+            .with_exec(
+                [
+                    "sh", "-c",
+                    "apt-get update && apt-get install -y --no-install-recommends "
+                    "make curl && rm -rf /var/lib/apt/lists/*",
+                ]
+            )
+            .with_exec(["pip", "install", "uv"])
+            .with_workdir("/app")
+            .with_file("/app/pyproject.toml", src.file("pyproject.toml"))
+            .with_file("/app/uv.lock", src.file("uv.lock"))
+            .with_exec(["uv", "sync", "--frozen", "--no-install-project", "--group", "dev"])
+            .with_directory("/app", src)
+            .with_exec(["uv", "sync", "--frozen", "--group", "dev"])
+        )
+
     def _frontend_base(self, src: dagger.Directory) -> dagger.Container:
         src = (
             src
@@ -122,6 +152,16 @@ class CareerCaddy:
     ) -> dagger.Container:
         """eslint + prettier + ember-template-lint + stylelint. No tests."""
         return self._frontend_base(src).with_exec(["npm", "run", "lint"])
+
+    @function
+    async def lint_automation(
+        self,
+        src: Annotated[dagger.Directory, DefaultPath("../automation")],
+    ) -> dagger.Container:
+        """Ruff check on the automation (cc_auto) source. Uses cc_auto's
+        Makefile entry point so cc-auto agent's contract stays canonical:
+        whatever `make lint` runs locally is what CI runs."""
+        return self._automation_base(src).with_exec(["make", "lint"])
 
     # ── Tests-only (slow) ──────────────────────────────────────────────────
 
@@ -205,6 +245,41 @@ class CareerCaddy:
                 "cat /tap.log; "
                 "grep -qE '^# fail +0$' /tap.log "
                 "&& grep -qE '^# pass +[1-9]' /tap.log",
+            ])
+        )
+
+    @function
+    async def test_automation(
+        self,
+        src: Annotated[dagger.Directory, DefaultPath("../automation")],
+    ) -> dagger.Container:
+        """pytest against automation (cc_auto). Tests monkeypatch the
+        Mongo client — no postgres / mongo sidecar required."""
+        return (
+            self._automation_base(src)
+            # Tee pytest output to /test.log so the assertion below can
+            # verify the canonical "N passed in Ms" summary. pipefail
+            # propagates pytest's exit through `tee`.
+            .with_exec([
+                "bash", "-c",
+                "set -o pipefail; "
+                "make test 2>&1 | tee /test.log",
+            ])
+            # Belt-and-suspenders: require the canonical pytest success
+            # summary in the log. Guards against "exit 0 with zero tests
+            # collected" (would not match `\d+ passed`) and against any
+            # failed/error lines slipping through. Matches the api +
+            # frontend lint-then-test split's assertion style.
+            #
+            # Cat the log first so `dagger call test-automation stdout`
+            # returns the test output (otherwise the grep-q exec is
+            # silent and downstream filters have nothing to chew on).
+            .with_exec([
+                "sh", "-c",
+                "cat /test.log; "
+                "grep -qE '[0-9]+ passed' /test.log "
+                "&& ! grep -qE '[0-9]+ failed' /test.log "
+                "&& ! grep -qE '[0-9]+ error' /test.log",
             ])
         )
 

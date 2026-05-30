@@ -21,7 +21,7 @@
 -include .env.local
 export
 
-.PHONY: up up-core up-full down logs build shell-api shell-db migrate test-api test-frontend bootstrap ci ci-ai scrape-url doctor doctor-poller list help
+.PHONY: up up-core up-full down logs build shell-api shell-db migrate test-api test-frontend test-automation lint-api lint-frontend lint-automation format-frontend bootstrap ci ci-ai scrape-url doctor doctor-poller list help
 
 # ── Dev stack ──────────────────────────────────────────────────────────────
 
@@ -75,6 +75,16 @@ lint-frontend: ## Prettier-check frontend (PATHS=... for files; defaults to whol
 format-frontend: ## Prettier auto-fix frontend (PATHS=... for files; defaults to whole tree)
 	docker compose exec frontend npm run lint:format -- --write $(if $(PATHS),$(PATHS),.)
 
+# automation/ doesn't have a long-running container in compose, so its
+# lint/test run via `uv run --group dev ...` directly (matches its own
+# Makefile contract). Quick iteration loop; the Dagger functions
+# below are the pre-push gate.
+lint-automation: ## Ruff-lint automation (cc_auto) code
+	$(MAKE) -C automation lint
+
+test-automation: ## Run pytest in automation (cc_auto)
+	$(MAKE) -C automation test
+
 # ── CI (Dagger) ────────────────────────────────────────────────────────────
 # Requires Dagger CLI: curl -fsSL https://dl.dagger.io/dagger/install.sh | sh
 #
@@ -85,13 +95,17 @@ format-frontend: ## Prettier auto-fix frontend (PATHS=... for files; defaults to
 # between the lint and test functions, so the split is not duplicated work.
 
 .PHONY: ci ci-lint ci-test
-.PHONY: ci-lint-api ci-lint-frontend ci-test-api ci-test-frontend
+.PHONY: ci-lint-api ci-lint-frontend ci-lint-automation
+.PHONY: ci-test-api ci-test-frontend ci-test-automation
 
 ci-lint-api:
 	dagger -m ./dagger call lint-api
 
 ci-lint-frontend:
 	dagger -m ./dagger call lint-frontend
+
+ci-lint-automation:
+	dagger -m ./dagger call lint-automation
 
 # Concise reports: surface failure blocks + summary; suppress dagger noise.
 # Pass FULL=1 to dump the entire test log unfiltered.
@@ -121,12 +135,27 @@ ci-test-frontend:
 		'; \
 	fi
 
-ci-lint: ci-lint-api ci-lint-frontend
-ci-test: ci-test-api ci-test-frontend
+ci-test-automation:
+	@set -o pipefail; \
+	if [ -n "$(FULL)" ]; then \
+		dagger -m ./dagger call test-automation stdout 2>&1; \
+	else \
+		dagger -m ./dagger call test-automation stdout 2>&1 | awk ' \
+			/^FAILED / { hit=1; n=15; print; next } \
+			/^ERROR / { hit=1; n=15; print; next } \
+			/====+ FAILURES ====+/ { hit=1; n=40; print; next } \
+			/====+ ERRORS ====+/ { hit=1; n=40; print; next } \
+			/[0-9]+ (passed|failed|error|skipped|deselected|warning)/ { print } \
+			hit { print; if (n-- <= 0) hit=0 } \
+		'; \
+	fi
 
-ci: ## Run API + frontend CI checks locally via Dagger (lint then tests, parallel within each phase)
-	$(MAKE) -j2 ci-lint
-	$(MAKE) -j2 ci-test
+ci-lint: ci-lint-api ci-lint-frontend ci-lint-automation
+ci-test: ci-test-api ci-test-frontend ci-test-automation
+
+ci: ## Run API + frontend + automation CI locally via Dagger (lint then tests, parallel within each phase)
+	$(MAKE) -j3 ci-lint
+	$(MAKE) -j3 ci-test
 
 ci-ai: ## Build the slim AI Docker image via Dagger (no camoufox — production image)
 	dagger -m ./dagger call build-ai
