@@ -7,3 +7,6 @@
 [submodule "agents"]
 	path = agents
 	url = git@github.com:overcast-software/career_caddy_agents.git
+[submodule "automation"]
+	path = automation
+	url = git@github.com:overcast-software/career_caddy_automation.git
