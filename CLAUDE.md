@@ -4,13 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Structure
 
-Three independently deployable submodules, each with its own `CLAUDE.md`:
+Four independently deployable submodules, each with its own `CLAUDE.md`:
 
 - `frontend/` — Ember.js 6.x SPA (see `frontend/CLAUDE.md`)
 - `api/` — Django REST Framework backend (see `api/CLAUDE.md` — not yet created)
-- `agents/` — Pydantic-AI agents + MCP servers + browser scraper + hold-poller (see `agents/CLAUDE.md`)
+- `agents/` — service-side: Pydantic-AI agents + MCP servers + browser scraper + pollers (see `agents/CLAUDE.md`)
+- `automation/` — operator-side: email triage + caddy-web + A2A orchestrator + link traverser (see `automation/CLAUDE.md`)
 
-Inside the `agents/` submodule, top-level peer folders advertise the heterogeneity:
+### `agents/` vs `automation/` — service vs operator
+
+The two are split by who they serve:
+
+- **`agents/` = server-side, service-driven.** Runs as Docker containers for *everyone*: Camoufox + Playwright browser, `scrape_graph` pydantic-graph state machine, prod MCP servers (`chat_server.py` + `public_server.py` shipped to `:8031` + `:8030`), pollers (`hold_poller.py`, `score_poller.py` — both retiring via the django-q2 phased rollout). When the queue migration lands, the scrape worker container also lives here because it needs Camoufox.
+- **`automation/` = user-side, operator-driven.** Runs on *one user's* machines (laptop, pibu, home server). Email triage pipeline (`scripts/inbox_triage.py` + `src/email_source/` + `src/email_classifier/`), caddy-web copilot, A2A orchestrator, link traverser, sharpen_profiles. **HTTP-only contract** with the api + public MCP — no Python imports cross. Self-hosters set `CC_API_BASE_URL` / `CC_MCP_URL` / `CC_API_TOKEN` and point at their own Career Caddy domain.
+
+Test: *service for everyone* → `agents/`; *operator for one user* → `automation/`.
+
+### Inside `agents/`
+
+Top-level peer folders advertise the heterogeneity:
 
 - `agents/agents/` — Pydantic-AI agent definitions (the spine: job_extractor, obstacle, onboarding, career_caddy CRUD)
 - `agents/mcp_servers/` — Four MCP servers; `chat_server.py` and `public_server.py` ship to prod (`:8031` chat, `:8030` public at `mcp.careercaddy.online`); `browser_server.py` and `career_caddy_server.py` are local-only
@@ -19,10 +31,6 @@ Inside the `agents/` submodule, top-level peer folders advertise the heterogenei
 - `agents/pollers/` — long-running daemons (`hold_poller.py`, `score_poller.py`)
 - `agents/tools/` — one-shot operator scripts (`manual_login`, `discover_sites`, `export_graph_structure`, `fetch_chromium`)
 - `agents/lib/` — shared utilities (`api_tools.py` HTTP client, `toolsets.py`, `models/`, `history.py`, etc.)
-
-### Sibling consumer (not a submodule)
-
-`~/Network/syncthing/Projects/career_caddy_automation/` ("cc_auto") is a sibling toolkit for email triage and other workflows that drives Career Caddy entirely over HTTP — no Python imports cross the boundary. Self-hosters set the `CC_API_BASE_URL` / `CC_MCP_URL` / `CC_API_TOKEN` env trio and point cc_auto at their own Career Caddy domain.
 
 ## Getting Started (Full Local Dev)
 
