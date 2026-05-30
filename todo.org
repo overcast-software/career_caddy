@@ -449,7 +449,7 @@ end-to-end: file → parsed sections written → row =completed=. All four
 LLM-shaped daemon threads gone after this phase.
 
 *Out of scope*: scrape dispatch + hold-poller (Phase 4).
-*** TODO Job-queue Phase 2 — Score + Summary migration
+*** DONE Job-queue Phase 2 — Score + Summary migration
 :PROPERTIES:
 :CREATED: [2026-05-30]
 :CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
