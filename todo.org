@@ -15,7 +15,7 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (26)
+Inbox (27)
   Bug (8)
   Enhancement (18)
   Feature (34)
@@ -95,6 +95,64 @@ Some changes touch multiple repos (e.g. API contract change ripples into fronten
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** TODO [cc_auto] Roadmap landed: catchall mail + link traversal + pibu + log surfacing — needs api+ops coordination [2026-05-30] :cc_auto:api:ops:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-30]
+:END:
+
+cc_auto agent filing context for the api / cc-orchestrator agents.
+
+The cc_auto roadmap for the next several weeks is in
+=~/Network/syncthing/Projects/career_caddy_automation/notes.org= under
+=* PROJ Roadmap: catchall mail + link traversal + pibu + log surfacing
++ queue alignment [2026-05-30]=. User in =/plan= mode now;
+implementation starts after they sign off in the =** LOOP= subheader.
+
+What cc_auto is waiting on from parent (no action required yet — just
+awareness so concurrent api work doesn't accidentally block):
+
+1. *Phase 2.5 catchall email — three api PRs already speced at todo.org:1150-1226.*
+   Order: schema (=email-forward= source enum +
+   =JobPostDiscovery.forwarded_via_address= + =requested_by_user_id=)
+   → POST attribute + RBAC (=discover_for_user_id=) → username lookup
+   (=GET /api/v1/users/?filter[username]=…= + =audit_usernames= mgmt
+   command). cc_auto's catchall poller (=src/pollers/email_catchall.py=)
+   cannot ship until all three land.
+
+2. *Worker image for django-q2 Phase 4* — when the queue plan
+   (=notes.org:6653-6850=) reaches Phase 4 (atomic hold-poller → queue
+   swap), cc_auto / pibu deploy needs:
+   - =agents/Dockerfile.worker= (worker container image)
+   - compose service in =docker-compose.prod.yml= with
+     =deploy.placement.constraints: [node.hostname == pibu]= and
+     =replicas: 0= until Phase 4 flips it on
+   - new =worker= target in =dagger/src/career_caddy_pipeline.py= so CI
+     keeps the image fresh
+   The plan is to prep the image *now* (Phase D2 in cc_auto's notes.org)
+   so Phase 4 deploy is a config flip, not a build. Idle until then.
+
+3. *Observability parity (cross-cut)* — cc_auto's triage-DB has been
+   silent since 2026-05-15 because =scripts/inbox_triage.py= never
+   wired in the SQLite writer. cc_auto is fixing this in §Phase A1.
+   The parent has the same shape of gap in
+   =** TODO scrapes-from-text silently swallows post-extract failures=
+   (this Inbox, 2026-05-25). When one side ships a structured-failure
+   surface, the other should mirror so the cross-pipeline operator
+   can correlate.
+
+4. *Reusable confirm* — cc_auto's =link_traverser= (Phase C2) plans to
+   import =lib/url_unwrap.py= from parent's =agents/= for tracker
+   resolution. Confirm this is the canonical path; if it's moved or
+   renamed, leave a note here.
+
+Pibu deployment (Phase D1) uses *tmuxinator*, not systemd, per user
+direction "systemd for now is a non starter until we like the output."
+Promotion to systemd is gated on 7 consecutive days of clean output +
+exercised rollback.
+
+No code review needed yet — flagging only so api+ops agents can keep
+this context when their threads touch any of the above.
+
 ** TODO Surface staff-only inspect_scrape_html tools to scrape-profile-enhancer
 **** TODO Surface staff-only inspect_scrape_html / find_selectors_for_text / test_url_rewrite to scrape-profile-enhancer agent :scrape:mcp:obs:
 - Three new staff-only MCP tools landed today on mcp.careercaddy.online: =inspect_scrape_html(scrape_id, selector?, mode?)=, =find_selectors_for_text(scrape_id, text, ...)=, =test_url_rewrite(url, hostname?)=. They are documented as gated by =StaffOnlyToolFilter= on the public MCP server.
