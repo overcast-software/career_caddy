@@ -7710,3 +7710,51 @@ plus cc-orchestrator for the docker-compose worker service.
 - Migrating any existing daemon thread (Phase 2+).
 - Frontend changes (none in Phase 1).
 - Worker heartbeat alert + retention (Phase 6).
+
+* DONE Job-queue Phase 2 — Score + Summary migration
+:PROPERTIES:
+:CREATED: [2026-05-30]
+:CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
+:DEPENDS_ON: Phase 1
+:LAST_TOUCHED: [2026-05-30]
+:ARCHIVE_TIME: 2026-05-30 Sat 10:31
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Canonical plan: =notes.org/Plans/Job-queue integration — django-q2 phased rollout=
+sub-phase Phase 2. Read before starting.
+
+*Owning agent*: cc-api (replace daemon threads with =async_task()=) +
+cc-frontend (bump =maxPolls= on Score / Summary routes).
+
+*Scope*
+- Replace =threading.Thread= in =api/job_hunting/api/views/scores.py=
+  with =async_task('job_hunting.lib.tasks.score_job', score_id)=. New
+  task in =tasks.py= fetches Score by pk, runs the existing service
+  function, updates row.
+- Same for =api/job_hunting/api/views/summaries.py= →
+  =async_task('job_hunting.lib.tasks.summary_job', summary_id)=.
+- =api/job_hunting/api/views/scores.py:_auto_score_job_post= also goes
+  through the queue (used by JobPost creation auto-scoring).
+- Frontend: add a =longRunning: true= flag option to
+  =frontend/app/services/pollable.js= =poll= and =pollIfPending=
+  methods. When set, =poller.js= uses a linear or longer-cadence
+  backoff instead of the 32s exponential cap. Apply to
+  =controllers/job-posts/show/scores.js= and
+  =controllers/job-posts/show/summaries.js=.
+
+*Test plan*
+- Existing api tests pass.
+- Manual: create a score → row transitions =pending= → =completed= via
+  the worker (not via daemon thread). Logfire trace confirms worker
+  execution.
+- Same for summary.
+- Frontend: score creation on a slow LLM still updates the row within
+  the new cap without 'may still be processing' fallback message.
+
+*Out of scope*
+- Cover letter / answer / question / resume (Phase 3).
+- Scrape dispatch (Phase 4).
