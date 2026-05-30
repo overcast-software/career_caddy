@@ -84,7 +84,9 @@ make migrate          # run Django migrations
 make demo-data        # seed guest user (Danny Noonan) + demo data (run after migrate)
 make test-api         # run API test suite
 make test-frontend    # run Ember QUnit tests
-make ci               # Dagger: lint + test API and frontend locally
+make test-automation  # run automation (cc_auto) pytest suite
+make lint-automation  # ruff-check automation (cc_auto)
+make ci               # Dagger: lint + test API + frontend + automation locally
 make ci-ai            # Dagger: build slim AI image (no camoufox)
 make scrape-url URL=https://...   # scrape one job URL → add to Career Caddy
 make poller                          # hold-poller against prod (Camoufox default)
@@ -166,15 +168,17 @@ curl -fsSL https://dl.dagger.io/dagger/install.sh | sh
 
 **Run locally** (no secrets needed — Dagger uses its own Docker sidecar):
 ```bash
-make ci           # lint + test API and frontend
+make ci           # lint + test API + frontend + automation
 make ci-ai        # build AI image (slow first run, downloads camoufox)
 ```
 
 **Available Dagger functions:**
 ```bash
-dagger -m ./dagger call build-api       # lint + test API (spins up postgres sidecar)
-dagger -m ./dagger call build-frontend  # lint + test frontend
-dagger -m ./dagger call build-ai        # build AI image with camoufox
+dagger -m ./dagger call build-api          # lint + test API (spins up postgres sidecar)
+dagger -m ./dagger call build-frontend     # lint + test frontend
+dagger -m ./dagger call lint-automation    # ruff-check automation (cc_auto)
+dagger -m ./dagger call test-automation    # pytest in automation (cc_auto)
+dagger -m ./dagger call build-ai           # build AI image with camoufox
 dagger -m ./dagger call publish --registry-token=env:GITHUB_TOKEN --org=overcast-software --tag=latest
 dagger -m ./dagger call deploy --ssh-key=file:~/.ssh/id_ed25519 --host=<vps> --app-dir=/opt/career-caddy --tag=latest
 ```
