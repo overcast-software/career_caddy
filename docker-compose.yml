@@ -67,6 +67,51 @@ services:
       db:
         condition: service_healthy
 
+  # ── Worker ──────────────────────────────────────────────────────────────
+  # django-q2 task worker — Phase 1 of Plans/Job-queue integration. Shares
+  # the api image (same code, same venv, same env). Runs `manage.py qcluster`
+  # to consume the django_q_ormq queue table off the same Postgres DB. No
+  # behavior change in Phase 1 — only the `health_check` task is wired in.
+  # Subsequent phases migrate the 9 daemon-thread spawn points + 2 polling
+  # daemons (hold-poller atomic-deleted in Phase 4).
+  worker:
+    build:
+      context: ./api
+    entrypoint: ""
+    command: python manage.py qcluster
+    volumes:
+      - ./api:/app
+      - api_venv:/app/.venv
+      - screenshots:/app/screenshots
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-job_hunting}
+      DEBUG: "True"
+      SECRET_KEY: ${SECRET_KEY:-dev-only-insecure-do-not-use-in-production}
+      # Worker doesn't serve HTTP, but Django still wants ALLOWED_HOSTS
+      # set when running management commands in some configurations.
+      ALLOWED_HOSTS: "localhost,127.0.0.1,worker"
+      USE_MCP_BROWSER_AGENT: "${USE_MCP_BROWSER_AGENT:-False}"
+      BROWSER_MCP_SSE_URL: "http://browser-mcp:3004/sse"
+      CHAT_SERVICE_URL: "http://chat:8000"
+      SCREENSHOT_DIR: /app/screenshots
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-noreply@localhost}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:4200}
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        # Wait for api to come up so it can run migrations first; the
+        # worker can't qcluster a database whose django_q_* tables
+        # don't exist yet.
+        condition: service_started
+
   frontend:
     image: node:20-slim
     working_dir: /app
