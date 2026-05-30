@@ -478,7 +478,7 @@ shows up in the Phase 6 failed-task surface (Phase 6 must ship before
 Phase 4 or basic visibility is missing — see plan).
 
 *Out of scope*: parse_scrape (Phase 5), score_poller (Phase 5).
-*** TODO Job-queue Phase 3 — Cover Letter, Answer, Question, Resume migrations
+*** DONE Job-queue Phase 3 — Cover Letter, Answer, Question, Resume migrations
 :PROPERTIES:
 :CREATED: [2026-05-30]
 :CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
