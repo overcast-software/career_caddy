@@ -527,14 +527,24 @@ class CareerCaddy:
                     f"cd {app_dir}; "
                     f"grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG={tag}/' .env || echo 'IMAGE_TAG={tag}' >> .env; "
                     f"docker compose -f docker-compose.prod.yml pull; "
-                    # No explicit `down` — `up -d --remove-orphans` recreates
-                    # only containers whose resolved image/config changed
-                    # (app services, because IMAGE_TAG just moved). The db
-                    # service uses unparameterized postgres:18 so it stays
-                    # running, which (a) gives us zero db downtime and (b)
-                    # avoids the docker-proxy host-port re-bind race that
-                    # broke deploys when down+up ran back-to-back without
-                    # the proxy fully releasing 127.0.0.1:5432 in between.
+                    f"docker compose -f docker-compose.prod.yml down --remove-orphans; "
+                    # docker-proxy can outlive the container that spawned it
+                    # by a few hundred ms after `down` returns; chaining `up`
+                    # immediately makes the new db container fail with
+                    # `Bind for 127.0.0.1:5432 failed: port is already
+                    # allocated`. Manual `down` then `up` typed at a shell
+                    # doesn't hit it because the human-pause is enough.
+                    # Poll until the port frees (≤30s), then fall back to
+                    # an explicit pkill if a true zombie is hanging on.
+                    f"for i in $(seq 1 30); do "
+                    f"  ss -tnl 'sport = :5432' 2>/dev/null | grep -q ':5432' || break; "
+                    f"  sleep 1; "
+                    f"done; "
+                    f"if ss -tnl 'sport = :5432' 2>/dev/null | grep -q ':5432'; then "
+                    f"  echo 'WARN: 5432 still bound after 30s, pkill docker-proxy fallback'; "
+                    f"  pkill -f 'docker-proxy.*-host-port (5432|5433)' || true; "
+                    f"  sleep 1; "
+                    f"fi; "
                     f"docker compose -f docker-compose.prod.yml up -d --remove-orphans; "
                     # Reclaim disk: prune unused images (including OLD per-SHA
                     # tags from previous deploys, not just dangling ones),
