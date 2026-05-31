@@ -527,7 +527,14 @@ class CareerCaddy:
                     f"cd {app_dir}; "
                     f"grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG={tag}/' .env || echo 'IMAGE_TAG={tag}' >> .env; "
                     f"docker compose -f docker-compose.prod.yml pull; "
-                    f"docker compose -f docker-compose.prod.yml down --remove-orphans; "
+                    # No explicit `down` — `up -d --remove-orphans` recreates
+                    # only containers whose resolved image/config changed
+                    # (app services, because IMAGE_TAG just moved). The db
+                    # service uses unparameterized postgres:18 so it stays
+                    # running, which (a) gives us zero db downtime and (b)
+                    # avoids the docker-proxy host-port re-bind race that
+                    # broke deploys when down+up ran back-to-back without
+                    # the proxy fully releasing 127.0.0.1:5432 in between.
                     f"docker compose -f docker-compose.prod.yml up -d --remove-orphans; "
                     # Reclaim disk: prune unused images (including OLD per-SHA
                     # tags from previous deploys, not just dangling ones),
