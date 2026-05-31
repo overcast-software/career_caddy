@@ -95,10 +95,47 @@ Some changes touch multiple repos (e.g. API contract change ripples into fronten
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** TODO [dc] careercaddy.online ansible ownership unwound — proceed with Deploy PR :dc:
+
+dc has unwound ansible ownership of careercaddy.online on racknerd
+per cc's Inbox/Bug ask. Concretely:
+
+1. =playbooks/racknerd/careercaddy.online.yml= is ARCHIVED with a
+   fail-fast guard (=tags: always= so neither =--tags= nor =--skip-tags=
+   bypass it). The file is kept as archaeology — original tasks remain
+   below the guard but ansible will never reach them.
+
+2. =/opt/stacks/careercaddy.online/docker-compose.yml= will not be
+   re-templated by dc. cc's Deploy scp owns that file unambiguously.
+
+3. Subdomains still dc-owned (no change): metabase.careercaddy.online,
+   careercaddy.dev, analytics.careercaddy.online. The
+   =*.careercaddy.online= wildcard catch-all in
+   =tasks/debian/caddy-racknerd.yml= stays — it picks up any subdomain
+   NOT matched by a more-specific block, which is exactly the dc
+   surface.
+
+4. Question answered: =proxy= external docker network on racknerd is
+   DC-CREATED via =tasks/debian/caddy.yml= as part of the caddy stack
+   deploy. cc's compose should reference it as:
+     networks:
+       proxy:
+         external: true
+   and add caddy labels (=caddy: careercaddy.online, ...= +
+   =caddy.reverse_proxy: "{{upstreams 8000}}"= etc.) —
+   caddy-docker-proxy on racknerd will pick them up and add specific
+   site blocks that take precedence over the dc-owned wildcard catch-all.
+
+cc can ship the Deploy PR (caddy labels + proxy network reference)
+without dc needing to touch racknerd further. ping dc if anything on
+the caddy edge misbehaves.
+
+dc-side record: =~/Network/syncthing/Projects/diycloud/notes.org= ::
+=Operations/Unwound careercaddy.online ansible ownership= (2026-05-31).
 ** DONE [cc_auto] Phase 1 complete — ready for =git submodule add automation/= [2026-05-30] :cc_auto:shared-contract:
 CLOSED: [2026-05-30 Sat]
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-30]
+:LAST_TOUCHED: [2026-05-31]
 :HANDOFF_TO: cc-orchestrator
 :SIGNAL_LOCATION: career_caddy_automation/notes.org "Phase 1 complete — ready for parent submodule-add [2026-05-30]"
 :REMOTE: git@github.com:overcast-software/career_caddy_automation.git

@@ -1,27 +1,43 @@
 ---
-# Production deployment — VPS via docker compose
+# Production deployment — VPS via docker compose.
 #
-# Uses pre-built images from GHCR. Core stack only (db + api + frontend).
-#
-# Deploy:
-#   docker compose -f docker-compose.prod.yml pull
-#   docker compose -f docker-compose.prod.yml up -d --remove-orphans
+# This file is cc-owned and lives at /opt/stacks/careercaddy.online/
+# on racknerd after dagger deploy scp's it. Previously ansible
+# (dc/playbooks/racknerd/careercaddy.online.yml) was also writing
+# to that path — dc unwound and archived the playbook 2026-05-31
+# so this file is the single source of truth. See cc/notes.org
+# Operations/Deploy debugging 2026-05-30 for the full story.
 #
 # Required env vars (set in .env on the server):
-#   SECRET_KEY, DB_PASSWORD, ALLOWED_HOSTS, CORS_ALLOWED_ORIGINS,
-#   CSRF_TRUSTED_ORIGINS, IMAGE_TAG, TAILSCALE_IP (optional)
+#   SECRET_KEY, DB_PASSWORD, IMAGE_TAG, EMAIL_HOST, EMAIL_HOST_USER,
+#   EMAIL_HOST_PASSWORD. Optional: ALLOWED_HOSTS, CORS_ALLOWED_ORIGINS,
+#   CSRF_TRUSTED_ORIGINS, TAILSCALE_IP, FRONTEND_URL, LOGFIRE_TOKEN.
+#
+# Deploy:
+#   docker compose pull
+#   docker compose down --remove-orphans
+#   docker compose up -d --remove-orphans
+
+# Pin the compose project name so it doesn't shift if the dir is
+# renamed. Container names are also explicit per-service so `down`
+# always finds the correct rows even if the project label drifts.
+name: careercaddyonline
 
 services:
 
   db:
     image: postgres:18
+    container_name: careercaddy-db
     restart: unless-stopped
+    networks:
+      - default
     environment:
       POSTGRES_DB: ${DB_NAME:-job_hunting}
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     volumes:
-      - postgres_data:/var/lib/postgresql   # postgres 18+: mount the parent dir, not /data
+      # postgres 18+: mount the parent dir, not /data
+      - postgres_data:/var/lib/postgresql
     ports:
       - "127.0.0.1:5432:5432"
       - "${TAILSCALE_IP:-127.0.0.1}:5433:5432"
@@ -34,14 +50,18 @@ services:
 
   api:
     image: ghcr.io/overcast-software/career_caddy_api:${IMAGE_TAG:-latest}
+    container_name: careercaddy-api
     restart: unless-stopped
+    networks:
+      - default
+      - proxy
     ports:
       - "127.0.0.1:8025:8000"
     environment:
       DEBUG: "False"
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@db:5432/${DB_NAME:-job_hunting}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-api.careercaddy.online,localhost,127.0.0.1,api}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-careercaddy.online,api.careercaddy.online,localhost,127.0.0.1,api}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://careercaddy.online}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://careercaddy.online}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -76,6 +96,13 @@ services:
       start_period: 30s
       retries: 3
     mem_limit: 512m
+    labels:
+      caddy: api.careercaddy.online
+      caddy.import: cc_log
+      caddy.reverse_proxy: "{{upstreams 8000}}"
+      caddy.reverse_proxy.transport: http
+      caddy.reverse_proxy.transport.read_timeout: 2m
+      caddy.reverse_proxy.transport.write_timeout: 2m
 
   # ── Worker ──────────────────────────────────────────────────────────────
   # django-q2 task worker — Phase 1 of Plans/Job-queue integration. Shares
@@ -87,14 +114,17 @@ services:
   # atomic-deleted in Phase 4).
   worker:
     image: ghcr.io/overcast-software/career_caddy_api:${IMAGE_TAG:-latest}
+    container_name: careercaddy-worker
     restart: unless-stopped
+    networks:
+      - default
     entrypoint: ""
     command: python manage.py qcluster
     environment:
       DEBUG: "False"
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@db:5432/${DB_NAME:-job_hunting}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-api.careercaddy.online,localhost,127.0.0.1,worker}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-careercaddy.online,api.careercaddy.online,localhost,127.0.0.1,worker}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       SCRAPING_ENABLED: ${SCRAPING_ENABLED:-False}
       SA_SCHEMA_ON_POST_MIGRATE: "False"  # api runs migrations; worker just consumes
@@ -125,12 +155,27 @@ services:
 
   frontend:
     image: ghcr.io/overcast-software/career-caddy-frontend:${IMAGE_TAG:-latest}
+    container_name: careercaddy-frontend
     restart: unless-stopped
+    networks:
+      - default
+      - proxy
     ports:
       - "127.0.0.1:8087:80"
     depends_on:
       - api
     mem_limit: 64m
+    labels:
+      caddy: careercaddy.online
+      caddy.import: cc_log
+      caddy.encode: zstd gzip
+      # Same-origin: SPA emits /api/v1/... to its own host; we route
+      # those to the api container, preserving the /api prefix (handle,
+      # not handle_path) so Django routes them correctly. The catch-all
+      # reverse_proxy below handles everything else.
+      caddy.handle: /api/*
+      caddy.handle.reverse_proxy: api:8000
+      caddy.reverse_proxy: "{{upstreams 80}}"
 
   # ── Public MCP Server ────────────────────────────────────────────────────
   # Exposes career-data tools via MCP protocol at mcp.careercaddy.online.
@@ -139,7 +184,11 @@ services:
 
   mcp:
     image: ghcr.io/overcast-software/career_caddy_ai:${IMAGE_TAG:-latest}
+    container_name: careercaddy-mcp
     restart: unless-stopped
+    networks:
+      - default
+      - proxy
     ports:
       - "127.0.0.1:8030:8000"
     environment:
@@ -152,21 +201,35 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/mcp || exit 1"]
+      # /mcp requires auth (jh_* API key), so a bare GET returns 401 —
+      # which IS the server-is-up signal. Accept any 2xx or 4xx as
+      # healthy; 5xx or connection failure marks unhealthy. Without
+      # this, caddy-docker-proxy filters the container out of routing
+      # and external clients see 502 instead of the proper 401.
+      test: ["CMD-SHELL", "curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/mcp | grep -qE '^[24]'"]
       interval: 30s
       timeout: 5s
       start_period: 15s
       retries: 3
     mem_limit: 256m
+    labels:
+      caddy: mcp.careercaddy.online
+      caddy.import: cc_log
+      caddy.reverse_proxy: "{{upstreams 8000}}"
 
   # ── Chat Server (internal) ─────────────────────────────────────────────
-  # SSE streaming chat endpoint — API proxies to this service.
+  # SSE streaming chat endpoint — api proxies to this service.
   # Not exposed to the internet; only reachable via the Docker network.
+  # No caddy label — internal-only.
 
   chat:
     image: ghcr.io/overcast-software/career_caddy_ai:${IMAGE_TAG:-latest}
+    container_name: careercaddy-chat
     restart: unless-stopped
+    networks:
+      - default
     ports:
+      # Kept for local debug only. Could be dropped post-migration.
       - "127.0.0.1:8031:8000"
     environment:
       CC_API_BASE_URL: "http://api:8000"
@@ -188,6 +251,24 @@ services:
       retries: 3
     mem_limit: 512m
 
+networks:
+  default:
+  proxy:
+    # Created and managed by dc's tasks/debian/caddy.yml on racknerd.
+    # caddy-docker-proxy watches containers on this network for `caddy:`
+    # labels and synthesizes site blocks on the fly. Marking it
+    # `external: true` here means compose does NOT create/destroy it.
+    external: true
+
+# External volumes — created under the legacy `career_caddy_` project
+# prefix when this stack first ran from ~/Projects/career_caddy. Kept
+# the names so the migration to /opt/stacks/careercaddy.online +
+# project=careercaddyonline does not orphan the postgres data or
+# screenshots volume. Compose will NOT create/destroy these here.
 volumes:
   postgres_data:
+    external: true
+    name: career_caddy_postgres_data
   screenshots:
+    external: true
+    name: career_caddy_screenshots
