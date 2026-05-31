@@ -22,9 +22,20 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     volumes:
       - postgres_data:/var/lib/postgresql   # postgres 18+: mount the parent dir, not /data
-    ports:
-      - "127.0.0.1:5432:5432"
-      - "${TAILSCALE_IP:-127.0.0.1}:5433:5432"
+    # No host port bindings. Internal traffic (api, worker, chat, mcp)
+    # reaches postgres via the docker network as `db:5432`. Host-side
+    # psql access goes through `make shell-db` (i.e. `docker compose
+    # exec db psql`), which doesn't need a published port.
+    #
+    # Removed 2026-05-30 after a stuck docker-proxy zombie on the VPS
+    # (PIDs 3248051/3248060, root-owned) blocked 127.0.0.1:5432 and
+    # ${TAILSCALE_IP}:5433 across multiple Deploys. With no host port
+    # to bind, deploys can't fail with `Bind for ... already allocated`
+    # and the orphan proxies become harmless until the host reboots.
+    #
+    # If external (Tailscale) postgres access is needed again, re-add
+    # `${TAILSCALE_IP}:5433:5432` and run `sudo systemctl restart docker`
+    # on the VPS first to clear any lingering proxies.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 10s
