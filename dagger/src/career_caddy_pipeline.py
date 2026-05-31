@@ -528,6 +528,28 @@ class CareerCaddy:
                     f"grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG={tag}/' .env || echo 'IMAGE_TAG={tag}' >> .env; "
                     f"docker compose -f docker-compose.prod.yml pull; "
                     f"docker compose -f docker-compose.prod.yml down --remove-orphans; "
+                    # This VPS reproduces moby/moby#24932 on every cycle —
+                    # `docker compose down` leaves orphaned root-owned
+                    # docker-proxy processes that keep listening on the
+                    # host ports our containers expose (5432, 5433, 8025,
+                    # 8030, 8031, 8087). The next `up` then fails with
+                    # `Bind for 127.0.0.1:PORT failed: port is already
+                    # allocated`. Confirmed reproducible even on a freshly
+                    # restarted docker daemon (Deploy 26708202701 on a
+                    # clean post-`systemctl restart docker` state).
+                    #
+                    # Recovery: kill any docker-proxy whose -host-port is
+                    # one of the published ports. Requires sudo because
+                    # docker-proxy is root-owned and the deploy ssh user
+                    # is unprivileged. The /etc/sudoers.d/deploy-docker-
+                    # proxy-cleanup grant scopes this to ONLY this
+                    # specific pkill invocation:
+                    #
+                    #   <deploy_user> ALL=(root) NOPASSWD: /usr/bin/pkill -f docker-proxy*
+                    #
+                    # `|| true` so a (rare) no-zombies cycle doesn't fail
+                    # the deploy when pkill exits with 1.
+                    f"sudo -n /usr/bin/pkill -f 'docker-proxy.*-host-port' || true; "
                     f"docker compose -f docker-compose.prod.yml up -d --remove-orphans; "
                     # Reclaim disk: prune unused images (including OLD per-SHA
                     # tags from previous deploys, not just dangling ones),

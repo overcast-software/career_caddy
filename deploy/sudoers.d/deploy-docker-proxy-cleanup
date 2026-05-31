@@ -1,0 +1,30 @@
+# Career Caddy deploy automation — narrow sudo grant.
+#
+# Lets the unprivileged ssh user used by the Dagger Deploy workflow kill
+# root-owned `docker-proxy` processes that have been orphaned from their
+# parent container. This is a workaround for moby/moby#24932: on this
+# VPS, `docker compose down` does NOT reliably reap its own docker-proxy
+# children, so the next `up` fails with
+# `Bind for 127.0.0.1:PORT failed: port is already allocated`. Without
+# this grant, the deploy ssh user can't pkill the root-owned proxies
+# and Deploy stays red forever.
+#
+# Scope: ONLY `/usr/bin/pkill -f docker-proxy*` — nothing else. The
+# pattern wildcard intentionally covers any args the deploy script may
+# pass (today it's `-f docker-proxy.*-host-port`; a more specific
+# variant might land later). pkill's `-f` matches against the full
+# command line, so the deploy user can only kill processes whose
+# cmdline begins with `docker-proxy` — which only docker itself
+# spawns.
+#
+# Install on the VPS as root:
+#
+#   sudo install -m 0440 -o root -g root \
+#     deploy/sudoers.d/deploy-docker-proxy-cleanup \
+#     /etc/sudoers.d/deploy-docker-proxy-cleanup
+#   sudo visudo -c   # verify before reloading
+#
+# Replace `deploy` below with the actual deploy ssh user if different
+# (current GitHub Actions secret: DEPLOY_SSH_USER).
+
+deploy ALL=(root) NOPASSWD: /usr/bin/pkill -f docker-proxy*
