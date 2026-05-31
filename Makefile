@@ -21,7 +21,7 @@
 -include .env.local
 export
 
-.PHONY: up up-core up-full down logs build shell-api shell-db migrate test-api test-frontend test-automation lint-api lint-frontend lint-automation format-frontend bootstrap ci ci-ai scrape-url doctor doctor-poller list help
+.PHONY: up up-core up-full down logs build shell-api shell-db migrate test-api test-frontend test-automation lint-api lint-frontend lint-automation format-frontend bootstrap ci ci-ai scrape-url runner runner-local poller poller-local doctor doctor-poller list help
 
 # ── Dev stack ──────────────────────────────────────────────────────────────
 
@@ -166,11 +166,19 @@ ci-ai: ## Build the slim AI Docker image via Dagger (no camoufox — production 
 scrape-url: ## Scrape a single job URL  (usage: make scrape-url URL=https://...)
 	cd agents && uv run caddy-pipeline --url $(URL)
 
-poller: ## Poll for hold scrapes against prod (pass ARGS="--engine chrome --headless")
-	cd agents && uv run caddy-poller $(ARGS)
+runner: ## Run the scrape runner against prod (pass ARGS="--engine chrome --headless"). Claims hold scrapes via POST /scrapes/claim-next/; N runners coexist safely via SKIP LOCKED.
+	cd agents && uv run caddy-runner $(ARGS)
 
-poller-local: ## Poll for hold scrapes against local dev (localhost:8000; set CC_API_TOKEN_LOCAL to override prod token)
-	cd agents && CC_API_BASE_URL=http://localhost:8000 CC_API_TOKEN=$${CC_API_TOKEN_LOCAL:-$$CC_API_TOKEN} uv run caddy-poller $(ARGS)
+# Deprecated alias — drop after one release.
+poller: ## DEPRECATED — use `make runner`. Kept for one release.
+	cd agents && uv run caddy-runner $(ARGS)
+
+runner-local: ## Run the scrape runner against local dev (localhost:8000; set CC_API_TOKEN_LOCAL to override prod token)
+	cd agents && CC_API_BASE_URL=http://localhost:8000 CC_API_TOKEN=$${CC_API_TOKEN_LOCAL:-$$CC_API_TOKEN} uv run caddy-runner $(ARGS)
+
+# Deprecated alias — drop after one release.
+poller-local: ## DEPRECATED — use `make runner-local`. Kept for one release.
+	cd agents && CC_API_BASE_URL=http://localhost:8000 CC_API_TOKEN=$${CC_API_TOKEN_LOCAL:-$$CC_API_TOKEN} uv run caddy-runner $(ARGS)
 
 # ── Bootstrap ──────────────────────────────────────────────────────────────
 

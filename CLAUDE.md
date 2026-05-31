@@ -15,7 +15,7 @@ Four independently deployable submodules, each with its own `CLAUDE.md`:
 
 The two are split by who they serve:
 
-- **`agents/` = server-side, service-driven.** Runs as Docker containers for *everyone*: Camoufox + Playwright browser, `scrape_graph` pydantic-graph state machine, prod MCP servers (`chat_server.py` + `public_server.py` shipped to `:8031` + `:8030`), pollers (`hold_poller.py`, `score_poller.py` — both retiring via the django-q2 phased rollout). When the queue migration lands, the scrape worker container also lives here because it needs Camoufox.
+- **`agents/` = server-side, service-driven.** Runs as Docker containers for *everyone*: Camoufox + Playwright browser, `scrape_graph` pydantic-graph state machine, prod MCP servers (`chat_server.py` + `public_server.py` shipped to `:8031` + `:8030`), the scrape runner (`runners/scrape_runner.py` — claims hold scrapes via `POST /api/v1/scrapes/claim-next/`; N runners coexist safely via `SELECT FOR UPDATE SKIP LOCKED`), the score poller (`pollers/score_poller.py`, retiring via the django-q2 phased rollout).
 - **`automation/` = user-side, operator-driven.** Runs on *one user's* machines (laptop, pibu, home server). Email triage pipeline (`scripts/inbox_triage.py` + `src/email_source/` + `src/email_classifier/`), caddy-web copilot, A2A orchestrator, link traverser, sharpen_profiles. **HTTP-only contract** with the api + public MCP — no Python imports cross. Self-hosters set `CC_API_BASE_URL` / `CC_MCP_URL` / `CC_API_TOKEN` and point at their own Career Caddy domain.
 
 Test: *service for everyone* → `agents/`; *operator for one user* → `automation/`.
@@ -28,7 +28,8 @@ Top-level peer folders advertise the heterogeneity:
 - `agents/mcp_servers/` — Four MCP servers; `chat_server.py` and `public_server.py` ship to prod (`:8031` chat, `:8030` public at `mcp.careercaddy.online`); `browser_server.py` and `career_caddy_server.py` are local-only
 - `agents/browser/` — Camoufox + Playwright engine, credentials, sessions (local-only)
 - `agents/scrape_graph/` — pydantic-graph state machine for scrape + extract
-- `agents/pollers/` — long-running daemons (`hold_poller.py`, `score_poller.py`)
+- `agents/runners/` — external workers that claim work via the api (`scrape_runner.py`, formerly `pollers/hold_poller.py`)
+- `agents/pollers/` — periodic-sweep daemons (`score_poller.py`; `hold_poller.py` is a deprecation shim re-exporting `runners.scrape_runner`)
 - `agents/tools/` — one-shot operator scripts (`manual_login`, `discover_sites`, `export_graph_structure`, `fetch_chromium`)
 - `agents/lib/` — shared utilities (`api_tools.py` HTTP client, `toolsets.py`, `models/`, `history.py`, etc.)
 
@@ -60,7 +61,7 @@ make up-ai
 # Browser MCP:  http://localhost:3004/sse
 ```
 
-**Chat-created scrapes default to `hold` status.** The chat server creates scrapes with `status="hold"` so the hold-poller picks them up. Without a running poller (`make poller` or `make poller-local`), these scrapes sit in `hold` forever. On fresh clones, start the poller or manually change scrape status to trigger processing.
+**Chat-created scrapes default to `hold` status.** The chat server creates scrapes with `status="hold"` so the scrape runner picks them up. Without a running runner (`make runner` or `make runner-local`), these scrapes sit in `hold` forever. On fresh clones, start the runner or manually change scrape status to trigger processing.
 
 **Running the AI pipeline directly** (no docker service needed):
 
@@ -89,12 +90,12 @@ make lint-automation  # ruff-check automation (cc_auto)
 make ci               # Dagger: lint + test API + frontend + automation locally
 make ci-ai            # Dagger: build slim AI image (no camoufox)
 make scrape-url URL=https://...   # scrape one job URL → add to Career Caddy
-make poller                          # hold-poller against prod (Camoufox default)
-make poller ARGS="--engine chrome"   # hold-poller with Chromium + stealth (ARM/Pi)
-make poller ARGS="--attended"        # headed browser; spawns an ephemeral tab per scrape in one resident window and closes it on completion. Cookies persist across scrapes so logins/captchas you solve once stay warm.
-make poller-local                    # hold-poller against localhost:8000 (uses CC_API_TOKEN_LOCAL)
+make runner                          # scrape runner against prod (Camoufox default)
+make runner ARGS="--engine chrome"   # runner with Chromium + stealth (ARM/Pi)
+make runner ARGS="--attended"        # headed browser; spawns an ephemeral tab per scrape in one resident window and closes it on completion. Cookies persist across scrapes so logins/captchas you solve once stay warm.
+make runner-local                    # scrape runner against localhost:8000 (uses CC_API_TOKEN_LOCAL)
 make doctor                          # check local environment is set up correctly
-make doctor-poller                   # check hold-poller environment
+make doctor-poller                   # check scrape-runner environment (legacy name, same target)
 make bootstrap                       # print API initialization status (curl /initialize/)
 ```
 
@@ -123,7 +124,7 @@ The **frontend** is a JSON:API client. The `application` adapter injects JWT aut
 
 The **API** uses Django ORM for all models. Startup requires only `manage.py migrate`.
 
-The **AI layer** runs locally. Agents chain MCP servers as tool providers. Email→JobPost orchestration now lives in the sibling repo `~/Projects/career_caddy_automation`, which consumes tools from `mcp.careercaddy.online/mcp`; this repo's `agents/` only ships the local browser/scrape agents and the hold-poller. The AI layer authenticates to the API using a long-lived API key (`CC_API_TOKEN`), not a JWT.
+The **AI layer** runs locally. Agents chain MCP servers as tool providers. Email→JobPost orchestration now lives in the sibling repo `~/Projects/career_caddy_automation`, which consumes tools from `mcp.careercaddy.online/mcp`; this repo's `agents/` only ships the local browser/scrape agents and the scrape runner. The AI layer authenticates to the API using a long-lived API key (`CC_API_TOKEN`), not a JWT.
 
 ## Cross-Component Contracts
 
