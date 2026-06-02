@@ -7794,3 +7794,39 @@ end-to-end: file → parsed sections written → row =completed=. All four
 LLM-shaped daemon threads gone after this phase.
 
 *Out of scope*: scrape dispatch + hold-poller (Phase 4).
+
+* SHIPPED ActivityPub Phase 5b — Outbox endpoint (paginated public JPs as Create activities)
+:PROPERTIES:
+:CREATED: [2026-05-29]
+:DEPENDS_ON: Phase 5a
+:LAST_TOUCHED: [2026-06-01]
+:ARCHIVE_TIME: 2026-06-01 Mon 21:54
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
+sub-phase 5b. Read that before starting. This is a placeholder; only
+unblock after 5a (Actor + WebFinger) has shipped + the Actor URIs are
+stable in prod.
+
+*Summary*: =GET /api/v1/actors/<username>/outbox= returns an AS2
+OrderedCollection of Create(Note) activities, each wrapping a public
+JobPost (=audience= contains AS2 Public, =created_by= = the actor's
+user). Paginated via AS2 paging URIs (=first=, =next=, =prev=). Sort:
+=published= descending.
+
+*Pre-conditions before picking up*
+- 5a has shipped to prod.
+- The Actor URI shape is stable (Q1 resolution in the plan).
+- The =/as-object/= adapter from Phase 4 builds the per-post AS2 Note;
+  5b wraps each in a Create activity envelope.
+
+*Out of scope*: persistence of Activity rows (that's 5d when dispatch
+needs stable Activity IDs). 5b regenerates each activity on every
+outbox read.
+
+*Open questions to resolve before 5b is buildable*: none from the plan.
+The 5b shape is well-trodden AS2 territory.

@@ -15,10 +15,10 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (27)
+Inbox (31)
   Bug (8)
   Enhancement (18)
-  Feature (33)
+  Feature (34)
   Idea (0)
 Backlog [0/3]
 Active [0/25]
@@ -95,7 +95,147 @@ Some changes touch multiple repos (e.g. API contract change ripples into fronten
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** TODO [dc] Phase 5a federation harness — recommend dev environment + ship prod INSTANCE_ORIGIN fix anyway
+Cross-cutting reply from dc on the two findings the cc-side agent surfaced
+(prod /actors/dough returning AS2 JSON-LD with localhost:8000 URIs;
+careercaddy.dev /actors/dough returning 404 from some api with the right
+content-type but no Actor rows).
+
+*TL;DR*
+1. Prod: set =INSTANCE_ORIGIN=https://careercaddy.online= and restart api.
+   Latent-bug fix, no federation involvement.
+2. Find which api backend serves =careercaddy.dev/actors/*= (Angular dev
+   proxy config will tell you) before running any backfill.
+3. Dev: backfill + =INSTANCE_ORIGIN=https://careercaddy.dev= on the
+   actual api container that path hits.
+4. Run the Phase 5a Mastodon smoke against *dev*, not prod.
+
+*Why dev for the harness, not prod*
+
+Phase 5a is first contact. Once a Mastodon peer caches your
+=/actors/<user>= response it stickies the URIs and publicKey. If
+later Phase 5b/5c work surfaces a bug — wrong key encoding, malformed
+inbox URI, signature off by a byte — you fix the code locally, but
+every peer that already cached the buggy actor sees the old version
+until /their/ cache expires, and you do not control their TTL.
+Federation has long memory.
+
+Dev is the throwaway identity. If the harness produces a malformed
+actor and three test Mastodon peers cache it, you can blow away the
+dev DB or rename the actor. Same accident on prod and you have burned
+careercaddy.online with whatever fediverse instances probed first.
+
+Setup cost on dev is two manage.py commands + one env var.
+Cheap. Run on dev.
+
+*Ship the prod INSTANCE_ORIGIN fix regardless of harness choice*
+
+Do not leave =localhost:8000= URIs in prod's actor responses just
+because you are not federating yet. Any crawler or curious peer that
+hits =api.careercaddy.online/actors/dough= today caches an actor
+pointing at localhost. Cheap, isolated fix — ship it:
+
+  ssh racknerd "echo 'INSTANCE_ORIGIN=https://careercaddy.online' \
+    >> /opt/stacks/careercaddy.online/.env && \
+    docker compose -f /opt/stacks/careercaddy.online/docker-compose.yml \
+    restart api"
+
+*Watch-out before backfilling on dev*
+
+The other agent's path-trace assumption — =careercaddy.dev → racknerd
+→ tunnel → laptop ember → laptop api= — is shaky. The actual dc-shipped
+path is:
+
+  careercaddy.dev (apex, public DNS)
+    → racknerd:443 (caddy edge, LE cert for careercaddy.dev wildcard)
+    → via_pibu snippet (tailscale to 100.84.193.34 = pibu)
+    → pibu:443 (caddy, terminates cd_tls)
+    → 192.168.1.101:4200 (omarchy ng serve, Angular dev)
+
+That last hop is the Angular dev server, not Django. The 404 with
+=Content-Type: application/activity+json= proves Angular is proxying
+=/actors/*= to /some/ Django backend (proxy.conf.json or similar). It
+could be:
+
+  - pibu's =careercaddy-dev-api= container (from
+    =playbooks/pibu/careercaddy.dev.yml=)
+  - the laptop's local api over a tunnel
+  - some other api on omarchy
+
+Whichever it is, that is where you must run:
+
+  docker compose exec api python manage.py bootstrap_instance_actor
+  docker compose exec api python manage.py generate_federation_actors
+
+Inspect =proxy.conf.json= (or whatever the frontend uses for dev
+proxying) before running the backfill, so you do not seed the wrong db.
+
+*Also: INSTANCE_ORIGIN on dev*
+
+If the dev api also defaults to =http://localhost:8000= in absence of
+INSTANCE_ORIGIN, set =INSTANCE_ORIGIN=https://careercaddy.dev= on the
+dev api's env at the same time as the backfill. The harness needs the
+canonical apex in the URIs or Mastodon will reject the actor at
+verification time.
+
+*dc-side surface that is now ready*
+
+- =https://careercaddy.dev/= returns 200 (verified 2026-06-01).
+- LE wildcard cert in place for =careercaddy.dev= +
+  =*.careercaddy.dev=. Distributed to pibu via cert-puller.
+- racknerd's caddy bridges =careercaddy.dev= +
+  =careercaddy.dev.robotbellybutton.com= → pibu via_pibu.
+- Pibu's caddy terminates both hostnames; apex skips internal_only so
+  external federation traffic gets through.
+- =careercaddy.dev/actors/dough= reaches an api somewhere and returns
+  a real 404 with the activitypub content-type — so the route is
+  functionally plumbed; only the data is missing.
+
+*Out of scope for this reply / still cc-owned*
+
+- The federation routes themselves (=/.well-known/webfinger=,
+  =/actors/<x>=) at the apex are tracked under the other open inbox
+  item =[cc] Caddy reverse-proxy routing for ActivityPub federation
+  surface=. dc has not added apex-path routing yet because dev now
+  reaches whatever Angular's proxy resolves to and the request did
+  in fact land on a Django api. If the harness later needs a
+  dedicated apex carve-out (e.g. webfinger short-circuit), file it
+  there.
+- ALLOWED_HOSTS / CSRF_TRUSTED_ORIGINS additions for =careercaddy.dev=
+  on the dev api are cc-side (=playbooks/pibu/careercaddy.dev.yml= env
+  block or the dev =.env=).
+
+*Tags*: =:dc:phase5a:federation:caddy:dev:=
+** TODO caddy-inbox + hold_poller drowning in 401s — confirm token/scheme
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-01]
+:END:
+Since 2026-05-31 16:00 UTC, caddy-inbox throws ~300-450 errors/hr and
+hold_poller mirrors it. All are HTTP 401 from api.careercaddy.online.
+
+Failing call sites: followup_processor agent → CareerCaddyToolset →
+src/client/api_client.py (Authorization: Bearer CC_API_TOKEN).
+Hot endpoints: GET /api/v1/job-applications/?filter[company]=...,
+GET /api/v1/job-posts/{id}/job-applications/, POST /api/v1/companies/.
+
+Action items:
+1. Confirm whether the api's accepted auth scheme for jh_* staff keys is
+   currently 'Bearer' or 'Api-Key'. Parent CLAUDE.md documents 'Api-Key';
+   cc_auto sends 'Bearer'. If api never accepted Bearer for these keys, the
+   prior baseline of ~0 errors/day is suspicious — figure out what changed.
+2. Check whether CC_API_TOKEN in the caddy-inbox loop environment expired or
+   rotated near 2026-05-31 16:00 UTC. If yes, refresh it.
+3. Same fix for hold_poller (uses same client).
+4. Investigation note: cc_auto notes.org Operations/2026-05-31 caddy-inbox
+   401 spike — ongoing auth failure, not DisallowedHost.
+
+Cross-repo: if the answer is 'api requires Api-Key scheme', a parent-side
+todo is needed — but more likely cc_auto just needs to switch its header
+prefix or refresh its token.
 ** TODO [dc] careercaddy.online ansible ownership unwound — proceed with Deploy PR :dc:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-01]
+:END:
 
 dc has unwound ansible ownership of careercaddy.online on racknerd
 per cc's Inbox/Bug ask. Concretely:
@@ -422,11 +562,49 @@ Two real candidates (=screenshot.js= borderline, =scrape-status.js= lean-no), on
 :LAST_TOUCHED: [2026-05-05]
 :END:
 ** Feature
+*** TODO deploy/pibu/ — Camoufox scrape runner systemd user unit
+SHIPPED 2026-05-31. cc_auto/deploy/pibu/ holds the canonical
+shape for running the agents-repo scrape runner on pibu.
+
+What landed:
+- =deploy/pibu/caddy-runner.service= — systemd user unit
+  (Camoufox + --attended + memory caps + Restart on-failure).
+- =deploy/pibu/install.sh= — idempotent installer with preflight.
+- =deploy/pibu/README.md= — setup/refresh/smoke recipe.
+- =~/.config/environment.d/career-caddy.conf= on pibu now uses
+  =BROWSER_ENGINE=camoufox= (was =chrome= which OOM-launched).
+- Architecture note added: Pibu scrape runner — Camoufox attended,
+  systemd user unit.
+
+Follow-up to track separately if it bites:
+- Camoufox fetch (~150MB) on pibu is slow over the constrained
+  network + Pi I/O. Document it in README (done) and only run it
+  during low-load windows.
+- Pibu runs a parallel dev career-caddy docker stack; that plus the
+  runner sits close to the 905MB RAM cap. If the runner gets OOM-
+  killed by the kernel rather than systemd MemoryMax, lower the
+  cap further or shut the dev stack down on pibu.
+*** TODO Catchall mail B2 shipped — Phase B3 poller unblocked once cc Phase 2.5 api tickets land [2026-05-31]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-31]
+:END:
+*Signal*: Doug confirmed catchall =<username>@careercaddy.online= is live and accepting forwarded mail (per relay from cc, 2026-05-31). Phase B2 (=Inbox/Feature/Phase 2.5: ops — MX record + catchall mail server=) moved to SHIPPED.
+
+*B3 (this side) =src/pollers/email_catchall.py= remains blocked on these cc-side api tickets in cc/todo.org Inbox/Feature*:
+- =Phase 2.5: api — email-forward source + JobPostDiscovery.forwarded_via_address + JSON:API discoveries hasMany=
+- =Phase 2.5: api — discover_for_user_id on POST job-posts + staff-or-self RBAC + audit column=
+- =Phase 2.5: api — username catchall validator + audit_usernames mgmt command=
+- Also need =GET /api/v1/users/?filter[username]= queryable for the To-address resolver (covered by the validator ticket scope).
+
+*Next action when those ship*: promote =Inbox/Feature/Phase 2.5: cc_auto — inbox poller= out of Inbox (Backlog or Active) and start the build. Reference =~/.claude/plans/majestic-wiggling-sutton.md= Phase B for the full plan.
+
+*Out of scope here*: no api work; cc owns those three tickets. cc was the messenger, so no cross-repo inbox mirror needed — the tickets are already captured on their side.
 *** TODO Job-queue Phase 8 — Optional SSE push for long-running jobs
 :PROPERTIES:
 :CREATED: [2026-05-30]
 :CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
 :DEPENDS_ON: Phase 7 + observed user pain with polling cap
+:LAST_TOUCHED: [2026-05-31]
 :END:
 Canonical plan: =notes.org/Plans/Job-queue integration — django-q2 phased rollout=
 sub-phase Phase 8. OPT-IN. Only ship if Phases 2-7 surface real user
@@ -689,39 +867,10 @@ federated JobPost ingestion semantics (=5e=).
 - AS2 payload validation: parse-or-reject; 100KB size cap.
 - Allowlist enforcement: non-allowlisted instances 403 before signature
   verification.
-*** TODO ActivityPub Phase 5b — Outbox endpoint (paginated public JPs as Create activities)
+*** SHIPPED ActivityPub Phase 5a — Actor + WebFinger + Instance Actor + lazy RSA keypair
 :PROPERTIES:
 :CREATED: [2026-05-29]
-:DEPENDS_ON: Phase 5a
-:LAST_TOUCHED: [2026-05-29]
-:END:
-*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
-sub-phase 5b. Read that before starting. This is a placeholder; only
-unblock after 5a (Actor + WebFinger) has shipped + the Actor URIs are
-stable in prod.
-
-*Summary*: =GET /api/v1/actors/<username>/outbox= returns an AS2
-OrderedCollection of Create(Note) activities, each wrapping a public
-JobPost (=audience= contains AS2 Public, =created_by= = the actor's
-user). Paginated via AS2 paging URIs (=first=, =next=, =prev=). Sort:
-=published= descending.
-
-*Pre-conditions before picking up*
-- 5a has shipped to prod.
-- The Actor URI shape is stable (Q1 resolution in the plan).
-- The =/as-object/= adapter from Phase 4 builds the per-post AS2 Note;
-  5b wraps each in a Create activity envelope.
-
-*Out of scope*: persistence of Activity rows (that's 5d when dispatch
-needs stable Activity IDs). 5b regenerates each activity on every
-outbox read.
-
-*Open questions to resolve before 5b is buildable*: none from the plan.
-The 5b shape is well-trodden AS2 territory.
-*** TODO ActivityPub Phase 5a — Actor + WebFinger + Instance Actor + lazy RSA keypair
-:PROPERTIES:
-:CREATED: [2026-05-29]
-:LAST_TOUCHED: [2026-05-29]
+:LAST_TOUCHED: [2026-06-01]
 :END:
 *Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
 sub-phase 5a. The =Resolved decisions= section there pins Q1 (URI shape),
@@ -1153,11 +1302,11 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 *Dependency*: Phase 2 api verb-endpoints ticket merged.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Manual dedup → learning loop
-*** TODO Phase 2.5: ops — MX record + catchall mail server for *@careercaddy.online :infra:cc_auto:
+*** SHIPPED Phase 2.5: ops — MX record + catchall mail server for *@careercaddy.online :infra:cc_auto:
 :PROPERTIES:
 :PHASE:    2.5
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
+:LAST_TOUCHED: [2026-05-31]
 :END:
 *Goal*: deliver mail to a catchall mailbox cc_auto can read over Tailscale.
 
