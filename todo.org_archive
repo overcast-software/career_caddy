@@ -7941,3 +7941,45 @@ The merge brings:
 
 No frontend / cc_auto / agents work blocks the pin bump — it's a pure
 api-internal change. Just bump and let the parent CI re-run.
+
+* SHIPPED ActivityPub Phase 5e — Federated JobPost ingestion + dedup
+:PROPERTIES:
+:CREATED: [2026-05-29]
+:DEPENDS_ON: Phase 5d
+:LAST_TOUCHED: [2026-06-02]
+:ARCHIVE_TIME: 2026-06-02 Tue 15:31
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
+sub-phase 5e. Placeholder; unblock after 5d.
+
+*Summary*: when a =Create(Note)= activity arrives in our inbox, construct
+a candidate JobPost (source_instance from attributedTo's host). Run
+=find_duplicate= via canonical_link / apply_url-reciprocity / fingerprint.
+If duplicate, link via duplicate_of_id + write DuplicateAnnotation with
+=action="federated_merge"=. If no duplicate, insert as federated row
+(visibility-gated behind JobPostDiscovery per the existing five-clause
+filter).
+
+*Pre-conditions before picking up*
+- 5d has shipped (so inbound activities have a stable
+  FederationActivity history to consult for dedup-on-replay).
+- Q7 in the plan resolved: dedup outcome (link / ignore / discovery-only).
+
+*Operational must-haves before merge*
+- Defensive parsing: treat every inbound field as untrusted. URL fields
+  through canonicalize_link + strip_url_trailing_junk. Title /
+  description size-capped. HTML sanitized.
+- Per-instance retention: federated JobPost rows older than 90d with
+  zero local JobPostDiscovery get archived (slim form retained for
+  audit).
+- Inbound dedup tie-in with Phase 3's DuplicateAnnotation reports —
+  surface federation merges in the dedupe-feedback report.
+
+*Closes the contract*: this is the point at which following a remote
+actor produces a visible federated post in the local user's feed.
+Everything before 5e is plumbing; 5e is the end-user surface.
