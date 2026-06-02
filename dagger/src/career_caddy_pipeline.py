@@ -433,6 +433,7 @@ class CareerCaddy:
         org: str = "overcast-software",
         tag: str = "latest",
         registry_username: str = "",
+        platform: str = "",
         frontend_api_host: str = "",
     ) -> list[str]:
         """Build all images and push to GHCR. Returns list of pushed image refs.
@@ -442,6 +443,8 @@ class CareerCaddy:
             org: GitHub organization (used in image path)
             tag: Image tag (use git SHA for immutable tags)
             registry_username: GitHub actor username for GHCR auth (defaults to org)
+            platform: Target platform (e.g. "linux/arm64"); empty = engine
+                native (amd64 in CI). Use with QEMU for cross-builds.
             frontend_api_host: API origin baked into the frontend production
                 build. Default is empty → same-origin (SPA emits /api/v1/...;
                 outer proxy routes /api/* to the api container). Pass a full
@@ -452,16 +455,23 @@ class CareerCaddy:
         frontend_ref = f"{REGISTRY}/{org}/{FRONTEND_IMAGE}:{tag}"
         ai_ref = f"{REGISTRY}/{org}/{AI_IMAGE}:{tag}"
 
+        build_kwargs: dict = {}
+        if platform:
+            build_kwargs["platform"] = dagger.Platform(platform)
+
         pushed_api = await (
             api_src
-            .docker_build()
+            .docker_build(**build_kwargs)
             .with_registry_auth(REGISTRY, username, registry_token)
             .publish(api_ref)
         )
 
         pushed_frontend = await (
             frontend_src
-            .docker_build(build_args=[dagger.BuildArg("API_HOST", frontend_api_host)])
+            .docker_build(
+                build_args=[dagger.BuildArg("API_HOST", frontend_api_host)],
+                **build_kwargs,
+            )
             .with_registry_auth(REGISTRY, username, registry_token)
             .publish(frontend_ref)
         )
@@ -469,7 +479,10 @@ class CareerCaddy:
         # AI image: build without Camoufox (browser runs on Pi, not VPS)
         pushed_ai = await (
             ai_src
-            .docker_build(build_args=[dagger.BuildArg("INSTALL_CAMOUFOX", "false")])
+            .docker_build(
+                build_args=[dagger.BuildArg("INSTALL_CAMOUFOX", "false")],
+                **build_kwargs,
+            )
             .with_registry_auth(REGISTRY, username, registry_token)
             .publish(ai_ref)
         )
