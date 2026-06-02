@@ -181,7 +181,7 @@ dagger -m ./dagger call lint-automation    # ruff-check automation (cc_auto)
 dagger -m ./dagger call test-automation    # pytest in automation (cc_auto)
 dagger -m ./dagger call build-ai           # build AI image with camoufox
 dagger -m ./dagger call publish --registry-token=env:GITHUB_TOKEN --org=overcast-software --tag=latest
-dagger -m ./dagger call deploy --ssh-key=file:~/.ssh/id_ed25519 --host=<vps> --app-dir=/opt/career-caddy --tag=latest
+dagger -m ./dagger call deploy --ssh-key=file:~/.ssh/id_ed25519 --host=<vps> --app-dir=/opt/stacks/careercaddy.online --tag=latest
 ```
 
 ## Gitflow
