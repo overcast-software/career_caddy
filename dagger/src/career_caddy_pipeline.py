@@ -9,7 +9,7 @@ Usage (from repo root):
   dagger -m ./dagger call build-frontend
   dagger -m ./dagger call build-ai
   dagger -m ./dagger call publish --registry-token=env:GITHUB_TOKEN --org=overcast-software --tag=latest
-  dagger -m ./dagger call deploy --ssh-key=file:~/.ssh/id_ed25519 --host=your-vps-ip --app-dir=/home/oldbones/Projects/career_caddy --tag=latest
+  dagger -m ./dagger call deploy --ssh-key=file:~/.ssh/id_ed25519 --host=your-vps-ip --app-dir=/opt/stacks/careercaddy.online --tag=latest
 
 In GitHub Actions, call via: dagger -m ./dagger call publish ...
 
@@ -495,7 +495,7 @@ class CareerCaddy:
         ssh_key: Secret,
         host: str,
         compose_file: Annotated[dagger.File, DefaultPath("../docker-compose.prod.yml")],
-        app_dir: str = "/home/oldbones/Projects/career_caddy",
+        app_dir: str = "/opt/stacks/careercaddy.online",
         tag: str = "latest",
         ssh_user: str = "deploy",
     ) -> str:
