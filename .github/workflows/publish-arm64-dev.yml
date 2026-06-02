@@ -1,0 +1,75 @@
+name: Publish arm64 dev images
+
+# Cross-builds arm64 images for the `dev` branch and publishes to GHCR
+# as `:dev-<sha>` (immutable) and `:dev` (moving). No SSH deploy step —
+# fetch is operator-driven (run `docker compose pull` wherever you want
+# the arm64 images, e.g. a Raspberry Pi).
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  ci:
+    name: Build and test (API + Frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Dagger CLI
+        run: curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=v0.20.8 BIN_DIR=/usr/local/bin sh
+
+      - name: Build and test API
+        run: dagger -m ./dagger call build-api
+
+      - name: Build and test Frontend
+        run: dagger -m ./dagger call build-frontend
+
+      - name: Test AI (toolsets + security)
+        run: dagger -m ./dagger call test-ai
+
+  publish-arm64:
+    name: Publish arm64 images to GHCR (:dev, :dev-<sha>)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set up QEMU (arm64 emulation for cross-build)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Install Dagger CLI
+        run: curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=v0.20.8 BIN_DIR=/usr/local/bin sh
+
+      - name: Publish arm64 images — immutable :dev-<sha>
+        run: |
+          dagger -m ./dagger call publish \
+            --registry-token=env:GHCR_TOKEN \
+            --org=overcast-software \
+            --tag=dev-${{ github.sha }} \
+            --platform=linux/arm64 \
+            --registry-username=${{ github.actor }}
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+
+      - name: Publish arm64 images — moving :dev tag
+        run: |
+          dagger -m ./dagger call publish \
+            --registry-token=env:GHCR_TOKEN \
+            --org=overcast-software \
+            --tag=dev \
+            --platform=linux/arm64 \
+            --registry-username=${{ github.actor }}
+        env:
+          GHCR_TOKEN: ${{ github.token }}
