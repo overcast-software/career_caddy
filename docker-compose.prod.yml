@@ -84,6 +84,7 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-https://careercaddy.online}
       SCREENSHOT_DIR: /app/screenshots
       LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      INSTANCE_ORIGIN: ${INSTANCE_ORIGIN:-http://localhost:8000}
     volumes:
       - screenshots:/app/screenshots
     depends_on:
