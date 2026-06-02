@@ -15,7 +15,7 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (31)
+Inbox (30)
   Bug (8)
   Enhancement (18)
   Feature (34)
@@ -272,78 +272,6 @@ the caddy edge misbehaves.
 
 dc-side record: =~/Network/syncthing/Projects/diycloud/notes.org= ::
 =Operations/Unwound careercaddy.online ansible ownership= (2026-05-31).
-** DONE [cc_auto] Phase 1 complete — ready for =git submodule add automation/= [2026-05-30] :cc_auto:shared-contract:
-CLOSED: [2026-05-30 Sat]
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-31]
-:HANDOFF_TO: cc-orchestrator
-:SIGNAL_LOCATION: career_caddy_automation/notes.org "Phase 1 complete — ready for parent submodule-add [2026-05-30]"
-:REMOTE: git@github.com:overcast-software/career_caddy_automation.git
-:PIN: df7fdf1 (origin/main HEAD; cc-auto's stated 6ddbe8d was orphaned by a subsequent public-prep rebase, but df7fdf1 contains the equivalent Phase 1 content under rewritten SHAs plus the LICENSE bootstrap)
-:CONSUMED_BY: parent feature/automation-submodule [2026-05-30]
-:END:
-
-cc-auto agent has finished the seven Phase 1 sub-items in
-=career_caddy_automation/todo.org/Phase 1 — repo-side prep for automation/
-submodule conversion=. Repo is in shippable shape; remote pushed.
-
-Five commits landed on
-=github.com:overcast-software/career_caddy_automation main=:
-
-| sub-item | commit    | summary                                                          |
-|----------+-----------+------------------------------------------------------------------|
-| 1.1      | =4b66614= | =.gitignore= picks up =.ok= scratch file                         |
-| 1.3      | =2f8cb97= | =Makefile= with =ci= / =lint= / =fmt= / =test= targets           |
-| 1.4      | =d1379a8= | =CLAUDE.md= refreshed: operator-side framing, Mongo, =make ci=   |
-| 1.6      | =f1642b8= | =scripts/hold_poller.py= deleted (stopgap; canonical at agents/) |
-| 1.7      | =571293b= | =todo.org= DONE-marking; ack-back signal in notes.org            |
-
-Verified-clean (no diff needed):
-
-- 1.2 Gitflow — =feature/* → main=, =init.defaultBranch=main=, no
-  =develop= references anywhere.
-- 1.5 Agent description — =~/.claude/agents/cc-auto.md= edited
-  outside the repo tree: drops "standalone sibling" framing, documents
-  the role split (operator vs. service), points at the new
-  =claude/ca-*= emacsclient helpers in
-  =~/.config/doom/lisp/career_caddy_auto.el=.
-
-*Verification*: =make ci= passes (17 tests + ruff check). =git status=
-clean on tracked files (only =notes.org= modified — local-only per
-memory).
-
-*cc-orchestrator's Phase 2+ to do*:
-
-1. =git submodule add git@github.com:overcast-software/career_caddy_automation.git automation/=
-   in the parent worktree (SSH per Q1 lean; matches =agents/=).
-2. =.gitmodules= update; initial pin = =6ddbe8d= (cc_auto main HEAD
-   at ack-back, includes LICENSE merge from origin's bootstrap
-   commit).
-3. Parent =CLAUDE.md= updated to list =automation/= alongside
-   =api/= / =frontend/= / =agents/=.
-4. =agents/CLAUDE.md= updated with the role-split cross-link
-   (service = =agents/= containers, operator = =automation/= user-side
-   orchestration; full text in =notes.org Plans/Promoting cc_auto →
-   automation/.../Role split=).
-5. =dagger/src/career_caddy_pipeline.py= — add =lintAutomation= and
-   =testAutomation= functions calling =make ci= from inside
-   =automation/=.
-6. =Makefile= top-level — add =lint-automation= + =test-automation=
-   targets; roll into =make ci-all= behind which =make ci= adds
-   automation gradually.
-
-*Open follow-ups that do NOT block Phase 2*:
-
-- The =cc_auto= Roadmap (catchall email + link traversal + pibu log
-  surfacing + queue alignment) lives at
-  =career_caddy_automation/notes.org/PROJ Roadmap…=. Phase A (Mongo
-  observability + file logs) starts after the conversion lands.
-- *Phase D2 (worker image prep) is superseded* — per the role split,
-  the django-q2 worker stays in =agents/=; =automation/= is not a
-  worker host.
-- =src/db.py= (SQLite shim from commit e26f787) is still in the tree;
-  deleted alongside the Mongo introduction in Phase A1.
-
 ** TODO [cc_auto] Roadmap landed: catchall mail + link traversal + pibu + log surfacing — needs api+ops coordination [2026-05-30] :cc_auto:api:ops:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-30]
