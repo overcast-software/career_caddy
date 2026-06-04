@@ -102,8 +102,9 @@ Some changes touch multiple repos (e.g. API contract change ripples into fronten
 :RELATED_TO: Inbox/chat reply renders the no-response fallback literal — empty-accumulated path in chat.js
 :LAST_TOUCHED: [2026-06-04]
 :PR_URL:   https://github.com/overcast-software/career_caddy_agents/pull/35
-:MERGE_SHA: 401ede20f662a35a1e8530d718bf4f7108dc0238
+:MERGE_SHA: 2b0e548de2f2ead9263c02e4ba3a309f494f33ca
 :NEEDS_PIN_BUMP: yes
+:AGENTS_PR_SHA: 401ede20f662a35a1e8530d718bf4f7108dc0238
 :END:
 
 Tags: =:agents:mcp:chat:bugs:=.
@@ -178,8 +179,9 @@ Cross-links:
 :SEEN_AT: production chat
 :LAST_TOUCHED: [2026-06-04]
 :PR_URL:   https://github.com/overcast-software/career_caddy_frontend/pull/175
-:MERGE_SHA: 831be57d0d6dc40719b9e0b9d6dfba2c413721e3
+:MERGE_SHA: 2b0e548de2f2ead9263c02e4ba3a309f494f33ca
 :NEEDS_PIN_BUMP: yes
+:FRONTEND_PR_SHA: 831be57d0d6dc40719b9e0b9d6dfba2c413721e3
 :END:
 
 Tags: =:frontend:chat:bugs:=.
