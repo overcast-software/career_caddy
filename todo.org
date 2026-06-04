@@ -95,7 +95,7 @@ Some changes touch multiple repos (e.g. API contract change ripples into fronten
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
-** DONE chat_server httpx.ReadTimeout on api v1 me — root cause for no-response fallback
+** SHIPPED chat_server httpx.ReadTimeout on api v1 me — root cause for no-response fallback
 :PROPERTIES:
 :CREATED: [2026-06-04]
 :REPORTED_BY: orchestrator-claude via logfire
@@ -105,6 +105,8 @@ Some changes touch multiple repos (e.g. API contract change ripples into fronten
 :MERGE_SHA: 2b0e548de2f2ead9263c02e4ba3a309f494f33ca
 :NEEDS_PIN_BUMP: yes
 :AGENTS_PR_SHA: 401ede20f662a35a1e8530d718bf4f7108dc0238
+:DEPLOYED_AT: [2026-06-04 16:30]
+:DEPLOYED_RUN: 26963292164
 :END:
 
 Tags: =:agents:mcp:chat:bugs:=.
@@ -172,7 +174,7 @@ Cross-links:
 - [[file:agents/notes.org::*Architecture/MCP server boundary]] —
   the four-MCP-server table, which servers ship to prod
 - [2026-06-04] orchestrator-claude shipped agents PR 35 — merges /me/ into one fetch + emits RunErrorEvent on httpx failure
-** DONE chat reply renders the no-response fallback literal — empty-accumulated path in chat.js
+** SHIPPED chat reply renders the no-response fallback literal — empty-accumulated path in chat.js
 :PROPERTIES:
 :CREATED: [2026-06-04]
 :REPORTED_BY: Doug
@@ -182,6 +184,8 @@ Cross-links:
 :MERGE_SHA: 2b0e548de2f2ead9263c02e4ba3a309f494f33ca
 :NEEDS_PIN_BUMP: yes
 :FRONTEND_PR_SHA: 831be57d0d6dc40719b9e0b9d6dfba2c413721e3
+:DEPLOYED_AT: [2026-06-04 16:30]
+:DEPLOYED_RUN: 26963292164
 :END:
 
 Tags: =:frontend:chat:bugs:=.
