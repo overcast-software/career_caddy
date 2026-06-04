@@ -2,6 +2,47 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Source of truth — read FIRST
+
+The canonical state of this project lives in two org-mode wikis, NOT
+in this file. CLAUDE.md is a quickstart. Anything below is a pointer
+that may drift; the wikis are authoritative.
+
+- **`notes.org`** (drill via `claude/cc-notes-*`) — architecture,
+  operations, decisions, mistakes tally. Never read with the `Read`
+  tool; always drill via the helpers.
+- **`todo.org`** (drill via `claude/cc-todo-*`) — work-in-flight,
+  inbox, lifecycle states. Single source for cross-repo task state.
+
+Boot sequence (every session):
+
+```
+emacsclient --eval '(claude/cc-notes-toc)'
+emacsclient --eval '(claude/cc-notes-important)'
+emacsclient --eval '(claude/cc-todo-toc)'
+emacsclient --eval '(claude/cc-todo-by-state "STRT")'
+```
+
+Submodule wikis (same drilldown shape, separate helper namespaces):
+
+| Submodule       | Wiki                       | Helper prefix     |
+|-----------------|----------------------------|-------------------|
+| `api/`          | `api/notes.org`            | `claude/cap-*`    |
+| `frontend/`     | `frontend/notes.org`       | `claude/cf-*`     |
+| `agents/`       | `agents/notes.org`         | `claude/cag-*`    |
+| `automation/`   | `automation/notes.org`     | `claude/ca-*`     |
+
+Peer-project surfaces (not controlled by this repo, but participate
+in the same shared notes-ledger + lifecycle protocol):
+
+| Surface     | Wiki                           | Helper prefix     |
+|-------------|--------------------------------|-------------------|
+| `diycloud/` | `diycloud/notes.org`           | `claude/dc-*`     |
+
+When work crosses cc↔dc boundaries, both wikis hold a mirrored
+cross-cutting node; see `Operations/Cross-cutting agent split — cc
+and dc` in either repo for the ownership table.
+
 ## Repository Structure
 
 Four independently deployable submodules, each with its own `CLAUDE.md`:
