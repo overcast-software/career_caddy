@@ -95,6 +95,192 @@ Some changes touch multiple repos (e.g. API contract change ripples into fronten
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** DONE chat_server httpx.ReadTimeout on api v1 me — root cause for no-response fallback
+:PROPERTIES:
+:CREATED: [2026-06-04]
+:REPORTED_BY: orchestrator-claude via logfire
+:RELATED_TO: Inbox/chat reply renders the no-response fallback literal — empty-accumulated path in chat.js
+:LAST_TOUCHED: [2026-06-04]
+:PR_URL:   https://github.com/overcast-software/career_caddy_agents/pull/35
+:MERGE_SHA: 401ede20f662a35a1e8530d718bf4f7108dc0238
+:NEEDS_PIN_BUMP: yes
+:END:
+
+Tags: =:agents:mcp:chat:bugs:=.
+
+Symptom: =chat_server= MCP intermittently hangs on its outbound
+HTTP call to =/api/v1/me/= for ~5 seconds, raises
+=httpx.ReadTimeout=, and returns no assistant text. The frontend
+then renders the =(no response from agent)= fallback. This is the
+root cause for the sibling frontend entry above.
+
+Logfire evidence — last 48h, same =url_full=
+=http://api:8000/api/v1/me/=:
+
+| time UTC               | service           | result                          |
+|------------------------+-------------------+---------------------------------|
+| 2026-06-04 15:17:37    | chat_server       | httpx.ReadTimeout 5.04s         |
+| 2026-06-02 21:27:38    | chat_server       | httpx.ReadTimeout 5.02s         |
+| 2026-06-02 21:27:10    | chat_server       | httpx.ReadTimeout 5.04s         |
+| same window many calls | public_mcp_server | OK 50-200ms, hundreds of times  |
+
+The api endpoint is fine. Only =chat_server= hangs. Both servers
+live in =agents/mcp_servers/= and call the same upstream.
+
+Suspects:
+
+1. *Auth header difference.* =public_mcp_server= passes a per-client
+   =jh_*= API key under =Authorization: Bearer=. =chat_server= may
+   be passing a JWT that has expired by the time =/me/= is hit, and
+   the api side hangs instead of 401-ing cleanly. Compare the two
+   servers' httpx client construction in =agents/mcp_servers/=.
+2. *httpx client pool exhaustion or stale connection.* If the
+   =chat_server= keeps a single =httpx.AsyncClient= for the lifetime
+   of an SSE conversation and the underlying TCP connection gets
+   killed by the docker network mid-call, the next call hangs to
+   the default 5s read timeout. =public_mcp_server= may construct a
+   fresh client per request and dodge this.
+3. *Token refresh deadlock.* If =chat_server='s auth path acquires a
+   lock to refresh the JWT and that lock is never released on
+   failure, subsequent calls block — but logfire would show the
+   block as a non-=httpx= hang, not =httpx.ReadTimeout=. Less
+   likely.
+
+Acceptance criteria:
+- Identify the structural difference between =chat_server= and
+  =public_mcp_server='s httpx clients / auth header construction.
+- Either fix =chat_server= to use the same shape as
+  =public_mcp_server= for the =/me/= call, or wrap the call with a
+  timeout + recovery path so a transient hang doesn't return zero
+  text to the SSE stream.
+- When the timeout fires, =chat_server= should still emit an
+  =AG_UI.RUN_ERROR= event so the frontend can render a real error
+  message instead of the bare fallback.
+- Add a logfire alert / pydantic-graph trace marker so this
+  regression surfaces immediately if it recurs.
+
+No cc-agents subagent exists yet — this stays in Inbox until
+either the general-purpose agent picks it up or a cc-agents
+subagent is created. See parent =todo.org Inbox=
+=diycloud — thin CLAUDE.md ...= entry for the broader question
+of whether to carve a cc-agents subagent.
+
+Cross-links:
+- [[file:notes.org::*AI Chat — Architecture Reference]] — chat
+  message flow, AG-UI wiring
+- [[file:agents/notes.org::*Architecture/MCP server boundary]] —
+  the four-MCP-server table, which servers ship to prod
+- [2026-06-04] orchestrator-claude shipped agents PR 35 — merges /me/ into one fetch + emits RunErrorEvent on httpx failure
+** DONE chat reply renders the no-response fallback literal — empty-accumulated path in chat.js
+:PROPERTIES:
+:CREATED: [2026-06-04]
+:REPORTED_BY: Doug
+:SEEN_AT: production chat
+:LAST_TOUCHED: [2026-06-04]
+:PR_URL:   https://github.com/overcast-software/career_caddy_frontend/pull/175
+:MERGE_SHA: 831be57d0d6dc40719b9e0b9d6dfba2c413721e3
+:NEEDS_PIN_BUMP: yes
+:END:
+
+Tags: =:frontend:chat:bugs:=.
+
+Symptom: chat reply rendered as the literal fallback string
+=no response from agent= surrounded by parens for at least one turn
+observed in prod chat.
+
+Location of the fallback emit:
+- =frontend/app/services/chat.js:299-301= — the
+  =if (!accumulated)= branch at end-of-stream calls
+  =_replaceLastMessage= with the fallback literal.
+
+Two plausible paths into this branch — investigate both before
+choosing a fix:
+
+1. *Server sent no text at all.* The SSE stream produced no
+   =TEXT_MESSAGE_CONTENT= events; =accumulated= stayed empty;
+   fallback fires. If this is the path, the bug is upstream
+   (chat_server / agent run produced no assistant text) and the
+   frontend response should be observability: surface
+   =conversation_id= + usage so the operator can root-cause
+   server-side. Don't silently swallow.
+2. *Stream contained ONLY a navigate marker.* The block at
+   =chat.js:289-297= strips =NAVIGATE_RE= matches from
+   =accumulated= and calls =router.transitionTo=. If the WHOLE
+   accumulated body is a navigate marker, =accumulated.replace=
+   leaves an empty string, the strip-branch already called
+   =_replaceLastMessage= with the empty body, then the
+   =if !accumulated= guard at line 299 fires and overwrites
+   with the fallback literal just before the route transition.
+   Race-y; can briefly flash the literal to the user.
+
+Acceptance criteria:
+- Identify which of 1 or 2 actually fired. If diagnosis depends
+  on prod logs the frontend cannot see, surface that in the
+  handoff envelope and file a parent todo for cc-api or
+  scrape-profile-enhancer to add the upstream observability.
+- Fix the frontend behavior so the user never sees the literal
+  fallback when the agent actually DID respond — case 2, pure
+  navigate. For case 1 truly empty agent response, the fallback
+  can stay but should carry actionable detail =conversation_id=
+  + a re-try affordance, not the bare string.
+- Add a QUnit test that covers the empty-after-strip case so the
+  regression cannot re-enter.
+
+Cross-links:
+- [[file:notes.org::*AI Chat — Architecture Reference]] — chat
+  message flow + AG-UI wiring in parent notes.org Architecture
+- [[file:frontend/notes.org::*Architecture/Async getters + .then chains]]
+  — sibling pattern; the dual-flash bug PR 172 was a related
+  failure in the answer-save flow
+
+Logfire confirmed root cause is CASE 1 (server returned no text), not
+case 2 (nav marker). Three =httpx.ReadTimeout= incidents on
+=chat_server= calling =/api/v1/me/= over 48h, including Doug's
+2026-06-04 15:17 incident. Same call from =public_mcp_server=
+succeeds in 50-200ms; the api endpoint is fine.
+
+Scope for this todo (cc-frontend only):
+- Replace the bare =(no response from agent)= literal at
+  =frontend/app/services/chat.js:299-301= with an actionable
+  fallback that carries =conversation_id= + a retry affordance.
+- Keep the strip-navigate branch correct (case 2 doesn't fire in
+  the observed incident but the order-of-operations there is still
+  worth tightening so an empty post-strip body doesn't briefly
+  overwrite with the fallback).
+- Add a QUnit test for the empty-accumulated path.
+
+Parallel agents-side investigation is a separate todo —
+"chat_server httpx.ReadTimeout on api/v1/me/" — root cause for the
+server returning no text. Cross-link to that entry once filed.
+- [2026-06-04] cc-frontend shipped PR 175 to frontend main, awaits parent pin bump
+** TODO diycloud — thin CLAUDE.md + mirror handoff envelope + dc-fleet-status
+:PROPERTIES:
+:CREATED: [2026-06-04]
+:CROSS_REF: [[file:notes.org::*Cross-cutting agent split — cc and dc]]
+:LAST_TOUCHED: [2026-06-04]
+:END:
+
+diycloud should mirror what cc just shipped across all repos:
+
+1. =diycloud/CLAUDE.md= — lead with =Source of truth — read FIRST=
+   block pointing at =diycloud/notes.org= (drill via =claude/dc-*=)
+   and any dc todo board if one exists. Boot sequence + helper-
+   namespace table.
+2. =Operations/Cross-cutting agent split — cc and dc/Protocol —
+   handoff envelope= — mirror node already exists on cc side at
+   parent =notes.org=. The dc side needs a same-named node so both
+   agents read it on init. The cc-side node's body explicitly
+   notes the mirror obligation; =:LAST_TOUCHED:= drawer decides
+   which is fresh until reconciled.
+3. Decide whether dc subagents emit =handoff= / =pushback=
+   envelopes back to dc-claude (parallel to what cc subagents now
+   do). If yes, port the envelope shape from the cc-side protocol
+   node; if no, document the reason on the cross-cutting node.
+4. Optional: build =(claude/dc-fleet-status)= matching
+   =(claude/cc-fleet-status)= so dc has a single-call status probe.
+
+This is dc-claude work. Tag with =:dc:= so it doesn't slip past
+the cc dispatch flow.
 ** TODO [dc] Phase 5a federation harness — recommend dev environment + ship prod INSTANCE_ORIGIN fix anyway
 :PROPERTIES:
 :LAST_TOUCHED: [2026-06-04]
