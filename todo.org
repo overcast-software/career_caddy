@@ -95,7 +95,53 @@ Some changes touch multiple repos (e.g. API contract change ripples into fronten
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
+** DONE Thin CLAUDE.md across parent + 4 submodules — point at notes.org and todo.org
+:PROPERTIES:
+:CREATED: [2026-06-04]
+:CLOSED: [2026-06-04]
+:LAST_TOUCHED: [2026-06-04]
+:END:
+
+Sliming CLAUDE.md across parent + 4 submodules so each lead with a
+=Source of truth — read FIRST= pointer block at the top: notes.org
+(drilldown via =cc-/cap-/cf-/cag-/ca-*= helpers) plus todo.org
+(=cc-todo-*=).
+
+Done in this shipment:
+
+- =.gitignore=: =notes.org= added to =api/= and =agents/= (matches
+  frontend/automation precedent so per-submodule wikis stay local).
+- =CLAUDE.md=: thinned across parent, frontend, agents, automation;
+  =api/CLAUDE.md= created (didn't exist before). Each leads with the
+  pointer + boot sequence + helper-namespace table; existing body
+  content left in place to be migrated to notes.org Architecture
+  over time as nodes get touched.
+- Parent =CLAUDE.md= also acknowledges =diycloud/= as a peer
+  surface with its own =dc-*= helpers (operator runs both; same
+  envelope/handoff process applies cross-cutting).
+
+Pairs with these out-of-band changes (not part of this PR set):
+- =api/notes.org= + =agents/notes.org= scaffolded with =Navigation=
+  + 4 sections (Operations/Architecture/Plans/Archive). Local files,
+  not committed.
+- =~/.config/doom/elisp/career_caddy_api.el= + =career_caddy_agents.el=
+  built (=cap-*=, =cag-*= helper namespaces) + registered in
+  =config.org=. Personal config, not in this repo.
+- =~/.claude/agents/*.md= subagent contracts updated with structured
+  =handoff= + =pushback= envelopes (orchestrator-claude reads them
+  via =(claude/cc-todo-from-handoff)= / =(claude/cc-pushback-from-handoff)=).
+- =cc-deploy-watcher= haiku subagent added; =/dispatch= slash
+  command added; =Operations/Fleet Inbox= node added to parent
+  notes.org.
+
+Why: CLAUDE.md kept duplicating architecture details that already
+lived (or now live) in notes.org. Thinning prevents drift; the
+notes.org wiki is the source of truth and the subagents already
+boot from it.
 ** TODO [dc] Phase 5a federation harness — recommend dev environment + ship prod INSTANCE_ORIGIN fix anyway
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-04]
+:END:
 Cross-cutting reply from dc on the two findings the cc-side agent surfaced
 (prod /actors/dough returning AS2 JSON-LD with localhost:8000 URIs;
 careercaddy.dev /actors/dough returning 404 from some api with the right
@@ -1699,9 +1745,45 @@ controllers/job-posts/show/questions.js were deleted before ship.
 :END:
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
+*** SHIPPED Consolidated frontend pin bump — dual-flash + scrape-graph dagre
+:PROPERTIES:
+:CREATED: [2026-06-03]
+:LAST_TOUCHED: [2026-06-03]
+:END:
+
+Two frontend fixes accumulated; consolidated parent pin bump in
+flight via cc-orchestrator agent:
+
+- PR #172 (=fd4ad6d=) — answer-save dual-flash fix
+- PR #173 (=d1c0b89=) — scrape-graph dagre node-width fix
+
+Bump target: frontend =b54229d= → =d1c0b89=. Both fixes ride along.
+
+Parked stale local branch =feature/bump-frontend-dual-flash-fix=
+(pin target =fd4ad6d=, predates PR #173) will be deleted by
+orchestrator as part of cleanup.
+
+** Smoke after Deploy
+
+- =https://careercaddy.online/job-posts/<id>/questions/<qid>/answers/new=
+  → submit a plain answer, confirm exactly one flash
+- =https://careercaddy.online/scrapes/<id>/graph=
+  → confirm rightmost node label is visible
+
+** Cross-links
+
+- Parent PR: filed by orchestrator (will land in this same Inbox item
+  when reported back)
+- Frontend conventions wiki: =[[file:frontend/notes.org::*Architecture]]=
+
+Orchestrator will report parent PR URL + merge SHA + Deploy run URL
+when it lands. I (orchestrator-claude) will promote this entry to
+DONE when the parent PR merges and to SHIPPED when its Deploy is
+green.
 *** TODO inspect_scrape_html serialization crashes on BS4 class lists
 :PROPERTIES:
 :CREATED: [2026-05-28]
+:LAST_TOUCHED: [2026-06-03]
 :END:
 *Trigger*: scrape 475, selector =a[href^="https://www.linkedin.com/jobs/view/"][href$="/"]= → MCP tool errored with:
 
