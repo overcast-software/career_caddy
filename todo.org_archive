@@ -7983,3 +7983,53 @@ filter).
 *Closes the contract*: this is the point at which following a remote
 actor produces a visible federated post in the local user's feed.
 Everything before 5e is plumbing; 5e is the end-user surface.
+
+* DONE Thin CLAUDE.md across parent + 4 submodules — point at notes.org and todo.org
+:PROPERTIES:
+:CREATED: [2026-06-04]
+:CLOSED: [2026-06-04]
+:LAST_TOUCHED: [2026-06-04]
+:ARCHIVE_TIME: 2026-06-04 Thu 08:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+Sliming CLAUDE.md across parent + 4 submodules so each lead with a
+=Source of truth — read FIRST= pointer block at the top: notes.org
+(drilldown via =cc-/cap-/cf-/cag-/ca-*= helpers) plus todo.org
+(=cc-todo-*=).
+
+Done in this shipment:
+
+- =.gitignore=: =notes.org= added to =api/= and =agents/= (matches
+  frontend/automation precedent so per-submodule wikis stay local).
+- =CLAUDE.md=: thinned across parent, frontend, agents, automation;
+  =api/CLAUDE.md= created (didn't exist before). Each leads with the
+  pointer + boot sequence + helper-namespace table; existing body
+  content left in place to be migrated to notes.org Architecture
+  over time as nodes get touched.
+- Parent =CLAUDE.md= also acknowledges =diycloud/= as a peer
+  surface with its own =dc-*= helpers (operator runs both; same
+  envelope/handoff process applies cross-cutting).
+
+Pairs with these out-of-band changes (not part of this PR set):
+- =api/notes.org= + =agents/notes.org= scaffolded with =Navigation=
+  + 4 sections (Operations/Architecture/Plans/Archive). Local files,
+  not committed.
+- =~/.config/doom/elisp/career_caddy_api.el= + =career_caddy_agents.el=
+  built (=cap-*=, =cag-*= helper namespaces) + registered in
+  =config.org=. Personal config, not in this repo.
+- =~/.claude/agents/*.md= subagent contracts updated with structured
+  =handoff= + =pushback= envelopes (orchestrator-claude reads them
+  via =(claude/cc-todo-from-handoff)= / =(claude/cc-pushback-from-handoff)=).
+- =cc-deploy-watcher= haiku subagent added; =/dispatch= slash
+  command added; =Operations/Fleet Inbox= node added to parent
+  notes.org.
+
+Why: CLAUDE.md kept duplicating architecture details that already
+lived (or now live) in notes.org. Thinning prevents drift; the
+notes.org wiki is the source of truth and the subagents already
+boot from it.
