@@ -888,11 +888,11 @@ shows up in the Phase 6 failed-task surface (Phase 6 must ship before
 Phase 4 or basic visibility is missing — see plan).
 
 *Out of scope*: parse_scrape (Phase 5), score_poller (Phase 5).
-*** TODO ActivityPub Phase 5d — Outbound dispatch worker for new public JobPosts
+*** SHIPPED ActivityPub Phase 5d — Outbound dispatch worker for new public JobPosts
 :PROPERTIES:
 :CREATED: [2026-05-29]
 :DEPENDS_ON: Phase 5c
-:LAST_TOUCHED: [2026-05-29]
+:LAST_TOUCHED: [2026-06-05]
 :END:
 *Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
 sub-phase 5d. Placeholder; unblock after 5c.
@@ -917,11 +917,11 @@ with exponential backoff retry; dead-letter at 7d.
 - =sharedInbox= optimization: deliver once per peer instance when the
   followers there share a shared inbox.
 - Update / Delete activities for JP edits / deletions.
-*** TODO ActivityPub Phase 5c — Inbox + Follow + Follower model + HTTP Signatures
+*** SHIPPED ActivityPub Phase 5c — Inbox + Follow + Follower model + HTTP Signatures
 :PROPERTIES:
 :CREATED: [2026-05-29]
 :DEPENDS_ON: Phase 5a + 5b
-:LAST_TOUCHED: [2026-05-29]
+:LAST_TOUCHED: [2026-06-05]
 :END:
 *Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
 sub-phase 5c. Placeholder; unblock after 5a + 5b ship.
@@ -1096,12 +1096,12 @@ ready to deploy).
 :LAST_TOUCHED: [2026-05-29]
 :END:
 Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN ActivityPub plan, federation visibility belongs on each JobPost via AS2 audience primitives, not via a per-content-shape filter (avoids baking single-user assumptions like mailto=private into the data model). Spec: add JobPost.audience JSONField (Postgres JSONB), default [https://www.w3.org/ns/activitystreams#Public]. Helper JobPost.is_public() returns True iff the Public collection URI appears in audience. JSON:API serializer exposes audience. Migration adds the column and backfills existing rows to the public-default. Frontend: JobPost model gains audience attr; jp.edit form adds a Visibility selector with Public and Private for now (Public maps to [...#Public], Private maps to []). jp.show shows a small badge when non-public. Phase 4 /as-object/ adapter and Outbox dispatch will consult this field but those are not in scope here. Tests: model default + is_public + serializer round-trip + frontend form selector.
-*** TODO Phase 5: infra — ActivityPub activity dispatch worker (django-q2 candidate) :api:infra:
+*** SHIPPED Phase 5: infra — ActivityPub activity dispatch worker (django-q2 candidate) :api:infra:
 :PROPERTIES:
 :PHASE:    5
 :STATUS:   deferred
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-27]
+:LAST_TOUCHED: [2026-06-05]
 :END:
 *Goal*: background worker dispatches outbound Activities to all followers / subscribers.
 
@@ -1125,12 +1125,12 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 *Dependency*: HTTP signatures + Outbox tickets.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
-*** TODO Phase 5: api — WebFinger endpoint :api:
+*** SHIPPED Phase 5: api — WebFinger endpoint :api:
 :PROPERTIES:
 :PHASE:    5
 :STATUS:   deferred
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
+:LAST_TOUCHED: [2026-06-05]
 :END:
 *Goal*: let remote instances discover our Actor by handle.
 
@@ -1152,12 +1152,12 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 *Status*: deferred placeholder.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
-*** TODO Phase 5: api — HTTP signatures (RFC 9421) for ActivityPub :api:
+*** SHIPPED Phase 5: api — HTTP signatures (RFC 9421) for ActivityPub :api:
 :PROPERTIES:
 :PHASE:    5
 :STATUS:   deferred
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
+:LAST_TOUCHED: [2026-06-05]
 :END:
 *Goal*: sign outbound ActivityPub HTTP traffic and verify inbound signatures.
 
@@ -1180,12 +1180,12 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 *Dependency*: Actor model.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
-*** TODO Phase 5: api — ActivityPub Outbox + Inbox endpoints :api:
+*** SHIPPED Phase 5: api — ActivityPub Outbox + Inbox endpoints :api:
 :PROPERTIES:
 :PHASE:    5
 :STATUS:   deferred
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
+:LAST_TOUCHED: [2026-06-05]
 :END:
 *Goal*: announce + receive ActivityPub Activities.
 
@@ -1208,12 +1208,12 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 *Dependency*: Actor model + HTTP signatures tickets.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
-*** TODO Phase 5: api — per-instance ActivityPub Actor model + actor URI :api:
+*** SHIPPED Phase 5: api — per-instance ActivityPub Actor model + actor URI :api:
 :PROPERTIES:
 :PHASE:    5
 :STATUS:   deferred
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
+:LAST_TOUCHED: [2026-06-05]
 :END:
 *Goal*: every Career Caddy instance gains an Actor identity so remote instances can route Activities to us.
 
