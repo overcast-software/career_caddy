@@ -172,10 +172,19 @@ services:
       caddy.encode: zstd gzip
       # Same-origin: SPA emits /api/v1/... to its own host; we route
       # those to the api container, preserving the /api prefix (handle,
-      # not handle_path) so Django routes them correctly. The catch-all
-      # reverse_proxy below handles everything else.
-      caddy.handle: /api/*
-      caddy.handle.reverse_proxy: api:8000
+      # not handle_path) so Django routes them correctly.
+      caddy.handle_0: /api/*
+      caddy.handle_0.reverse_proxy: api:8000
+      # ActivityPub federation: WebFinger + Actor URIs MUST live on the
+      # apex host because federation peers resolve via the host in the
+      # acct: URI. The api routes these at root paths — not /api/* —
+      # per RFC 7033 and ActivityPub conventions; see
+      # api/job_hunting/urls.py lines 135-152.
+      caddy.@federation.path_0: /.well-known/webfinger
+      caddy.@federation.path_1: /actors/*
+      caddy.handle_1: "@federation"
+      caddy.handle_1.reverse_proxy: api:8000
+      # Catch-all: SPA fallback for everything else.
       caddy.reverse_proxy: "{{upstreams 80}}"
 
   # ── Public MCP Server ────────────────────────────────────────────────────
