@@ -8033,3 +8033,67 @@ Why: CLAUDE.md kept duplicating architecture details that already
 lived (or now live) in notes.org. Thinning prevents drift; the
 notes.org wiki is the source of truth and the subagents already
 boot from it.
+
+* TODO chat shows '(no response from agent)' literal — investigate empty-accumulated path in chat.js
+:PROPERTIES:
+:CREATED: [2026-06-04]
+:REPORTED_BY: Doug
+:SEEN_AT: production chat
+:ARCHIVE_TIME: 2026-06-04 Thu 08:20
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: TODO
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+Symptom: chat reply rendered as literal =(no response from agent)= for
+at least one turn observed in prod.
+
+Location of the fallback string:
+- =frontend/app/services/chat.js:299-301= — the =if (!accumulated)
+  this._replaceLastMessage('(no response from agent)')= branch in
+  the SSE stream consumer.
+
+Two plausible paths into this branch — investigate both before
+choosing a fix:
+
+1. *Server actually sent no text.* The SSE stream produced no
+   =TEXT_MESSAGE_CONTENT= events; =accumulated= stayed empty;
+   fallback fires. If this is the path, the bug is upstream
+   (chat_server / agent run produced no assistant text) and the
+   frontend fix is observability: surface conversation_id +
+   usage so the operator can root-cause server-side. Don't
+   silently swallow.
+2. *Stream contained ONLY a navigate marker.* The block at
+   =chat.js:289-297= strips =NAVIGATE_RE= matches from
+   =accumulated= and calls =router.transitionTo=. If the WHOLE
+   accumulated body is a navigate marker, =accumulated.replace(...)=
+   leaves an empty string, but the =if (!accumulated)= guard at
+   299 is checked against the PRE-strip value... or is it? Read
+   the flow carefully — there's a possible race where the strip
+   empties the message and the fallback overwrites just before
+   the route transition fires, briefly flashing =(no response from
+   agent)= to the user.
+
+Acceptance criteria:
+- Identify which of (1) or (2) actually fired in the reported
+  incident. If diagnosis depends on prod logs the frontend can't
+  see, surface that in the handoff envelope and file a parent
+  todo for cc-api / cc-agents to add the upstream observability.
+- Fix the frontend behavior so the user never sees the literal
+  =(no response from agent)= when the agent actually DID respond
+  (case 2 — pure navigate). For case 1 (truly empty agent
+  response), the fallback can stay but should carry actionable
+  detail (conversation_id, a re-try affordance) instead of just
+  the bare string.
+- Add a QUnit test that covers the empty-after-strip case so the
+  regression can't re-enter.
+
+Cross-links:
+- [[file:notes.org::*AI Chat — Architecture Reference]] — chat
+  message flow + AG-UI wiring in parent notes.org Architecture
+- [[file:frontend/notes.org::*Architecture/Async getters + .then chains]]
+  — this code uses async/await; the dual-flash bug (PR #172) was
+  a sibling issue in the answer-save flow
+

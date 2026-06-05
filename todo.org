@@ -15,7 +15,7 @@ Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (32)
+Inbox (35)
   Bug (1)
   Enhancement (18)
   Feature (33)
