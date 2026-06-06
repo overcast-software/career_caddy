@@ -8097,3 +8097,40 @@ Cross-links:
   — this code uses async/await; the dual-flash bug (PR #172) was
   a sibling issue in the answer-save flow
 
+
+* DONE extension/ccsender-structured-prefill — pull css_selectors at submit time :extension:scrape:agents:
+CLOSED: [2026-06-05 Fri]
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-05]
+:PRIORITY: P2
+:ARCHIVE_TIME: 2026-06-05 Fri 19:26
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Enhancement
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Shipped 2026-06-05. =GET /scrape-profiles/extension-selectors/= now returns =job_data_selectors= from =css_selectors.job_data=, popup.js extends =grabHints= to run those selectors in the active tab and ship a =structured_prefill= dict alongside =text=, =Scrape.extension_prefill= persists the result (migration 0092), and =JobPostExtractor._try_prefill_extraction= runs before Tier 0 / LLM — when =title + company_name= are both ≥3 chars, ParsedJobData is built from the prefill and the LLM is skipped entirely. Migration 0093 seeds linkedin.com with =title: h1= + =company_name: a[href*='/company/']= so dogfood starts with a known-good profile. ~last_prefill_hit~ tracks coverage rate per scrape.
+
+Today ccsender posts =body.innerText= and the api LLM re-extracts everything from scratch — even on hosts where =ScrapeProfile.css_selectors.job_data= already names where title/company/location/salary/description live. Since the extension now fetches the profile on send anyway (=GET /scrape-profiles/extension-selectors/=), it is trivial to also ship =css_selectors.job_data= in the same response and have the extension run those selectors in the active tab.
+
+Outcome shape, sent alongside =text=:
+- =structured_prefill: {title, company_name, location, salary, description}= — null per field where the selector misses
+- Server-side: when =structured_prefill= arrives with high coverage on a host that has a current/non-probation profile, the scrape-graph can either (a) skip Tier1 entirely and PersistJobPost directly, or (b) feed the prefill into =ParsedJobData= validators as a prior and run a lighter extraction pass that just sanity-checks. Pick (b) first; (a) only after dogfood proves the prefill is reliable.
+
+Wins:
+- Cuts an LLM call on hosts with mature profiles (the long tail — boards we scrape often).
+- Faster perceived send: structured fields render before the LLM finishes.
+- Per-host selector probation already exists; this just adds a new consumer.
+
+Risks / open questions:
+- Stale selectors silently yield wrong data. Mitigation: ALWAYS send the raw =text= too so the server can reconcile / fall back / promote a selector-miss into the probation counter.
+- =description= via =.job-description= is rarely the canonical full posting body — it usually omits headers/footers. Sending the prefill alongside =text= sidesteps this; the LLM still owns the description.
+- ATS hosts (greenhouse, lever) often need =allFrames= for body capture — does that change here? Probably keep allFrames for =text=, structured selectors run only on the top frame.
+
+Plumbing:
+1. Extend =GET /scrape-profiles/extension-selectors/= response with =css_selectors= (just =job_data= subset).
+2. =popup.js#grabHints= → add structured-prefill extraction next to the apply/canonical extractors. Inject =job_data= selectors via =executeScript= args, same pattern as today.
+3. =POST /scrapes/from-text/= accepts optional =structured_prefill= dict; persisted on =Scrape= (new JSONField), surfaced as a Tier1 prior in the extractor.
+
+Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md= for the parent context — this is the natural next step after =extension_selectors= proves the api-as-source-of-truth model works.
