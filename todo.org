@@ -1641,11 +1641,14 @@ Files to touch when picked up:
 - scripts/inbox_triage.py — _create_inline_job_post fetches From: from the source, compares to parsed recruiter_contact email, sets link conditionally. Helper _mailto_from_contact ("<email>" regex) was already drafted in the reverted change; pull it from this todo's diff history if useful.
 
 Backfill: JP 2914 specifically can be patched via update_job_post once we know the recruiter's actual From: address. Not blocking; the post is usable via the description prefix that already names Lovely.yadav@excelonsolutions.com.
-*** TODO extension/ccsender-structured-prefill — pull css_selectors at submit time :extension:scrape:agents:
+*** DONE extension/ccsender-structured-prefill — pull css_selectors at submit time :extension:scrape:agents:
+CLOSED: [2026-06-05 Fri]
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-26]
+:LAST_TOUCHED: [2026-06-05]
 :PRIORITY: P2
 :END:
+Shipped 2026-06-05. =GET /scrape-profiles/extension-selectors/= now returns =job_data_selectors= from =css_selectors.job_data=, popup.js extends =grabHints= to run those selectors in the active tab and ship a =structured_prefill= dict alongside =text=, =Scrape.extension_prefill= persists the result (migration 0092), and =JobPostExtractor._try_prefill_extraction= runs before Tier 0 / LLM — when =title + company_name= are both ≥3 chars, ParsedJobData is built from the prefill and the LLM is skipped entirely. Migration 0093 seeds linkedin.com with =title: h1= + =company_name: a[href*='/company/']= so dogfood starts with a known-good profile. ~last_prefill_hit~ tracks coverage rate per scrape.
+
 Today ccsender posts =body.innerText= and the api LLM re-extracts everything from scratch — even on hosts where =ScrapeProfile.css_selectors.job_data= already names where title/company/location/salary/description live. Since the extension now fetches the profile on send anyway (=GET /scrape-profiles/extension-selectors/=), it is trivial to also ship =css_selectors.job_data= in the same response and have the extension run those selectors in the active tab.
 
 Outcome shape, sent alongside =text=:
