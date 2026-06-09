@@ -17,7 +17,7 @@ Headings: no =/=, =[brackets]=, or =(parens)= in heading text — they break =or
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
 Inbox (35)
-  Bug (1)
+  Bug (3)
   Enhancement (17)
   Feature (39)
   Idea (0)
@@ -2086,10 +2086,41 @@ controllers/job-posts/show/questions.js were deleted before ship.
 :END:
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
+*** TODO SSE events endpoint holds gunicorn worker open on client disconnect :api:bugs:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-09]
+:PRIORITY: P1
+:END:
+*Repro:* gunicorn worker pid 139 was inside =_event_stream= 's =select.select= in =api/job_hunting/api/events.py:191= when the kernel SIGKILL'd it 2026-06-09 07:51:13 PDT. The worker had been holding the SSE connection open for an undetermined duration; under the 512 MiB cap, retained per-connection state plus any concurrent request burst exceeded the limit.
+
+*Hypothesis:* the SSE handler 's =select.select= loop does not promptly release the worker when the client disconnects (frontend tab close, network blip). Worker stays "busy" from gunicorn 's perspective, accreting state, until something kills it.
+
+*Fix shape:* audit =_event_stream= for:
+  - bounded =select.select= timeout (e.g. 30s) with a top-level disconnect-check between iterations
+  - explicit cleanup of any per-connection buffers / queue subscriptions when the client goes away
+  - structured logging of connection lifecycle so we can see in logfire how long SSE sessions actually live
+
+*Why P1:* this is the upstream cause of the OOM. Bumping the memory limit (sibling Bug) buys headroom; this fix removes the leak shape entirely.
+
+*Related:* api worker OOM under SSE load (sibling Bug entry).
+*** TODO api worker OOM under SSE load — bump memory limit from 512 MiB :api:bugs:infra:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-09]
+:PRIORITY: P1
+:END:
+*Repro:* gunicorn worker pid 139 received SIGKILL at 2026-06-09 07:51:13 PDT inside =job_hunting/api/events.py:191= (=select.select= in =_event_stream=). Kernel marker: "Worker (pid:139) was sent SIGKILL! Perhaps out of memory?" Replacement worker (pid 216) booted within 1s but every MCP call in the window 500'd because =public_server.verify_token= 's =httpx.get(api/v1/me/)= hit =httpx.ReadTimeout=.
+
+*Memory limits today:* =docker-compose.prod.yml= caps the api service at 512 MiB. Post-restart, idle steady-state is 318 MiB / 512 MiB (62%). One SSE connection plus any other request burst pushes the worker past the limit.
+
+*Proposed fix:* bump api =mem_limit= (and the matching reservation) to 768 MiB or 1 GiB in =docker-compose.prod.yml=. Cheapest immediate stop-loss; pairs with the SSE-cleanup bug below.
+
+*Why P1:* OOM kills every in-flight request including MCP auth, so the user sees the whole api flicker red even for tools that have nothing to do with SSE.
+
+*Related:* SSE worker not releasing on client disconnect (sibling Bug entry).
 *** SHIPPED Consolidated frontend pin bump — dual-flash + scrape-graph dagre
 :PROPERTIES:
 :CREATED: [2026-06-03]
-:LAST_TOUCHED: [2026-06-03]
+:LAST_TOUCHED: [2026-06-09]
 :END:
 
 Two frontend fixes accumulated; consolidated parent pin bump in
