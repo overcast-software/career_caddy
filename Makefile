@@ -60,20 +60,20 @@ demo-data: ## Seed guest user (Danny Noonan) and demo data — run after migrate
 
 # ── Tests ──────────────────────────────────────────────────────────────────
 
-test-api: ## Run Django tests (PATHS="<module|class|method>" for a subset; defaults to whole job_hunting suite). Use this as the iteration loop; reserve make ci for the final pre-push gate.
-	docker compose exec api python manage.py test -v 2 $(if $(PATHS),$(PATHS),job_hunting)
+test-api: ## Run full Django test suite. For a subset run docker compose exec api python manage.py test <dotted.module.path> directly.
+	docker compose exec api python manage.py test -v 2 job_hunting
 
 test-frontend: ## Run Ember QUnit tests
 	docker compose exec frontend npm run test:ember
 
-lint-api: ## Ruff-lint api code (PATHS=... for a subset; defaults to whole tree)
-	docker compose exec api ruff check $(if $(PATHS),$(PATHS),.)
+lint-api: ## Ruff-lint whole api tree. For a subset run docker compose exec api ruff check <files> directly.
+	docker compose exec api ruff check .
 
-lint-frontend: ## Prettier-check frontend (PATHS=... for files; defaults to whole tree)
-	docker compose exec frontend npm run lint:format $(if $(PATHS),-- --check $(PATHS),)
+lint-frontend: ## Prettier-check whole frontend tree. For a subset run docker compose exec frontend npm run lint:format -- --check <files> directly.
+	docker compose exec frontend npm run lint:format
 
-format-frontend: ## Prettier auto-fix frontend (PATHS=... for files; defaults to whole tree)
-	docker compose exec frontend npm run lint:format -- --write $(if $(PATHS),$(PATHS),.)
+format-frontend: ## Prettier auto-fix whole frontend tree. For a subset run docker compose exec frontend npm run lint:format -- --write <files> directly.
+	docker compose exec frontend npm run lint:format -- --write .
 
 # automation/ doesn't have a long-running container in compose, so its
 # lint/test run via `uv run --group dev ...` directly (matches its own
