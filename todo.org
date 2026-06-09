@@ -18,7 +18,7 @@ TOC (compiled by =cc-todo-rebuild-toc=):
 Inbox (35)
   Bug (1)
   Enhancement (17)
-  Feature (33)
+  Feature (39)
   Idea (0)
 Backlog [0/3]
 Active [0/25]
@@ -685,7 +685,216 @@ Two real candidates (=screenshot.js= borderline, =scrape-status.js= lean-no), on
 :LAST_TOUCHED: [2026-05-05]
 :END:
 ** Feature
+*** SHIPPED Extension direct-POST :extension:api:dedupe:scrape:
+:PROPERTIES:
+:CREATED: [2026-06-06]
+:CANONICAL: Plans/PLAN Extension direct-POST when capture is complete
+:MERGE_SHA: b3088cf551a5f9aa66f2d20729fa72d0eb18c1a8
+:LAST_TOUCHED: [2026-06-07]
+:END:
+Canonical plan: =notes.org/Plans/PLAN Extension direct-POST when capture is complete=
+
+*Goal*: extension that already has title + company + description in hand POSTs a scrape with the captured contents and a new =source_mode=extension-direct= flag. Scrape graph short-circuits the browser tier and goes straight to PersistJobPost via the same JobPostExtractor.parse_scrape() entry point. One write path, zero server-side browser cost on the hot path.
+
+*Decisions baked in*
+- Trust presence, iterate — non-empty title + company + description is the gate; no validator threshold at v1.
+- Bias the present URL on merge — extension =link= wins canonical when colliding with a server scrape; other fields merge via empty-merge invariant.
+- Scrape carries contents — no parallel POST endpoint on JobPost; Scrape is the canonical write entry.
+
+*Phase A — api primitives*
+- =Scrape.source_mode= CharField default =browser=, choices =browser=, =extension-direct=. Migration on =scrapes=.
+- =Scrape.captured_payload= JSONField nullable. Holds title / company / description / apply_url / location / extraction_hints when fast path.
+- Serializer validation: =source_mode=extension-direct= requires =captured_payload= present; payload requires non-empty title + company + description.
+- =JobPostOverwriteDecision= merge-bias: prefer extension-direct rows when replacing =link= on canonical-collision merge.
+
+*Phase B — scrape-graph fast path*
+- =StartScrape= gate detects =source_mode=extension-direct= + payload present → branch to a thin =SkipBrowserTier= node.
+- =SkipBrowserTier= copies payload fields onto persistence path, calls =ResolveApplyUrl= only if =captured_payload.apply_url= null, then =PersistJobPost=.
+- Other browser-tier nodes (Navigate → DetectObstacle → ResolveFinalUrl → WaitReady → Capture → Tier0CSS → Tier1Mini → Tier2Haiku → Tier3Sonnet → EvaluateExtraction → ValidateExtraction) never enter on this branch.
+- Screenshots, if extension uploads via existing relationship, persist as today.
+
+*Phase C — extension cc_sender*
+- Content-script capture grows the gate: title + company + description all non-empty → POST scrape with payload + =source_mode=extension-direct=.
+- Fall through to today's link-only POST when gate fails (any field missing/empty).
+- Ship as extension v0.3.x.
+
+*Phase D — operator observability (low priority)*
+- Staff-only count panel: extension-direct vs browser scrapes per day.
+
+*Order*: A and B parallel (B is dead code until C lands). C ships last to flip the switch. D anytime.
+
+*Dependencies*: cc-api Phase 2.5 catchall tickets (email-forward + discover_for_user_id + username validator) land first to avoid stacking write-path migrations.
+
+*Dedupe-first reminder*: WRITE PATH change at PersistJobPost entry. The fast path still routes through =JobPostExtractor.parse_scrape()= which calls =find_duplicate= — canonical_link, fingerprint, sticky-closed response shape all preserved. Walk the dedupe-first memory at PR review.
+
+*Out of scope*: separate =POST /api/v1/job-posts/= path; server re-validation of extension contents; markup-level capture; apply_url click-follow on fast path.
+
+*Open questions*: see plan node — apply_url in v1, screenshot opt-in, source_mode vs status overload, fallback discipline, confidence-gate trigger.
+
+*Cross-links*
+- =notes.org/Plans/PLAN Extension direct-POST when capture is complete=
+- =notes.org/Plans/Apply-destination resolution=
+- =notes.org/Architecture/Scrape → Parse → JobPost workflow (post-refactor)=
+- =notes.org/Plans/Browser Extension v0.3.2–0.3.5=
+- Adjacent extension tickets in Inbox/Enhancement (multi-host-extractors, presence-vs-auth, linkedin extraction_hints overfire)
+*** TODO Phase 6e — JP lifecycle activities wired to followers :federation:api:
+:PROPERTIES:
+:CREATED: [2026-06-06]
+:CANONICAL: Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6e — JP lifecycle activities wired to followers
+:LAST_TOUCHED: [2026-06-06]
+:END:
+Canonical plan: =notes.org/Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6e — JP lifecycle activities wired to followers=
+
+*Goal*: followers see JP edits and JP closures in their feed without polling. =Update(Note)= and =Delete(Tombstone)= dispatched on JP lifecycle events.
+
+5d already implements the envelope builders (=build_update_activity_for_jobpost=, =build_delete_activity_for_jobpost= in =api/job_hunting/lib/as_object.py=); 6e wires the events.
+
+*Update trigger*: JP save with significant-field change → enqueue =dispatch_update_jobpost(jobpost_id, edit_marker=updated_at)= via 5d worker.
+
+*Significant fields*: =title=, =description=, =apply_url=, =location=, =posting_status=, =salary_min=, =salary_max=, =remote_status=. Suppress on all other field changes (avoid spamming followers with =last_seen_at= bumps etc.).
+
+*Delete triggers*: =posting_status= flips to =closed= (sticky-closed); =complete= flips false→true→false (manual moderation); owner clicks "this role is filled" on =jp.show= (new affordance, this ticket).
+
+*Idempotency*: Update activity id = =uuid5(NS, "update:<jp_id>:<updated_at_iso>")=. Delete activity id = =uuid5(NS, "delete:<jp_id>")=. Re-attempts produce identical URIs; peers dedup.
+
+*Frontend*
+- =jp.edit=: "Notify followers of this update" toggle (default on for owner edits, off for staff bulk).
+- =jp.show= owner-only "Mark as filled and notify followers" button.
+
+*Audit*: every Update/Delete records a =FederationActivity= row (5c primitive) for dead-letter + retry surface.
+
+*Dependencies*: 5d worker (SHIPPED), 6a Company actors recommended (target the right followers collection).
+
+*Out of scope*: per-follower notification preferences; Like / Announce receipt notifications (7e).
+
+*Bulk-operation safety*: add an explicit =JobPost.objects.bulk_close_quiet()= helper that bypasses dispatch; regular =save()= path emits.
+*** TODO Phase 6d — Employer self-serve + rel-me verification :federation:api:frontend:
+:PROPERTIES:
+:CREATED: [2026-06-06]
+:CANONICAL: Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6d — Employer self-serve + rel-me verification
+:LAST_TOUCHED: [2026-06-06]
+:END:
+Canonical plan: =notes.org/Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6d — Employer self-serve + rel-me verification=
+
+*Goal*: an employer claims their Company actor, verifies via rel="me" reciprocity with the company website, publishes JPs directly. Verified badge on actor + listings.
+
+*Schema*
+- =Actor.verified= BooleanField default false; surfaces as =careercaddy:verified= in envelope.
+- =Actor.verified_at= DateTimeField nullable.
+- =Actor.claimed_by= FK User nullable.
+- =User.is_employer= BooleanField default false; gates the employer dashboard route.
+- =Company.website= URLField nullable (confirm column existence on dispatch; add if missing).
+
+*Verification flow*
+- =POST /api/v1/companies/<slug>/claim/= with website URL → staff approval gate sets =Company.claim_pending=true=.
+- UI shows verification snippet: =<link rel="me" href="https://careercaddy.online/companies/<slug>">=.
+- =POST /api/v1/companies/<slug>/verify/= → server fetches =company.website=, parses HTML for rel="me" back to actor URI. Match → flip =Actor.verified=True=, =verified_at=now=, =claimed_by=request.user=.
+- Weekly =verify_claimed_actors= management command re-verifies; drop notification on revocation.
+
+*Frontend*
+- =/employers/me= dashboard: claimed Company actors, verification status, posting affordances.
+- =company.show= verified checkmark + tooltip "Verified via website rel=me link."
+- =jp.new= / =jp.edit= for employers: "Post as <Company actor>" option; sets JP =attributedTo= to Company actor; gates federation dispatch on Company =federation_enabled=.
+
+*Dependencies*: 6a Company Organization actors (HARD BLOCK).
+
+*Out of scope*: multi-Company employer accounts (recruiting agencies); employer billing or tier; JP submission rate limits beyond global throttle.
+
+*Open questions*: lean for V1 — first-claim-wins per Company; staff override on dispute; BeautifulSoup for resilient HTML parse; bidirectional rel="me" emitted, only website→actor direction required to flip verified.
+*** TODO Phase 6c — Topic and role aggregator actors :federation:api:
+:PROPERTIES:
+:CREATED: [2026-06-06]
+:CANONICAL: Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6c — Topic and role aggregator actors
+:LAST_TOUCHED: [2026-06-06]
+:END:
+Canonical plan: =notes.org/Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6c — Topic and role aggregator actors=
+
+*Goal*: virtual =Service= actors at =/topics/<slug>= whose outbox is the matching JP subset. Mastodon users follow =acct:python-remote@careercaddy.online= and similar.
+
+*Model*
+- =TopicActor(actor FK Actor, slug SlugField unique, name CharField, filter_spec JSONField, federation_enabled BooleanField default false)=.
+- =filter_spec= shape matches existing saved-search filter DSL.
+
+*Seeded set*: 8-12 curated topics (python-remote, javascript-remote, data-engineer-remote, frontend-remote, backend-remote, devops-sre-remote, ai-ml-remote, security-remote, plus regional cuts us-remote / eu-remote / anywhere-remote). Confirm final list with Doug at dispatch.
+
+*Outbox*: =GET /topics/<slug>/outbox= paginated =Create(Note)= of matching JPs. =attributedTo= = JP's Company actor URI (6a) when present, else creator's Person actor.
+
+*Dispatch*
+- New JP matching a topic's filter_spec → enqueue =dispatch_create_jobpost_to_topic(jobpost_id, topic_actor_id)= via 5d worker.
+- Activity id derived from =uuid5(NS, "create-topic:<jp_id>:<topic_id>")= for idempotency on re-saves.
+
+*Frontend*: =/topics= route lists seeded set with per-row Follow button + filter description + recent matches.
+
+*Dependencies*: 6a Company actors recommended (for proper =attributedTo= shape); not a hard block — degrades to creator Person actor.
+
+*Out of scope*: per-user dynamic topic actors (lean curated V1); cross-instance topic actor cooperation (would multiply fanout).
+*** TODO Phase 6b — Inbound JP ingest + cross-instance dedupe :federation:api:dedupe:
+:PROPERTIES:
+:CREATED: [2026-06-06]
+:CANONICAL: Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6b — Inbound JP ingest + cross-instance dedupe
+:LAST_TOUCHED: [2026-06-06]
+:END:
+Canonical plan: =notes.org/Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6b — Inbound JP ingest + cross-instance dedupe=
+
+*Goal*: accept federated =Create(Note)= as JP candidates; run through canonicalize_link / fingerprint / apply_url reciprocity dedupe. Promotes the old =Plans/ActivityPub Phase 5 — federation proper/Sub-phase 5e= ticket into Phase 6.
+
+*Inbox branch*
+- 5c inbox handler routes =Create(Note)= with no =inReplyTo= to JP-candidate ingest.
+- Coerce AS2 fields per the mapping in the plan node (name → title, url → link via canonicalize_link, attributedTo host → source_instance, careercaddy:extension → apply_url + company + canonicalLink + postingStatus).
+
+*Source enum*: add =source=federation= to JobPost.source.
+
+*Visibility*: federated rows visible only via explicit JobPostDiscovery (five-clause filter invariant). Discovery row created for each follower of the targeted Company / Topic actor on ingest.
+
+*Security*
+- HTTP Sig already verified at 5c envelope level.
+- canonicalize_link on every URL; description HTML through bleach; title ≤ 500, description ≤ 50 KB.
+- Per-actor per-hour rate cap default 100; per-instance allowlist (5c primitive) gates inbox edge.
+
+*Tombstone*
+- =Delete= for a federated JP we ingested → flip =posting_status=closed=, =complete=False=, write =source_deleted_at=. JP row stays so local =JobApplication.job_post_id= keeps resolving.
+
+*Dependencies*: 5c inbox (SHIPPED), HTTP Sig verification (SHIPPED), bleach sanitization (in tree). Independent of 6a — 6b can ship alone.
+
+*Dedupe-first*: THIS IS THE WRITE PATH. Walk the canonical-link, fingerprint, sticky-closed, response-shape rules before merging. Federated row colliding with local row's canonical_link: older =created_at= wins as root; newer becomes duplicate. Inbound =Update= merge-empty-fields only — never clobber local edits.
+
+*Out of scope*: actively pulling JPs from peers; inbound Like / Announce (7e); federated comments inbound (7c).
+*** TODO Phase 6a — Company Organization actors :federation:api:frontend:
+:PROPERTIES:
+:CREATED: [2026-06-06]
+:CANONICAL: Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6a — Company Organization actors
+:LAST_TOUCHED: [2026-06-06]
+:END:
+Canonical plan: =notes.org/Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6a — Company Organization actors=
+
+*Goal*: every Company exposes an AS2 Organization actor at =/companies/<slug>=; Mastodon and peer Career Caddy instances follow it; new JPs deliver via 5d.
+
+*Schema*
+- =Actor.company= FK nullable; mutual-exclusivity check with =Actor.user= (XOR XOR none for Instance Actor).
+- =Actor.avatar_url= URLField max 500 nullable (reused by 7a).
+- =Company.slug= SlugField max 80 unique nullable; backfill via =python manage.py backfill_company_slugs=.
+- =Company.federation_enabled= BooleanField default false.
+
+*Views*
+- =GET /companies/<slug>= content-negotiated (HTML for browsers, AS2 JSON for =application/activity+json=).
+- =GET /companies/<slug>/outbox= AS2 OrderedCollection of =Create(Note)= for public JPs.
+- WebFinger handler resolves =acct:<slug>@<host>= against Company actors.
+
+*Dispatch*
+- JP save with =company.federation_enabled=true= AND =audience contains #Public= → enqueue =dispatch_create_jobpost= attributed to the Company actor.
+
+*Frontend*
+- =company.show= Subscribe button + staff Federation-enabled toggle.
+
+*Dependencies*: 5a Actor model (SHIPPED), 5d dispatch worker (SHIPPED), Company schema present (verify =Company.website= column on dispatch).
+
+*Out of scope*: per-user-of-Company actors, employer self-claim (6d), logo upload UI (6d).
+
+*Dedupe-first reminder*: this opens a new outbound write path but does NOT create new inbound JobPosts. Dedupe contract is exercised on outbound activity id idempotency, not on JobPost creation. Walk the dedupe-first memory at PR-review time anyway.
 *** TODO deploy/pibu/ — Camoufox scrape runner systemd user unit
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-06]
+:END:
 SHIPPED 2026-05-31. cc_auto/deploy/pibu/ holds the canonical
 shape for running the agents-repo scrape runner on pibu.
 
@@ -707,9 +916,13 @@ Follow-up to track separately if it bites:
   runner sits close to the 905MB RAM cap. If the runner gets OOM-
   killed by the kernel rather than systemd MemoryMax, lower the
   cap further or shut the dev stack down on pibu.
-*** TODO Catchall mail B2 shipped — Phase B3 poller unblocked once cc Phase 2.5 api tickets land [2026-05-31]
+*** DONE Catchall mail B2
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-31]
+:LAST_TOUCHED: [2026-06-07]
+:MERGE_SHA: 82e81af33eb1cf0a336bf70e264d7762fcd3b75d
+:AUTOMATION_PR_SHA: f35fb4533a6292142561a6935f6155e647f24c07
+:PR_URL:   https://github.com/overcast-software/career_caddy/pull/235
+:SHIPPED_AT: [2026-05-31]
 :END:
 *Signal*: Doug confirmed catchall =<username>@careercaddy.online= is live and accepting forwarded mail (per relay from cc, 2026-05-31). Phase B2 (=Inbox/Feature/Phase 2.5: ops — MX record + catchall mail server=) moved to SHIPPED.
 
@@ -1439,11 +1652,12 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 *Dependency*: Phase 2.5 api tickets must ship first (=discover_for_user_id= and =email-forward= source + =forwarded_via_address=).
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest
-*** TODO Phase 2.5: api — email-forward source + JobPostDiscovery.forwarded_via_address + JSON:API discoveries hasMany :api:dedupe:cc_auto:
+*** SHIPPED Phase 2.5: api — email-forward source + JobPostDiscovery.forwarded_via_address + JSON:API discoveries hasMany :api:dedupe:cc_auto:
 :PROPERTIES:
 :PHASE:    2.5
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
+:LAST_TOUCHED: [2026-06-07]
+:MERGE_SHA: ba7b667fca2270c446e8359ab12909a992c5883c
 :END:
 *Goal*: surface forwarder provenance via the JSON:API =discoveries= relationship; the column lives where it logically belongs (=JobPostDiscovery=).
 
@@ -1466,11 +1680,12 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 - =api/job_hunting/tests/test_job_post_viewset.py= — relationship serializes on jp.show.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Surfacing forwarder provenance
-*** TODO Phase 2.5: api — discover_for_user_id on POST job-posts + staff-or-self RBAC + audit column :api:cc_auto:
+*** SHIPPED Phase 2.5: api — discover_for_user_id on POST job-posts + staff-or-self RBAC + audit column :api:cc_auto:
 :PROPERTIES:
 :PHASE:    2.5
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
+:LAST_TOUCHED: [2026-06-07]
+:MERGE_SHA: ba7b667fca2270c446e8359ab12909a992c5883c
 :END:
 *Goal*: let staff-level API keys (cc_auto's key) attribute =JobPostDiscovery= to an arbitrary user. No new endpoint; same =POST /api/v1/job-posts/= with a new attribute + RBAC.
 
@@ -1492,11 +1707,12 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 - =api/job_hunting/tests/test_job_post_discovery.py= — column populated correctly.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Why this changes the visibility math
-*** TODO Phase 2.5: api — username catchall validator + audit_usernames mgmt command :api:cc_auto:
+*** SHIPPED Phase 2.5: api — username catchall validator + audit_usernames mgmt command :api:cc_auto:
 :PROPERTIES:
 :PHASE:    2.5
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
+:LAST_TOUCHED: [2026-06-07]
+:MERGE_SHA: ba7b667fca2270c446e8359ab12909a992c5883c
 :END:
 *Goal*: ensure =username= is safe to use as an email local-part before the catchall ingest lands.
 
@@ -1966,7 +2182,7 @@ claude session) the capture lands in a stale view and either
 clobbers recent edits or appears in the wrong place. Capture
 handler should =revert-buffer= (auto-confirmed when no local
 changes) on the target file before inserting.
-** PLAN ActivityPub prep and job-post adaptation
+** PLAN ActivityPub
 *** i want frontend:job-posts.edit to allow me to edit canonical link, apply_url, and duplicates.
 *** There can be duplicates from more than one source, and this is a not a parent relationship as we coded up.  It feels more like a many-to-many is a many to many for me.  if we need to make a new jp for the apply_url that is a consideration.
 **** TODO Document all columns in job post and add comments to the model
