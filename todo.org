@@ -12,6 +12,7 @@ Sections: Inbox (capture; sub-headings Bug/Enhancement/Feature/Idea) → Backlog
 Workflow: agent dispatch + per-repo worktree protocol (see =* Workflow= section below).
 Tags (cross-cutting; mirror notes.org tags): scrape frontend api agents bugs infra chore chat dedupe extension mcp.
 Capture: =SPC X c= → top-level Inbox; =SPC X C= → Inbox/<kind>.
+Headings: no =/=, =[brackets]=, or =(parens)= in heading text — they break =org-find-olp= path resolution. Use a tag for namespacing prefixes, not =prefix/= in the heading.
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
@@ -401,7 +402,7 @@ verification time.
   block or the dev =.env=).
 
 *Tags*: =:dc:phase5a:federation:caddy:dev:=
-** TODO caddy-inbox + hold_poller drowning in 401s — confirm token/scheme
+** TODO caddy-inbox + hold_poller drowning in 401s — confirm token or scheme
 :PROPERTIES:
 :LAST_TOUCHED: [2026-06-01]
 :END:
@@ -678,8 +679,10 @@ Two real candidates (=screenshot.js= borderline, =scrape-status.js= lean-no), on
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
-** TODO https://chromewebstore.google.com/detail/career-caddy-sender/pjdajamkhjkemoaogohehcdpfkocofhd
-** TODO https://addons.mozilla.org/en-US/developers/addons
+** TODO Chrome Web Store — ccsender listing
+https://chromewebstore.google.com/detail/career-caddy-sender/pjdajamkhjkemoaogohehcdpfkocofhd
+** TODO Firefox AMO — developer dashboard
+https://addons.mozilla.org/en-US/developers/addons
 ** Idea
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
@@ -891,7 +894,7 @@ Canonical plan: =notes.org/Plans/PLAN Fediverse Phase 6 — job distribution + l
 *Out of scope*: per-user-of-Company actors, employer self-claim (6d), logo upload UI (6d).
 
 *Dedupe-first reminder*: this opens a new outbound write path but does NOT create new inbound JobPosts. Dedupe contract is exercised on outbound activity id idempotency, not on JobPost creation. Walk the dedupe-first memory at PR-review time anyway.
-*** TODO deploy/pibu/ — Camoufox scrape runner systemd user unit
+*** TODO pibu deploy — Camoufox scrape runner systemd user unit
 :PROPERTIES:
 :LAST_TOUCHED: [2026-06-06]
 :END:
@@ -1500,7 +1503,7 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 - =api/job_hunting/tests/test_federation.py= — CRUD; user can only see their own.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 4 — ActivityPub readiness
-*** TODO Phase 4: api — /api/v1/job-posts/:id/as-object/ JSON-LD adapter view :api:
+*** TODO Phase 4 api — job-posts as-object JSON-LD adapter view :api:
 :PROPERTIES:
 :PHASE:    4
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
@@ -1547,7 +1550,7 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 - =api/job_hunting/tests/test_job_post_model.py= — default =source_instance= populates; backfill correct.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 4 — ActivityPub readiness
-*** TODO Phase 3: frontend — staff-only /reports/dedupe-feedback report :frontend:dedupe:
+*** TODO Phase 3 frontend — staff-only dedupe-feedback report :frontend:dedupe:
 :PROPERTIES:
 :PHASE:    3
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
@@ -1759,7 +1762,7 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 *Dependency*: api verb-endpoints ticket (Phase 2 api) merged first.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Job-post edit page additions
-*** TODO Phase 2: api JobPostViewSet — mark-duplicate-of / unlink-duplicate / promote-canonical :api:dedupe:
+*** TODO Phase 2 api JobPostViewSet — mark-duplicate-of, unlink-duplicate, promote-canonical :api:dedupe:
 :PROPERTIES:
 :PHASE:    2
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
@@ -1857,7 +1860,7 @@ Files to touch when picked up:
 - scripts/inbox_triage.py — _create_inline_job_post fetches From: from the source, compares to parsed recruiter_contact email, sets link conditionally. Helper _mailto_from_contact ("<email>" regex) was already drafted in the reverted change; pull it from this todo's diff history if useful.
 
 Backfill: JP 2914 specifically can be patched via update_job_post once we know the recruiter's actual From: address. Not blocking; the post is usable via the description prefix that already names Lovely.yadav@excelonsolutions.com.
-*** TODO dedupe/canonicalize-direct-create — POST /job-posts/ pre-canonicalize :api:dedupe:
+*** TODO canonicalize-direct-create — POST job-posts pre-canonicalize :api:dedupe:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :PRIORITY: P1
@@ -1865,7 +1868,7 @@ Backfill: JP 2914 specifically can be patched via update_job_post once we know t
 =POST /api/v1/job-posts/= creates a JP without calling =canonicalize_link()= before =find_duplicate=. Direct API creates therefore bypass the host-rewrite + tracking-strip pass that =/scrapes/from-text/= does, so a /comm/jobs/view/ POST silently creates a duplicate of an existing /jobs/view/ row. Five-line fix in =views/jobs.py= =create()=. Evidence: jp 1315 ↔ jp 1550 (linkedin /comm/ duplicate, see notes.org).
 
 Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md= for context. Deferred out of the cross-platform-dedup-hints PR because the from-text path already canonicalizes; this closes the silent hole on the other create endpoint.
-*** TODO extension/multi-host-extractors — Indeed/Glassdoor/ZipRecruiter apply-button :extension:dedupe:
+*** TODO multi-host-extractors — Indeed, Glassdoor, ZipRecruiter apply-button :extension:dedupe:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :PRIORITY: P2
@@ -1873,7 +1876,7 @@ Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md= for context. Def
 Once ccsender 1.2.0 has 2 weeks of dogfood and the LinkedIn safety/go decoder proves out the model, add per-host apply-button extractors for the next tier of job boards: Indeed, Glassdoor, ZipRecruiter. Each is a small extractor block in =popup.js#grabHints=, hostname-gated like the LinkedIn one. Cost: small per-host code + one extension release each.
 
 Don't fan out before LinkedIn has shipped dedup wins in production. Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md=.
-*** TODO dedupe/dogfood-eval-pr2 — 2-week empirical re-eval after PR1 :dedupe:
+*** TODO dogfood-eval-pr2 — 2-week empirical re-eval after PR1 :dedupe:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :PRIORITY: P2
@@ -1969,7 +1972,7 @@ Proposal:
 - Per-resume override still works (some users target multiple fields)
 
 Not blocking M4. Easy follow-up; one migration + one form field on settings + one default in resume create.
-*** TODO Audit cover-letter / summary / orgmode-export prompts for dev-leaning copy
+*** TODO Audit cover-letter, summary, orgmode-export prompts for dev-leaning copy
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-07]
 :END:
@@ -2160,7 +2163,7 @@ ScrapeProfile id=2 (linkedin.com) =extraction_hints= emits =[DESCRIPTION NOT CAP
 :LAST_TOUCHED: [2026-05-13]
 :END:
 Narrow regression introduced by the destroyed-record invalidation in =frontend/app/utils/list-model.js= (shipped 2026-05-13). When the cached =InfinityModel= holds destroyed records — happens after logout/login or after =record.destroyRecord()= — the cache is invalidated, the DOM is rebuilt, and the =stagger-rows= entry animation replays from row 1. Reads as a full page reload. Normal tab nav between list routes is unaffected; cache hits + animation stays suppressed. Defer; users can not log in is the higher priority. Architecture note: =Architecture/list-model.js cache — list-route InfinityModel + destroyed-record invalidation= for full context.
-*** TODO Logout/login shows another user's score
+*** TODO Logout then login shows another user's score
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
