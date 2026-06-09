@@ -107,48 +107,14 @@ ci-lint-frontend:
 ci-lint-automation:
 	dagger -m ./dagger call lint-automation
 
-# Concise reports: surface failure blocks + summary; suppress dagger noise.
-# Pass FULL=1 to dump the entire test log unfiltered.
 ci-test-api:
-	@set -o pipefail; \
-	if [ -n "$(FULL)" ]; then \
-		dagger -m ./dagger call test-api stdout 2>&1; \
-	else \
-		dagger -m ./dagger call test-api stdout 2>&1 | awk ' \
-			/^(FAIL|ERROR): / { hit=1; n=25 } \
-			/^={70}/ { hit=1; n=25 } \
-			/^Ran [0-9]+ tests/ { print } \
-			/^(OK|FAILED)( |$$)/ { print } \
-			hit { print; if (n-- <= 0) hit=0 } \
-		'; \
-	fi
+	dagger -m ./dagger call test-api
 
 ci-test-frontend:
-	@set -o pipefail; \
-	if [ -n "$(FULL)" ]; then \
-		dagger -m ./dagger call test-frontend stdout 2>&1; \
-	else \
-		dagger -m ./dagger call test-frontend stdout 2>&1 | awk ' \
-			/^not ok / { hit=1; n=20; print; next } \
-			/^# (tests|pass|fail|skip|todo) / { print } \
-			hit { print; if (n-- <= 0) hit=0 } \
-		'; \
-	fi
+	dagger -m ./dagger call test-frontend
 
 ci-test-automation:
-	@set -o pipefail; \
-	if [ -n "$(FULL)" ]; then \
-		dagger -m ./dagger call test-automation stdout 2>&1; \
-	else \
-		dagger -m ./dagger call test-automation stdout 2>&1 | awk ' \
-			/^FAILED / { hit=1; n=15; print; next } \
-			/^ERROR / { hit=1; n=15; print; next } \
-			/====+ FAILURES ====+/ { hit=1; n=40; print; next } \
-			/====+ ERRORS ====+/ { hit=1; n=40; print; next } \
-			/[0-9]+ (passed|failed|error|skipped|deselected|warning)/ { print } \
-			hit { print; if (n-- <= 0) hit=0 } \
-		'; \
-	fi
+	dagger -m ./dagger call test-automation
 
 ci-lint: ci-lint-api ci-lint-frontend ci-lint-automation
 ci-test: ci-test-api ci-test-frontend ci-test-automation
