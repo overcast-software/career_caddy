@@ -198,7 +198,7 @@ class CareerCaddy:
             .with_exec([
                 "bash", "-c",
                 "set -o pipefail; "
-                "uv run python manage.py test -v 2 --keepdb --noinput 2>&1 "
+                "uv run python manage.py test -v 1 --keepdb --noinput 2>&1 "
                 "| tee /test.log",
             ])
             # Belt-and-suspenders: even if the runner ever exits 0 with
@@ -320,7 +320,7 @@ class CareerCaddy:
             .with_exec([
                 "bash", "-c",
                 "set -o pipefail; "
-                "uv run python manage.py test -v 2 --keepdb --noinput 2>&1 "
+                "uv run python manage.py test -v 1 --keepdb --noinput 2>&1 "
                 "| tee /test.log",
             ])
             .with_exec([
