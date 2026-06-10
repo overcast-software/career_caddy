@@ -129,6 +129,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       SCRAPING_ENABLED: ${SCRAPING_ENABLED:-False}
       SA_SCHEMA_ON_POST_MIGRATE: "False"  # api runs migrations; worker just consumes
+      Q_WORKERS: "1"  # rn drops to 1; off-rn worker stacks set their own
       USE_MCP_BROWSER_AGENT: "False"
       CHAT_SERVICE_URL: "http://chat:8000"
       EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
