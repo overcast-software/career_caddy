@@ -25,9 +25,9 @@ export
 
 # ── Dev stack ──────────────────────────────────────────────────────────────
 
-up: ## Start core dev stack (db + api + frontend + chat)
+up: ## Start core dev stack (db + api + frontend + chat + worker)
 	docker compose down --remove-orphans 2>/dev/null || true
-	docker compose up db api frontend chat
+	docker compose up db api frontend chat worker
 
 up-full: ## Start all services including browser-mcp
 	docker compose down --remove-orphans 2>/dev/null || true
