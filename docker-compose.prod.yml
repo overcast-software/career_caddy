@@ -96,7 +96,7 @@ services:
       timeout: 5s
       start_period: 30s
       retries: 3
-    mem_limit: 512m
+    mem_limit: 768m
     labels:
       caddy: api.careercaddy.online
       caddy.import: cc_log
@@ -260,7 +260,7 @@ services:
       timeout: 5s
       start_period: 15s
       retries: 3
-    mem_limit: 512m
+    mem_limit: 768m
 
 networks:
   default:
