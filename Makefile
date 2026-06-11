@@ -85,6 +85,19 @@ lint-automation: ## Ruff-lint automation (cc_auto) code
 test-automation: ## Run pytest in automation (cc_auto)
 	$(MAKE) -C automation test
 
+# e2e/ is an optional submodule. Skips cleanly when uninit so forks
+# without an e2e clone don't see CI red.
+canary: ## Cypress canary vs https://careercaddy.dev. Override target with CYPRESS_BASE_URL=...
+	@if [ -f e2e/package.json ]; then \
+		cd e2e && npm ci && npm run canary; \
+	else \
+		echo "e2e/ submodule not initialized — skipping canary (run 'git submodule update --init e2e' to enable)"; \
+	fi
+
+install-hooks: ## Wire scripts/git-hooks/ as the active hooks dir. Enables the pre-push canary against cc.dev.
+	git config core.hooksPath scripts/git-hooks
+	@echo "Hooks installed. Bypass once with: CC_SKIP_CANARY=1 git push"
+
 # ── CI (Dagger) ────────────────────────────────────────────────────────────
 # Requires Dagger CLI: curl -fsSL https://dl.dagger.io/dagger/install.sh | sh
 #
