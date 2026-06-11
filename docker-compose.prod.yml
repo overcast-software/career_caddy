@@ -70,7 +70,7 @@ services:
       BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN:-}
       GUNICORN_HOST: "0.0.0.0"
       GUNICORN_PORT: "8000"
-      GUNICORN_WORKERS: "2"
+      GUNICORN_WORKERS: "4"
       SA_SCHEMA_ON_POST_MIGRATE: "True"
       USE_MCP_BROWSER_AGENT: "False"
       CHAT_SERVICE_URL: "http://chat:8000"
