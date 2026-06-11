@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Pre-push gate: run the Cypress canary against cc.dev before
+# pushing to main. Nonzero exit blocks the push so a broken staging
+# state can't escalate into a prod Deploy.
+#
+# Activate with: make install-hooks
+# Bypass once:   CC_SKIP_CANARY=1 git push
+#
+# Pushes to non-main refs are unaffected.
+
+set -euo pipefail
+
+if [ "${CC_SKIP_CANARY:-0}" = "1" ]; then
+  echo "[pre-push] CC_SKIP_CANARY=1 — skipping canary."
+  exit 0
+fi
+
+target_main=false
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    target_main=true
+  fi
+done
+
+if [ "$target_main" = "false" ]; then
+  exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+if [ ! -f "$repo_root/e2e/package.json" ]; then
+  echo "[pre-push] e2e/ submodule not initialized — skipping canary."
+  echo "[pre-push] Run 'git submodule update --init e2e' to enable."
+  exit 0
+fi
+
+base_url="${CYPRESS_BASE_URL:-https://careercaddy.dev}"
+echo "[pre-push] Running Cypress canary against $base_url ..."
+
+cd "$repo_root/e2e"
+if [ ! -d node_modules ]; then
+  npm ci
+fi
+CYPRESS_BASE_URL="$base_url" npm run canary

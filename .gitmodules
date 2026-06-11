@@ -10,3 +10,6 @@
 [submodule "automation"]
 	path = automation
 	url = git@github.com:overcast-software/career_caddy_automation.git
+[submodule "e2e"]
+	path = e2e
+	url = git@github.com:overcast-software/career_caddy_e2e.git
