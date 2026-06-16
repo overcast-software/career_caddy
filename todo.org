@@ -16,15 +16,15 @@ Headings: no =/=, =[brackets]=, or =(parens)= in heading text — they break =or
 
 TOC (compiled by =cc-todo-rebuild-toc=):
 #+begin_example
-Inbox (35)
-  Bug (3)
-  Enhancement (17)
-  Feature (39)
+Inbox (32)
+  Bug (6)
+  Enhancement (7)
+  Feature (7)
   Idea (0)
-Backlog [0/3]
-Active [0/25]
+Backlog [0/4]
+Active [1/22]
 Icebox [0/6]
-Archive (1)
+Archive (2)
 #+end_example
 * Workflow                                           :IMPORTANT:
 Dispatch protocol for the four agents (=cc-orchestrator=, =cc-api=, =cc-frontend=, =cc-auto=). Mirrors =~/Sandbox/mailgun= pattern adapted to career_caddy's submodule layout. Claim a task on =main= before spawning a worktree so two dispatches cannot race for the same heading.
@@ -96,171 +96,8 @@ Some changes touch multiple repos (e.g. API contract change ripples into fronten
 - New UI components must use Tailwind utilities following HyperUI patterns. Never custom CSS.
 - Use hyperui, tailwind, and defined color palettes when writing UI html.
 - Submodule scope on entry headings goes in proper org tags (=:frontend:=, =:api:=, =:ai:=, =:bug:=), NOT bracket-suffix annotations like =[frontend]=. Tags stack: =:frontend:bug:=. Don't bulk-rewrite historical =[frontend]= entries.
-** SHIPPED chat_server httpx.ReadTimeout on api v1 me — root cause for no-response fallback
-:PROPERTIES:
-:CREATED: [2026-06-04]
-:REPORTED_BY: orchestrator-claude via logfire
-:RELATED_TO: Inbox/chat reply renders the no-response fallback literal — empty-accumulated path in chat.js
-:LAST_TOUCHED: [2026-06-04]
-:PR_URL:   https://github.com/overcast-software/career_caddy_agents/pull/35
-:MERGE_SHA: 2b0e548de2f2ead9263c02e4ba3a309f494f33ca
-:NEEDS_PIN_BUMP: yes
-:AGENTS_PR_SHA: 401ede20f662a35a1e8530d718bf4f7108dc0238
-:DEPLOYED_AT: [2026-06-04 16:30]
-:DEPLOYED_RUN: 26963292164
-:END:
-
-Tags: =:agents:mcp:chat:bugs:=.
-
-Symptom: =chat_server= MCP intermittently hangs on its outbound
-HTTP call to =/api/v1/me/= for ~5 seconds, raises
-=httpx.ReadTimeout=, and returns no assistant text. The frontend
-then renders the =(no response from agent)= fallback. This is the
-root cause for the sibling frontend entry above.
-
-Logfire evidence — last 48h, same =url_full=
-=http://api:8000/api/v1/me/=:
-
-| time UTC               | service           | result                          |
-|------------------------+-------------------+---------------------------------|
-| 2026-06-04 15:17:37    | chat_server       | httpx.ReadTimeout 5.04s         |
-| 2026-06-02 21:27:38    | chat_server       | httpx.ReadTimeout 5.02s         |
-| 2026-06-02 21:27:10    | chat_server       | httpx.ReadTimeout 5.04s         |
-| same window many calls | public_mcp_server | OK 50-200ms, hundreds of times  |
-
-The api endpoint is fine. Only =chat_server= hangs. Both servers
-live in =agents/mcp_servers/= and call the same upstream.
-
-Suspects:
-
-1. *Auth header difference.* =public_mcp_server= passes a per-client
-   =jh_*= API key under =Authorization: Bearer=. =chat_server= may
-   be passing a JWT that has expired by the time =/me/= is hit, and
-   the api side hangs instead of 401-ing cleanly. Compare the two
-   servers' httpx client construction in =agents/mcp_servers/=.
-2. *httpx client pool exhaustion or stale connection.* If the
-   =chat_server= keeps a single =httpx.AsyncClient= for the lifetime
-   of an SSE conversation and the underlying TCP connection gets
-   killed by the docker network mid-call, the next call hangs to
-   the default 5s read timeout. =public_mcp_server= may construct a
-   fresh client per request and dodge this.
-3. *Token refresh deadlock.* If =chat_server='s auth path acquires a
-   lock to refresh the JWT and that lock is never released on
-   failure, subsequent calls block — but logfire would show the
-   block as a non-=httpx= hang, not =httpx.ReadTimeout=. Less
-   likely.
-
-Acceptance criteria:
-- Identify the structural difference between =chat_server= and
-  =public_mcp_server='s httpx clients / auth header construction.
-- Either fix =chat_server= to use the same shape as
-  =public_mcp_server= for the =/me/= call, or wrap the call with a
-  timeout + recovery path so a transient hang doesn't return zero
-  text to the SSE stream.
-- When the timeout fires, =chat_server= should still emit an
-  =AG_UI.RUN_ERROR= event so the frontend can render a real error
-  message instead of the bare fallback.
-- Add a logfire alert / pydantic-graph trace marker so this
-  regression surfaces immediately if it recurs.
-
-No cc-agents subagent exists yet — this stays in Inbox until
-either the general-purpose agent picks it up or a cc-agents
-subagent is created. See parent =todo.org Inbox=
-=diycloud — thin CLAUDE.md ...= entry for the broader question
-of whether to carve a cc-agents subagent.
-
-Cross-links:
-- [[file:notes.org::*AI Chat — Architecture Reference]] — chat
-  message flow, AG-UI wiring
-- [[file:agents/notes.org::*Architecture/MCP server boundary]] —
-  the four-MCP-server table, which servers ship to prod
-- [2026-06-04] orchestrator-claude shipped agents PR 35 — merges /me/ into one fetch + emits RunErrorEvent on httpx failure
-** SHIPPED chat reply renders the no-response fallback literal — empty-accumulated path in chat.js
-:PROPERTIES:
-:CREATED: [2026-06-04]
-:REPORTED_BY: Doug
-:SEEN_AT: production chat
-:LAST_TOUCHED: [2026-06-04]
-:PR_URL:   https://github.com/overcast-software/career_caddy_frontend/pull/175
-:MERGE_SHA: 2b0e548de2f2ead9263c02e4ba3a309f494f33ca
-:NEEDS_PIN_BUMP: yes
-:FRONTEND_PR_SHA: 831be57d0d6dc40719b9e0b9d6dfba2c413721e3
-:DEPLOYED_AT: [2026-06-04 16:30]
-:DEPLOYED_RUN: 26963292164
-:END:
-
-Tags: =:frontend:chat:bugs:=.
-
-Symptom: chat reply rendered as the literal fallback string
-=no response from agent= surrounded by parens for at least one turn
-observed in prod chat.
-
-Location of the fallback emit:
-- =frontend/app/services/chat.js:299-301= — the
-  =if (!accumulated)= branch at end-of-stream calls
-  =_replaceLastMessage= with the fallback literal.
-
-Two plausible paths into this branch — investigate both before
-choosing a fix:
-
-1. *Server sent no text at all.* The SSE stream produced no
-   =TEXT_MESSAGE_CONTENT= events; =accumulated= stayed empty;
-   fallback fires. If this is the path, the bug is upstream
-   (chat_server / agent run produced no assistant text) and the
-   frontend response should be observability: surface
-   =conversation_id= + usage so the operator can root-cause
-   server-side. Don't silently swallow.
-2. *Stream contained ONLY a navigate marker.* The block at
-   =chat.js:289-297= strips =NAVIGATE_RE= matches from
-   =accumulated= and calls =router.transitionTo=. If the WHOLE
-   accumulated body is a navigate marker, =accumulated.replace=
-   leaves an empty string, the strip-branch already called
-   =_replaceLastMessage= with the empty body, then the
-   =if !accumulated= guard at line 299 fires and overwrites
-   with the fallback literal just before the route transition.
-   Race-y; can briefly flash the literal to the user.
-
-Acceptance criteria:
-- Identify which of 1 or 2 actually fired. If diagnosis depends
-  on prod logs the frontend cannot see, surface that in the
-  handoff envelope and file a parent todo for cc-api or
-  scrape-profile-enhancer to add the upstream observability.
-- Fix the frontend behavior so the user never sees the literal
-  fallback when the agent actually DID respond — case 2, pure
-  navigate. For case 1 truly empty agent response, the fallback
-  can stay but should carry actionable detail =conversation_id=
-  + a re-try affordance, not the bare string.
-- Add a QUnit test that covers the empty-after-strip case so the
-  regression cannot re-enter.
-
-Cross-links:
-- [[file:notes.org::*AI Chat — Architecture Reference]] — chat
-  message flow + AG-UI wiring in parent notes.org Architecture
-- [[file:frontend/notes.org::*Architecture/Async getters + .then chains]]
-  — sibling pattern; the dual-flash bug PR 172 was a related
-  failure in the answer-save flow
-
-Logfire confirmed root cause is CASE 1 (server returned no text), not
-case 2 (nav marker). Three =httpx.ReadTimeout= incidents on
-=chat_server= calling =/api/v1/me/= over 48h, including Doug's
-2026-06-04 15:17 incident. Same call from =public_mcp_server=
-succeeds in 50-200ms; the api endpoint is fine.
-
-Scope for this todo (cc-frontend only):
-- Replace the bare =(no response from agent)= literal at
-  =frontend/app/services/chat.js:299-301= with an actionable
-  fallback that carries =conversation_id= + a retry affordance.
-- Keep the strip-navigate branch correct (case 2 doesn't fire in
-  the observed incident but the order-of-operations there is still
-  worth tightening so an empty post-strip body doesn't briefly
-  overwrite with the fallback).
-- Add a QUnit test for the empty-accumulated path.
-
-Parallel agents-side investigation is a separate todo —
-"chat_server httpx.ReadTimeout on api/v1/me/" — root cause for the
-server returning no text. Cross-link to that entry once filed.
-- [2026-06-04] cc-frontend shipped PR 175 to frontend main, awaits parent pin bump
-** TODO diycloud — thin CLAUDE.md + mirror handoff envelope + dc-fleet-status
+** TODO make a default avatar for activitypub.  a generic man holding a golfbag.  looks like the man on the bathrooms at restaraunts but is holding a golf bag.
+** TODO [#C] diycloud — thin CLAUDE.md + mirror handoff envelope + dc-fleet-status
 :PROPERTIES:
 :CREATED: [2026-06-04]
 :CROSS_REF: [[file:notes.org::*Cross-cutting agent split — cc and dc]]
@@ -288,187 +125,8 @@ diycloud should mirror what cc just shipped across all repos:
 
 This is dc-claude work. Tag with =:dc:= so it doesn't slip past
 the cc dispatch flow.
-** TODO [dc] Phase 5a federation harness — recommend dev environment + ship prod INSTANCE_ORIGIN fix anyway
-:PROPERTIES:
-:LAST_TOUCHED: [2026-06-04]
-:END:
-Cross-cutting reply from dc on the two findings the cc-side agent surfaced
-(prod /actors/dough returning AS2 JSON-LD with localhost:8000 URIs;
-careercaddy.dev /actors/dough returning 404 from some api with the right
-content-type but no Actor rows).
-
-*TL;DR*
-1. Prod: set =INSTANCE_ORIGIN=https://careercaddy.online= and restart api.
-   Latent-bug fix, no federation involvement.
-2. Find which api backend serves =careercaddy.dev/actors/*= (Angular dev
-   proxy config will tell you) before running any backfill.
-3. Dev: backfill + =INSTANCE_ORIGIN=https://careercaddy.dev= on the
-   actual api container that path hits.
-4. Run the Phase 5a Mastodon smoke against *dev*, not prod.
-
-*Why dev for the harness, not prod*
-
-Phase 5a is first contact. Once a Mastodon peer caches your
-=/actors/<user>= response it stickies the URIs and publicKey. If
-later Phase 5b/5c work surfaces a bug — wrong key encoding, malformed
-inbox URI, signature off by a byte — you fix the code locally, but
-every peer that already cached the buggy actor sees the old version
-until /their/ cache expires, and you do not control their TTL.
-Federation has long memory.
-
-Dev is the throwaway identity. If the harness produces a malformed
-actor and three test Mastodon peers cache it, you can blow away the
-dev DB or rename the actor. Same accident on prod and you have burned
-careercaddy.online with whatever fediverse instances probed first.
-
-Setup cost on dev is two manage.py commands + one env var.
-Cheap. Run on dev.
-
-*Ship the prod INSTANCE_ORIGIN fix regardless of harness choice*
-
-Do not leave =localhost:8000= URIs in prod's actor responses just
-because you are not federating yet. Any crawler or curious peer that
-hits =api.careercaddy.online/actors/dough= today caches an actor
-pointing at localhost. Cheap, isolated fix — ship it:
-
-  ssh racknerd "echo 'INSTANCE_ORIGIN=https://careercaddy.online' \
-    >> /opt/stacks/careercaddy.online/.env && \
-    docker compose -f /opt/stacks/careercaddy.online/docker-compose.yml \
-    restart api"
-
-*Watch-out before backfilling on dev*
-
-The other agent's path-trace assumption — =careercaddy.dev → racknerd
-→ tunnel → laptop ember → laptop api= — is shaky. The actual dc-shipped
-path is:
-
-  careercaddy.dev (apex, public DNS)
-    → racknerd:443 (caddy edge, LE cert for careercaddy.dev wildcard)
-    → via_pibu snippet (tailscale to 100.84.193.34 = pibu)
-    → pibu:443 (caddy, terminates cd_tls)
-    → 192.168.1.101:4200 (omarchy ng serve, Angular dev)
-
-That last hop is the Angular dev server, not Django. The 404 with
-=Content-Type: application/activity+json= proves Angular is proxying
-=/actors/*= to /some/ Django backend (proxy.conf.json or similar). It
-could be:
-
-  - pibu's =careercaddy-dev-api= container (from
-    =playbooks/pibu/careercaddy.dev.yml=)
-  - the laptop's local api over a tunnel
-  - some other api on omarchy
-
-Whichever it is, that is where you must run:
-
-  docker compose exec api python manage.py bootstrap_instance_actor
-  docker compose exec api python manage.py generate_federation_actors
-
-Inspect =proxy.conf.json= (or whatever the frontend uses for dev
-proxying) before running the backfill, so you do not seed the wrong db.
-
-*Also: INSTANCE_ORIGIN on dev*
-
-If the dev api also defaults to =http://localhost:8000= in absence of
-INSTANCE_ORIGIN, set =INSTANCE_ORIGIN=https://careercaddy.dev= on the
-dev api's env at the same time as the backfill. The harness needs the
-canonical apex in the URIs or Mastodon will reject the actor at
-verification time.
-
-*dc-side surface that is now ready*
-
-- =https://careercaddy.dev/= returns 200 (verified 2026-06-01).
-- LE wildcard cert in place for =careercaddy.dev= +
-  =*.careercaddy.dev=. Distributed to pibu via cert-puller.
-- racknerd's caddy bridges =careercaddy.dev= +
-  =careercaddy.dev.robotbellybutton.com= → pibu via_pibu.
-- Pibu's caddy terminates both hostnames; apex skips internal_only so
-  external federation traffic gets through.
-- =careercaddy.dev/actors/dough= reaches an api somewhere and returns
-  a real 404 with the activitypub content-type — so the route is
-  functionally plumbed; only the data is missing.
-
-*Out of scope for this reply / still cc-owned*
-
-- The federation routes themselves (=/.well-known/webfinger=,
-  =/actors/<x>=) at the apex are tracked under the other open inbox
-  item =[cc] Caddy reverse-proxy routing for ActivityPub federation
-  surface=. dc has not added apex-path routing yet because dev now
-  reaches whatever Angular's proxy resolves to and the request did
-  in fact land on a Django api. If the harness later needs a
-  dedicated apex carve-out (e.g. webfinger short-circuit), file it
-  there.
-- ALLOWED_HOSTS / CSRF_TRUSTED_ORIGINS additions for =careercaddy.dev=
-  on the dev api are cc-side (=playbooks/pibu/careercaddy.dev.yml= env
-  block or the dev =.env=).
-
-*Tags*: =:dc:phase5a:federation:caddy:dev:=
-** TODO caddy-inbox + hold_poller drowning in 401s — confirm token or scheme
-:PROPERTIES:
-:LAST_TOUCHED: [2026-06-01]
-:END:
-Since 2026-05-31 16:00 UTC, caddy-inbox throws ~300-450 errors/hr and
-hold_poller mirrors it. All are HTTP 401 from api.careercaddy.online.
-
-Failing call sites: followup_processor agent → CareerCaddyToolset →
-src/client/api_client.py (Authorization: Bearer CC_API_TOKEN).
-Hot endpoints: GET /api/v1/job-applications/?filter[company]=...,
-GET /api/v1/job-posts/{id}/job-applications/, POST /api/v1/companies/.
-
-Action items:
-1. Confirm whether the api's accepted auth scheme for jh_* staff keys is
-   currently 'Bearer' or 'Api-Key'. Parent CLAUDE.md documents 'Api-Key';
-   cc_auto sends 'Bearer'. If api never accepted Bearer for these keys, the
-   prior baseline of ~0 errors/day is suspicious — figure out what changed.
-2. Check whether CC_API_TOKEN in the caddy-inbox loop environment expired or
-   rotated near 2026-05-31 16:00 UTC. If yes, refresh it.
-3. Same fix for hold_poller (uses same client).
-4. Investigation note: cc_auto notes.org Operations/2026-05-31 caddy-inbox
-   401 spike — ongoing auth failure, not DisallowedHost.
-
-Cross-repo: if the answer is 'api requires Api-Key scheme', a parent-side
-todo is needed — but more likely cc_auto just needs to switch its header
-prefix or refresh its token.
-** TODO [dc] careercaddy.online ansible ownership unwound — proceed with Deploy PR :dc:
-:PROPERTIES:
-:LAST_TOUCHED: [2026-06-01]
-:END:
-
-dc has unwound ansible ownership of careercaddy.online on racknerd
-per cc's Inbox/Bug ask. Concretely:
-
-1. =playbooks/racknerd/careercaddy.online.yml= is ARCHIVED with a
-   fail-fast guard (=tags: always= so neither =--tags= nor =--skip-tags=
-   bypass it). The file is kept as archaeology — original tasks remain
-   below the guard but ansible will never reach them.
-
-2. =/opt/stacks/careercaddy.online/docker-compose.yml= will not be
-   re-templated by dc. cc's Deploy scp owns that file unambiguously.
-
-3. Subdomains still dc-owned (no change): metabase.careercaddy.online,
-   careercaddy.dev, analytics.careercaddy.online. The
-   =*.careercaddy.online= wildcard catch-all in
-   =tasks/debian/caddy-racknerd.yml= stays — it picks up any subdomain
-   NOT matched by a more-specific block, which is exactly the dc
-   surface.
-
-4. Question answered: =proxy= external docker network on racknerd is
-   DC-CREATED via =tasks/debian/caddy.yml= as part of the caddy stack
-   deploy. cc's compose should reference it as:
-     networks:
-       proxy:
-         external: true
-   and add caddy labels (=caddy: careercaddy.online, ...= +
-   =caddy.reverse_proxy: "{{upstreams 8000}}"= etc.) —
-   caddy-docker-proxy on racknerd will pick them up and add specific
-   site blocks that take precedence over the dc-owned wildcard catch-all.
-
-cc can ship the Deploy PR (caddy labels + proxy network reference)
-without dc needing to touch racknerd further. ping dc if anything on
-the caddy edge misbehaves.
-
-dc-side record: =~/Network/syncthing/Projects/diycloud/notes.org= ::
-=Operations/Unwound careercaddy.online ansible ownership= (2026-05-31).
-** TODO [cc_auto] Roadmap landed: catchall mail + link traversal + pibu + log surfacing — needs api+ops coordination [2026-05-30] :cc_auto:api:ops:
+*** LOOP 3. subagents indeed emit emvenlops to dc-claude
+** TODO [#C] [cc_auto] Roadmap landed: catchall mail + link traversal + pibu + log surfacing — needs api+ops coordination [2026-05-30] :cc_auto:api:ops:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-30]
 :END:
@@ -484,25 +142,18 @@ implementation starts after they sign off in the =** LOOP= subheader.
 What cc_auto is waiting on from parent (no action required yet — just
 awareness so concurrent api work doesn't accidentally block):
 
-1. *Phase 2.5 catchall email — three api PRs already speced at todo.org:1150-1226.*
-   Order: schema (=email-forward= source enum +
-   =JobPostDiscovery.forwarded_via_address= + =requested_by_user_id=)
-   → POST attribute + RBAC (=discover_for_user_id=) → username lookup
-   (=GET /api/v1/users/?filter[username]=…= + =audit_usernames= mgmt
-   command). cc_auto's catchall poller (=src/pollers/email_catchall.py=)
-   cannot ship until all three land.
+1. *Phase 2.5 catchall email — SHIPPED in api (validated 2026-06-10).*
+   email-forward source, =forwarded_via_address=, =discover_for_user_id=
+   RBAC, audit_usernames mgmt command all live at
+   =api/job_hunting/api/views/jobs.py:520-604= (migration 0095). cc_auto's
+   catchall poller is unblocked on the parent side.
 
-2. *Worker image for django-q2 Phase 4* — when the queue plan
-   (=notes.org:6653-6850=) reaches Phase 4 (atomic hold-poller → queue
-   swap), cc_auto / pibu deploy needs:
-   - =agents/Dockerfile.worker= (worker container image)
-   - compose service in =docker-compose.prod.yml= with
-     =deploy.placement.constraints: [node.hostname == pibu]= and
-     =replicas: 0= until Phase 4 flips it on
-   - new =worker= target in =dagger/src/career_caddy_pipeline.py= so CI
-     keeps the image fresh
-   The plan is to prep the image *now* (Phase D2 in cc_auto's notes.org)
-   so Phase 4 deploy is a config flip, not a build. Idle until then.
+2. *Worker image for django-q2 Phase 4* — landed DIFFERENTLY (2026-06
+   sometime). =worker= service exists in =docker-compose.prod.yml:116=
+   but reuses the *api* image — no separate =agents/Dockerfile.worker=,
+   no =node.hostname == pibu= placement constraint, no dagger =worker=
+   target. If cc_auto still wants pibu-pinned worker isolation, file a
+   fresh todo with the rationale; the current shape may be sufficient.
 
 3. *Observability parity (cross-cut)* — cc_auto's triage-DB has been
    silent since 2026-05-15 because =scripts/inbox_triage.py= never
@@ -513,10 +164,9 @@ awareness so concurrent api work doesn't accidentally block):
    surface, the other should mirror so the cross-pipeline operator
    can correlate.
 
-4. *Reusable confirm* — cc_auto's =link_traverser= (Phase C2) plans to
-   import =lib/url_unwrap.py= from parent's =agents/= for tracker
-   resolution. Confirm this is the canonical path; if it's moved or
-   renamed, leave a note here.
+4. *Reusable confirm* — =agents/lib/url_unwrap.py= confirmed canonical
+   path (validated 2026-06-10). cc_auto's =link_traverser= (Phase C2)
+   can safely import it.
 
 Pibu deployment (Phase D1) uses *tmuxinator*, not systemd, per user
 direction "systemd for now is a non starter until we like the output."
@@ -526,20 +176,22 @@ exercised rollback.
 No code review needed yet — flagging only so api+ops agents can keep
 this context when their threads touch any of the above.
 
-** TODO Surface staff-only inspect_scrape_html tools to scrape-profile-enhancer
-**** TODO Surface staff-only inspect_scrape_html / find_selectors_for_text / test_url_rewrite to scrape-profile-enhancer agent :scrape:mcp:obs:
-- Three new staff-only MCP tools landed today on mcp.careercaddy.online: =inspect_scrape_html(scrape_id, selector?, mode?)=, =find_selectors_for_text(scrape_id, text, ...)=, =test_url_rewrite(url, hostname?)=. They are documented as gated by =StaffOnlyToolFilter= on the public MCP server.
-- The scrape-profile-enhancer subagent (this one) is running as user id 2 (Doug, staff) per get_current_user, but the deferred-tool listing at session start did NOT include these three. =ToolSearch query="inspect_scrape_html"= and the other names returned "No matching deferred tools found".
-- Cost: I had to fall back to raw =get_scrapes(id=...)= → YAML parse → regex-grep on the html field, which is slow and brittle. The whole point of these tools is to collapse exactly that loop.
-- Hypothesis: the StaffOnlyToolFilter may key off something other than user.is_staff (e.g. the API-Key principal type used by MCP-over-HTTP). Or the agent's MCP client connects with a different identity than the human user.
-- Action: confirm whether the subagent's MCP client request is being filtered out, and if so, surface a staff principal to the agent. File paths to start: =agents/mcp_servers/public_server.py= (filter definition), the toolset registration where these three tools are added, and =frontend/CLAUDE.md=-equivalent agent-system-prompt that instructs the subagent it should "use the tools if visible".
+** TODO [#C] Surface staff-only inspect_scrape_html / find_selectors_for_text / test_url_rewrite to scrape-profile-enhancer agent :api:scrape:mcp:obs:
+Validated 2026-06-10: api wiring looks correct end-to-end. ApiKeyTokenVerifier.verify_token at agents/mcp_servers/public_server.py:60-111 reads is_staff from /me/'s JSON:API attributes (or flat-dict fallback) and sets claims["is_staff"]. StaffOnlyToolFilter at agents/mcp_servers/staff_tool_filter.py reads it correctly. All three tools are visible in this orchestrator session's deferred-tool list (mcp__career_caddy__{inspect_scrape_html,find_selectors_for_text,test_url_rewrite}). Empirical acceptance still needs a fresh subagent dispatch — if the next scrape-profile-enhancer run lists them, promote to DONE.
+
+- Three staff-only MCP tools live on mcp.careercaddy.online: =inspect_scrape_html(scrape_id, selector?, mode?)=, =find_selectors_for_text(scrape_id, text, ...)=, =test_url_rewrite(url, hostname?)=. Gated by =StaffOnlyToolFilter= on the public MCP server.
+- The scrape-profile-enhancer subagent runs as user id 2 (Doug, staff) per get_current_user. Past observation (2026-05-25): deferred-tool listing did NOT include these three; =ToolSearch query="inspect_scrape_html"= returned "No matching deferred tools found".
+- Cost when missing: fall back to raw =get_scrapes(id=...)= → YAML parse → regex-grep on the html field, slow and brittle.
+- Hypothesis (now stale): StaffOnlyToolFilter keys off claims["is_staff"], which IS now set; ApiKeyTokenVerifier emits it from /me/.
 - Acceptance: a fresh scrape-profile-enhancer session sees the three tool names in its deferred-tool list and can ToolSearch +load them without ambiguity.
-** TODO wellfound profile needs hydrated capture + url_rewrites canonical rule
+** TODO [#B] wellfound profile needs hydrated capture + url_rewrites canonical rule
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-28]
 :END:
 State: TODO
 Scope: ScrapeProfile id=6 (wellfound.com)
+
+Validated 2026-06-10: still unshipped. No wellfound fixture under agents/fixtures/. Paths referenced (agents/scrape_graph/, agents/browser/) are correct.
 
 Context: enhancer 2026-05-26 audit found the static HTML for /jobs/job_listing_slug=4250970-senior-security-engineer is a Cloudflare-gated Next.js shell (65 lines, 0 job-content keywords). Current selectors (title:h1, location:[data-testid*=location]) work only against post-hydration DOM captured by the running browser; success_rate=0.947 is real but fragile and tier0_miss_count is already 5/19.
 
@@ -551,21 +203,26 @@ What needs doing:
 
 Files: agents/scrape_graph/, agents/browser/, ScrapeProfile id=6.
 Non-goal: do NOT pad extraction_hints — ZR incident showed >400-char hints silently bail prompt assembly; the durable fix for hallucinated salary/equity is the field-tolerant parser already speced in Inbox/job_post_extractor prompt anti-hallucination salary rules.
-** TODO job_post_extractor prompt anti-hallucination salary rules
+** SHIPPED [#A] job_post_extractor prompt anti-hallucination salary rules
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-26]
+:LAST_TOUCHED: [2026-06-10]
+:MERGE_SHA: d786c26
+:API_PR: 166
+:PARENT_PR: 257
 :END:
-Prompt-level fix so hourly to annual conversion is forbidden globally, not per-domain
+PRIMARY SPEC: see Followup child (2026-05-25 — field-tolerant validation). The prompt-only direction below remains a secondary lever (cheaper LLM round-trips when the model knows the rule) but is no longer the durable fix.
+
+Validated 2026-06-10: still unshipped. ParsedJobData at api/job_hunting/lib/parsers/job_post_extractor.py:80-110 trusts LLM salary verbatim; no hourly/extraction_date coercion exists; tests/test_job_post_extractor.py has no salary assertions; only the per-domain ZipRecruiter extraction_hints band-aid is in place.
 
 - Background: ziprecruiter ASK Consulting Engineer 2 scrapes 453/454 had the LLM convert $60-65/hr into salary_min=124800 salary_max=135200 unprompted. ScrapeProfile id=1 ziprecruiter.com now carries an extraction_hints override telling it not to, but the same trap exists for every domain whose profile lacks that hint. The system prompt asks for minimum annual salary in USD and treats unit-conversion as fair game.
-- File to change: agents/job_hunting/lib/parsers/job_post_extractor.py around the prompt template, the get_user_message / analyze_with_ai call site near line 917. Same for the Tier 3 extractor if it is a separate file.
+- File to change: api/job_hunting/lib/parsers/job_post_extractor.py — prompt template at ~:1108-1125 (=analyze_with_ai=), ParsedJobData model at :80-110, process_evaluation field passthrough at :419-435.
 - Required behaviour: if the source figure is per-hour, per-day, per-week, or per-month then leave salary_min and salary_max null AND quote the hourly figure inside description verbatim. Only annual figures become salary_min/salary_max. Same rule for Estimated pay chips: never canonical salary.
 - Also worth fixing in the same touch: the extraction_date field came back as 2023-10-06T00:00:00 from gpt-4o on both attempts; the prompt should say extraction_date = now today so the date is real rather than a model-pretrained snapshot.
 - Smallest test: a parser unit-test feeding contractor-style content with $60 - $65/hr and asserting salary_min is None, salary_max is None, and the hourly tokens survive in description.
 - Acceptance: removing the per-domain extraction_hints override on ziprecruiter still produces null salary for hourly postings.
 
-Tags suggestion: :agents:scrape:prompt:
-*** TODO Followup 2026-05-25 — flip strategy to field-tolerant validation
+Tags suggestion: :api:scrape:prompt:
+*** TODO [#A] Followup 2026-05-25 — flip strategy to field-tolerant validation
 Per user (2026-05-25): the prompt-engineering framing above is the weaker lever. The durable fix is field-tolerant validation in the extractor output layer, NOT begging the LLM to behave.
 
 - Principle: salary_min/salary_max are nullable on JobPost (api/job_hunting/models/job_post.py:31-32). A hallucinated salary should be DROPPED per-field to null, not used to reject the whole JobPost. The model allows it; the validation layer was being too strict.
@@ -576,33 +233,21 @@ Per user (2026-05-25): the prompt-engineering framing above is the weaker lever.
 - Where the rejection happens today: parse_scrape._run in api/job_hunting/lib/parsers/job_post_extractor.py — the structured-output validation step before persistence. Field-level coercion lives there.
 - Smallest test (revised): feed contractor content with $60-65/hr; assert the JP IS PERSISTED with salary_min=None, salary_max=None, and the hourly tokens preserved in description. The previous spec asserted rejection-with-nulls; flip to assert persistence-with-nulls.
 - The original prompt-rule approach stays as a parallel improvement (cheaper LLM round-trips when the model knows the rule) but is no longer the primary lever. The ScrapeProfile hints patch on ziprecruiter that tried this caused a second-order silent-bail; see Inbox/scrapes-from-text silently swallows post-extract failures followup.
-** TODO scrapes-from-text silently swallows post-extract failures
+** TODO [#A] scrapes-from-text silently swallows post-extract failures
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-25]
 :END:
 from-text path lands scrape in failed status without surfacing why
 
+Validated 2026-06-10: still unshipped. No `failure_reason` field on Scrape model (acceptance a unmet). Failure sites at api/job_hunting/lib/parsers/job_post_extractor.py:379/384 just flip status="failed" with logger.exception. No graph_payload-tagged rejection step written.
+
 - Repro: POST /api/v1/scrapes/from-text/ for the ziprecruiter ASK Consulting Engineer 2 posting, scrapes 453 + 454, 2026-05-26 05:59 UTC. The view returns HTTP 202, the inner Responses-API call at job_post_extractor.py:917 returns valid structured data, yet the scrape ends in failed with no JobPost and there is no PATCH-to-failed span in logfire, no exception, no validator log message. The extension popup just says could not parse and the operator has no diagnostic surface.
-- Files to inspect: api/scrapes/views.py the from_text view, api/scrapes/serializers.py creating the JobPost from the extractor result, agents/job_hunting/lib/parsers/job_post_extractor.py the analyze_with_ai call site, and the place that calls set_scrape_status failed on the from-text path.
+- Files to inspect: api/job_hunting/api/views/scrapes.py :704 from_text view, api/job_hunting/lib/parsers/job_post_extractor.py :375-386 (placeholder rejects → status="failed") + parse_scrape exception sites (:1246, :1316). Scrape model would need a failure_reason TextField; no such column exists today.
 - Smallest test that catches it: a from_text endpoint test where the LLM stub returns a Pydantic-validatable JobPost payload that nevertheless fails downstream JobPost creation (e.g. bogus extraction_date past, salary outside model bounds) — assert that the scrape row carries a non-empty failure reason and that a logfire span fires with the rejection cause.
 - Acceptance: a failed-from-text scrape carries a a failure_reason field readable by the extension popup, b a logfire span tagged with the rejection cause, and c ideally the rejected payload preserved as scrape graph_payload so the next agent can diff input vs output.
 
-Tags suggestion: :scrape:agents:obs:bug:
-** SHIPPED jp.show duplicate-candidates banner — Ember Data sub-collection sideload :api:frontend:bug:
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-25]
-:END:
-Closed [2026-05-13]: jp.show banner was empty even when /duplicate-candidates/ returned candidates, because the JP payload had no relationships.duplicate-candidates block — Ember Data hasMany.reload() silently no-op'd.
-
-Fix is the canonical Ember Data sub-collection pipeline:
-- =api/job_hunting/api/serializers.py=: new =compute_duplicate_candidates(post, request)= helper (single source of truth), new =JobPostDuplicateCandidateSerializer= class registered in =TYPE_TO_SERIALIZER=, =relationships["duplicate-candidates"]= declared on =JobPostSerializer= with a =get_related= override.
-- =api/job_hunting/api/views/jobs.py=: refactored standalone =/duplicate-candidates/= action to call the helper.
-- =api/job_hunting/tests/test_job_post_duplicate_candidates.py=: +2 tests (links.related on every JP payload, ?include= sideload).
-- =frontend/app/routes/job-posts/show.js=: route now =findRecord(... { include: 'scrapes,duplicate-candidates' })=, dropped the explicit =.reload()=. One round-trip.
-- =frontend/app/adapters/job-post.js=: deleted (vestigial — the auto-emitted =links.related= replaces it).
-
-Reference: =Architecture/Ember Data sub-collection reads — the canonical pattern= in notes.org. Refactor candidates for the same pattern parked under separate Inbox entry.
-** TODO Refactor sub-collection adapters to hasMany + include= sideload :frontend:api:
+Tags suggestion: :api:scrape:obs:bug:
+** TODO [#C] Refactor sub-collection adapters to hasMany + include= sideload :frontend:api:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
@@ -679,72 +324,697 @@ Two real candidates (=screenshot.js= borderline, =scrape-status.js= lean-no), on
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
-** TODO Chrome Web Store — ccsender listing
+** TODO [#C] Chrome Web Store — ccsender listing
 https://chromewebstore.google.com/detail/career-caddy-sender/pjdajamkhjkemoaogohehcdpfkocofhd
-** TODO Firefox AMO — developer dashboard
+** TODO [#C] Firefox AMO — developer dashboard
 https://addons.mozilla.org/en-US/developers/addons
 ** Idea
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
 ** Feature
-*** SHIPPED Extension direct-POST :extension:api:dedupe:scrape:
+*** TODO Rethink Phase 6 — federation is instance-level, not Company-level
+Rethink the Phase 6 federation design: ActivityPub federation belongs
+at the **instance** level (an employer running their own Career Caddy
+instance, that instance's JobPosts federating across the fediverse),
+NOT at the Company resource level inside a multi-tenant instance.
+
+Doug 2026-06-13: "company was never supposed to be federated. company
+was meant to mean a company could spin up an instance of cc and their
+posts could be populated throughout fedi."
+
+**** What this overturns
+
+The Phase 6a/6b shipped surface presumed Company-as-actor:
+
+- =Company.federation_enabled= + =Company.slug= as a per-row toggle
+- =/.well-known/webfinger?resource=acct:<slug>@host= resolving to a
+  Company actor at =/companies/<slug>/=
+- =POST /companies/<slug>/inbox= accepting Follow / Undo / Create /
+  Update / Delete
+- =/companies/<slug>/outbox= + =/followers= + =/following=
+  collections
+- =FederationFollower= rows keyed by Company
+- The =<Companies::SubscribeButton>= public-facing affordance
+- The =Federation= panel on =/admin/companies/:id=
+
+That whole story was: "a Company resource inside a Career Caddy
+instance is a first-class fediverse actor that remote actors can
+follow." It's the wrong primitive.
+
+**** What the right shape is
+
+The actor is the **instance**, not the row:
+
+- A self-hosted Career Caddy instance =careers.acme.com= IS the
+  fediverse actor.
+- =@acme@careers.acme.com= (or =@instance@careers.acme.com=) resolves
+  via WebFinger to a single Actor that represents the whole tenant.
+- Job posts created on that instance get =Create{Note}= activities
+  delivered to the instance actor's followers.
+- Remote followers subscribe to the instance, not to a Company row.
+- A multi-tenant Career Caddy instance (like the main
+  =careercaddy.online=) does NOT itself act as an employer-facing
+  actor — its JPs come from many sources.
+
+The Company resource inside an instance is back to being a tagging /
+grouping primitive without its own AP identity.
+
+**** Concrete cleanups (sequenced)
+
+Today's shipped /disable/ commit just removed UI surfaces; the api
+side stays in place pending this redesign. Sequence to undo:
+
+1. Frontend (done in PR #198): hide =Federation= panel on
+   =/admin/companies/:id=, remove =<Companies::SubscribeButton>= from
+   the public Company page, remove toggle from controller. Search
+   refactor + federation-UI-disable bundled.
+
+2. Migration: drop =Company.federation_enabled=, =Company.slug=
+   columns and the =FederationFollower.company= FK. Leave the
+   actor row table — it'll be repurposed for instance actors.
+
+3. URL routes: retire =/.well-known/webfinger= resolution against
+   Company slugs; retire =/companies/<slug>/= GET (AS2 actor),
+   =/inbox= POST, =/outbox= / =/followers= / =/following= collections.
+   Decide: 410 Gone or 404 — neither has any production followers
+   today, so either is safe.
+
+4. Phase 6b inbound JP ingest: the AS2 →JobPost coercion code stays
+   but its discovery hook needs to be rebound from "Company actor's
+   inbox received this" to "instance actor's inbox received this."
+
+5. Build the instance-actor surface: single WebFinger entry per
+   instance, =/.well-known/webfinger?resource=acct:<instance>@<host>=
+   resolving to one Actor row keyed on something like
+   =Instance.local_actor= or a singleton row.
+
+6. Outbound: when a JP is created on an instance with federation
+   enabled, the api dispatches =Create{Note}= to instance-actor's
+   followers. The existing outbound dispatch worker (Phase 5d /
+   django-q2) gets repointed.
+
+**** [?] Q1 — Single instance actor or per-tenant?
+Career Caddy is multi-tenant inside a single deployment (each User
+has their own JPs). Does the instance expose ONE shared actor that
+broadcasts everyone's public JPs, OR one actor per User (an
+acct:<user>@<host> shape that already exists today for personal
+actors)?
+
+Lean: keep the existing per-User actor as the federation channel
+(that's how Mastodon-style federation usually works — accounts, not
+instances) and retire the Company-actor story. The "instance is the
+actor" phrasing might really mean "the per-User actor on a
+self-hosted instance is the actor that surfaces an employer's JPs."
+
+This Q is load-bearing; settle it before the cleanups in 2-6.
+
+**** [?] Q2 — Backout vs. soft-disable
+Drop the api endpoints / columns immediately (small blast radius
+since no production followers exist), OR mark them =deprecated:
+2026-06-13= and leave for a clean-up sweep?
+
+Lean: drop. Phase 6 shipped 2-3 days ago, no real-world followers
+exist, and leaving misleading surfaces around is worse than the
+migration cost.
+
+**** [?] Q3 — Naming on the api side
+What name does the instance actor row take? =Actor.instance= boolean
+flag, separate =InstanceActor= model, or repurpose the existing
+=Actor.company= FK as =Actor.scope= with values
+=user|company|instance|topic= (also captures Phase 6c topics if
+those come back)?
+
+Lean: a single =Actor.scope= enum lets every future actor type
+(user / instance / topic / aggregator) live in one table. Worth
+designing before any migration drops Company fields.
+
+**** Depends on
+- Q1-Q3 need decisions before any cleanup PRs.
+- The frontend disable (PR #198) is already shipped — it's the
+  zeroth step and doesn't block the design discussion.
+
+**** Related
+- Phase 6a (api PR #178) — Company-actor read endpoints + slug +
+  federation_enabled.
+- Phase 6b (api PR #179) — Inbound JP ingest from federated Notes.
+- Phase 6b Company-actor inbox + Follow (api PR #181) — the
+  handshake that closed the Phase 6b loop.
+- =Architecture/Phase 6b — Company-actor inbox + Follow handshake=
+  in api notes — this entry will need a =:SUPERSEDED_BY:= drawer
+  key pointing at whatever Architecture node captures the
+  instance-actor design once it lands.
+*** TODO Dedicated AdminSidebar for /admin/* routes
 :PROPERTIES:
-:CREATED: [2026-06-06]
-:CANONICAL: Plans/PLAN Extension direct-POST when capture is complete
-:MERGE_SHA: b3088cf551a5f9aa66f2d20729fa72d0eb18c1a8
-:LAST_TOUCHED: [2026-06-07]
+:LAST_TOUCHED: [2026-06-13]
 :END:
-Canonical plan: =notes.org/Plans/PLAN Extension direct-POST when capture is complete=
+Admin tree has outgrown the single "Admin" link in the main sidebar.
+Today's per-template =<:subnav>= duplicates the section list in every
+admin route's =RouteLayout=, and the user has to scroll up to navigate
+between sections. Give =/admin/*= its own dedicated sidebar.
 
-*Goal*: extension that already has title + company + description in hand POSTs a scrape with the captured contents and a new =source_mode=extension-direct= flag. Scrape graph short-circuits the browser tier and goes straight to PersistJobPost via the same JobPostExtractor.parse_scrape() entry point. One write path, zero server-side browser cost on the hot path.
+Today's state:
 
-*Decisions baked in*
-- Trust presence, iterate — non-empty title + company + description is the gate; no validator threshold at v1.
-- Bias the present URL on merge — extension =link= wins canonical when colliding with a server scrape; other fields merge via empty-merge invariant.
-- Scrape carries contents — no parallel POST endpoint on JobPost; Scrape is the canonical write entry.
+- Main =sidebar.hbs= shows user-facing routes (Job Posts, Companies,
+  Reports, etc.) and gates a single "Admin" link on
+  =currentUser.user.isStaff= (sidebar.hbs:577); the link routes to
+  =admin.users.index=.
+- Inside =admin.*=, every show template re-emits the same
+  =<:subnav>= block with =LinkTo= to: api-keys, users, waitlist,
+  invitations, scrape-profiles, companies, dedupe, ai-models. That
+  duplication is the symptom — it's a sidebar wearing a subnav
+  costume.
+- New admin sections incoming: =/admin/job-posts/:id= (from the
+  Power-commands plan), eventually a Federation overview route, the
+  promoted duplicate-handling resource.
 
-*Phase A — api primitives*
-- =Scrape.source_mode= CharField default =browser=, choices =browser=, =extension-direct=. Migration on =scrapes=.
-- =Scrape.captured_payload= JSONField nullable. Holds title / company / description / apply_url / location / extraction_hints when fast path.
-- Serializer validation: =source_mode=extension-direct= requires =captured_payload= present; payload requires non-empty title + company + description.
-- =JobPostOverwriteDecision= merge-bias: prefer extension-direct rows when replacing =link= on canonical-collision merge.
+**** Proposed shape
 
-*Phase B — scrape-graph fast path*
-- =StartScrape= gate detects =source_mode=extension-direct= + payload present → branch to a thin =SkipBrowserTier= node.
-- =SkipBrowserTier= copies payload fields onto persistence path, calls =ResolveApplyUrl= only if =captured_payload.apply_url= null, then =PersistJobPost=.
-- Other browser-tier nodes (Navigate → DetectObstacle → ResolveFinalUrl → WaitReady → Capture → Tier0CSS → Tier1Mini → Tier2Haiku → Tier3Sonnet → EvaluateExtraction → ValidateExtraction) never enter on this branch.
-- Screenshots, if extension uploads via existing relationship, persist as today.
+A dedicated =<AdminSidebar>= component, mounted in place of the main
+=<Sidebar>= whenever the active route name starts with =admin=.
 
-*Phase C — extension cc_sender*
-- Content-script capture grows the gate: title + company + description all non-empty → POST scrape with payload + =source_mode=extension-direct=.
-- Fall through to today's link-only POST when gate fails (any field missing/empty).
-- Ship as extension v0.3.x.
+- Lives at =frontend/app/components/admin-sidebar.{js,hbs}=.
+- Renders sections (current scope): API Keys, Users, Waitlist,
+  Invitations, Scrape Profiles, Companies, AI Models, Scrape Graph,
+  Dedupe.
+- Top item: "← Exit admin" =LinkTo @route="index"= so staff can get
+  back to the user-side surface without manually URL-bar'ing.
+- Footer item: a small "Logged in as <username>" badge with a
+  switch-account / logout shortcut.
+- Same Heroicons / sidebar-link / Tailwind shape as the main
+  sidebar (so muscle memory carries over).
+- Mobile: same drawer pattern as today; close on link click via
+  =@onClose=.
 
-*Phase D — operator observability (low priority)*
-- Staff-only count panel: extension-direct vs browser scrapes per day.
+Mounting logic in =application.hbs= (or whichever layout owns the
+chrome): branch on =router.currentRouteName.startsWith('admin')= to
+render =<AdminSidebar>= instead of =<Sidebar>=.
 
-*Order*: A and B parallel (B is dead code until C lands). C ships last to flip the switch. D anytime.
+After this lands, the per-template =<:subnav>= blocks in every
+admin show template go away — the sidebar IS the nav.
 
-*Dependencies*: cc-api Phase 2.5 catchall tickets (email-forward + discover_for_user_id + username validator) land first to avoid stacking write-path migrations.
+**** Adjacent cleanup
 
-*Dedupe-first reminder*: WRITE PATH change at PersistJobPost entry. The fast path still routes through =JobPostExtractor.parse_scrape()= which calls =find_duplicate= — canonical_link, fingerprint, sticky-closed response shape all preserved. Walk the dedupe-first memory at PR review.
+- =sidebar.hbs:577-606= block (the gated Admin link) goes away;
+  the entry point becomes a top-level "Admin" badge in the
+  =<TopBar>= for staff users (one click, always visible, not
+  buried in the drawer).
+- Every =admin/*= route's template loses the duplicated =<:subnav>=
+  block. Keep =RouteLayout= but remove the named slot.
+- =admin.index= route should land somewhere useful rather than the
+  current API Keys list. Candidate: a small dashboard with counts
+  (users, pending invitations, suspected duplicates queue length,
+  ScrapeProfile failures last 7d). Out of scope for v1 — just route
+  =admin.index= to =admin.users.index= until the dashboard is built.
 
-*Out of scope*: separate =POST /api/v1/job-posts/= path; server re-validation of extension contents; markup-level capture; apply_url click-follow on fast path.
+**** [?] Q1 — Replace or overlay
+Replace the main sidebar with =<AdminSidebar>= when on =admin.*= (mode
+switch), OR overlay/toggle (both visible, admin section folds open
+inline)?
 
-*Open questions*: see plan node — apply_url in v1, screenshot opt-in, source_mode vs status overload, fallback discipline, confidence-gate trigger.
+Lean: replace. The user-facing nav has no relevance when you're
+curating staff data — keeping it visible adds noise. The "← Exit
+admin" link makes the back-trip cheap.
 
-*Cross-links*
-- =notes.org/Plans/PLAN Extension direct-POST when capture is complete=
-- =notes.org/Plans/Apply-destination resolution=
-- =notes.org/Architecture/Scrape → Parse → JobPost workflow (post-refactor)=
-- =notes.org/Plans/Browser Extension v0.3.2–0.3.5=
-- Adjacent extension tickets in Inbox/Enhancement (multi-host-extractors, presence-vs-auth, linkedin extraction_hints overfire)
-*** TODO Phase 6e — JP lifecycle activities wired to followers :federation:api:
+**** [?] Q2 — Grouping inside the admin sidebar
+Flat list, or grouped headers (Users / Curation / Federation /
+Diagnostics)?
+
+Lean: grouped, even for today's small set. A flat list of 9 items
+already feels long; grouping scales to the dozen-plus we'll have
+once /admin/job-posts/:id + Federation overview + Dedupe resource
+land. Proposed grouping:
+
+- Users — API Keys, Users, Waitlist, Invitations
+- Curation — Companies, Dedupe (+ future Job Posts hub, Dedupe resource)
+- Federation — (none yet; eventually a Federation overview)
+- Diagnostics — Scrape Profiles, AI Models, Scrape Graph
+
+**** [?] Q3 — Top-bar Admin badge for staff
+Add a persistent "Admin" badge to =<TopBar>= for staff users, so the
+entry point is one click from anywhere AND it's discoverable
+without opening the drawer?
+
+Lean: yes. The current "Admin link inside the sidebar drawer" is the
+exact reason the current screenshot looked broken — the sidebar
+showed no admin link because the user wasn't staff, but if the user
+WERE staff, the entry point was still buried in a drawer. A
+top-bar badge makes the admin surface a first-class chrome element
+for staff.
+
+**** [?] Q4 — Active-section indicator
+How does the admin sidebar indicate the active section? Same
+=LinkTo @current-when= treatment as the main sidebar (background
+tint), or a chunkier left-border accent (Linear-style)?
+
+Lean: match the main sidebar's existing treatment for consistency
+(=sidebar-link= class applies the active styles via =@current-when=).
+Don't introduce a new pattern just for the admin tree.
+
+**** Depends on
+- Q1-Q4 need decisions before any cc-frontend dispatch.
+- Power-commands palette (separate Feature) doesn't block this —
+  this is a chrome-level reshape; commands palette is an additional
+  navigation primitive that complements rather than replaces it.
+
+**** Related
+- Inbox/Feature "Power-commands palette + /admin/job-posts/:id staff hub"
+  — the admin sidebar's "Job Posts" entry will eventually link into
+  L0 of that plan.
+- =feedback_staff_curation_under_admin= — confirms that staff
+  curation belongs in =/admin=, so a dedicated sidebar for that
+  surface is the right shape rather than nesting curation into
+  user-facing pages.
+- =reference_hyperui= — HyperUI sidebar variants are the source for
+  any new Tailwind shape; reuse the existing =sidebar-link= class.
+*** TODO Power-commands palette + /admin/job-posts/:id staff hub
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-13]
+:END:
+Global cmd-K command palette + staff /admin/job-posts/:id hub.
+Captures the design sketch from a 2026-06-13 conversation; needs
+workshop before any cc-* dispatch.
+
+The literal user ask: a way to jump from =/job-posts/:id/edit= to
+=/admin/job-posts/:id= via "power commands". Neither destination
+nor palette infra exists today; this Feature plans both because the
+hand-off only makes sense once both layers ship.
+
+**** L0 — Destination: =/admin/job-posts/:id=
+Staff-only curation hub for a single JP. Different surface from
+=/job-posts/:id=, not a clone:
+
+- Identity & ownership: =created_by=, =source_instance=, audit log
+  (mark-as-duplicate / promote-canonical / nuclear-delete /
+  source-transitions) with LinkTo to =/admin/users/:id=.
+- Dedupe state: =canonical_link=, =fingerprint=, =sticky_closed=, live
+  =duplicate_of= chain (LinkTo each), auto-candidates from the
+  existing =/job-posts/:id/dedupe-candidates/= endpoint with
+  =confidence=.
+- Federation state: JobPostDiscovery rows (which Company actor's
+  inbox brought it in, when), =source="federation"= flag,
+  =source_deleted_at= tombstone.
+- Scrape graph: every Scrape that touched this JP with redirect
+  chain (PR #188's =scrapes/show= walker is the template).
+- Staff verbs: mark-as-duplicate-of (PowerSelect), promote-canonical,
+  unlink-duplicate, nuclear-delete, force-rescrape,
+  override-owner-edit.
+
+Route: =admin.job-posts.show=, path =/admin/job-posts/:job_post_id=,
+wired into =router.js:259= alongside the existing admin tree.
+
+Data shape: reportFetch to a composite =/admin/job-posts/:id/dossier/=
+endpoint that denormalizes audit + discoveries + scrapes +
+dedupe-candidates in one round-trip. Matches the staff-hub use case;
+explicitly NOT trying to be a generic JSON:API include chain.
+
+**** L1 — Power-commands surface
+A cmd-K palette is the actual "power commands" pattern.
+
+- =commands= service — registry: =register({ id, label, hint, context, run, keywords })=.
+  Routes/controllers register on =activate()=, unregister on =deactivate()=.
+  Context shape: ={ route, model }= so a command can scope itself.
+- =<CommandPalette>= component — fixed overlay, opens on =cmd-K= /
+  =ctrl-K=, document-level keydown bound by the service. PowerSelect
+  inside (already used everywhere). Arrow-nav, Enter to run.
+- Standard keymap helpers: =g a= (go to admin view of current record),
+  =g e= (edit), =g s= (show), =g d= (dedupe compare picker), =.= (open
+  palette — GitHub convention as alternate trigger). Register via the
+  same service so they're discoverable in the palette listing too.
+- HyperUI modal pattern; Tailwind utilities; no new dep.
+
+Initial command set, registered globally:
+
+- =Go: Job Posts=, =Go: Admin → Companies=, =Go: Admin → Scrape Profiles=, =Go: Admin → Dedupe=
+- =Open as admin= — only when =context.model= is a JP; transitions to
+  =admin.job-posts.show= with =model.id=. This is the specific
+  hand-off from the user ask.
+- =Mark as duplicate of…= — only on JP edit/show; opens an inline JP
+  search inside the palette.
+- =Compare with…= — only on JP edit/show; opens a JP search then
+  transitions to =admin.dedupe.compare=.
+- =Nuclear delete= — staff-only, confirm modal.
+
+**** L2 — Hand-off from =/job-posts/:id/edit=
+Once L1 is in place, the literal ask becomes a one-block registration
+in the =job-posts.edit= controller's =activate()=:
+
+#+begin_src js
+commands.register({
+  id: 'jp.openInAdmin',
+  label: 'Open in admin',
+  hint: 'g a',
+  context: { route: 'job-posts.edit' },
+  run: () => router.transitionTo('admin.job-posts.show', model.id),
+});
+#+end_src
+
+cmd-K → type "admin" → Enter. Or =g a= from anywhere on the page.
+
+**** [?] Q1 — Destination shape: composite dossier endpoint vs JSON:API include chain
+Composite =/admin/job-posts/:id/dossier/= endpoint that denormalizes
+audit + discoveries + scrapes + dedupe-candidates in one
+round-trip, OR stitch 4 separate JSON:API queries via include?
+
+Lean: composite. One round-trip, matches the staff-hub use case,
+maps cleanly to the api-basic-CRUD-MCP-composites split (this is
+not basic CRUD).
+
+**** [?] Q2 — Palette trigger: cmd-K only, +., or +vim sequences
+=cmd-K= only? =cmd-K= + =.= (GitHub-style)? =cmd-K= + vim-style two-key
+sequences (=g a=, =g e=, etc.)?
+
+Lean: =cmd-K= as primary, vim sequences for the half-dozen most-used
+nav commands. =.= optional. Sequences register via the same service
+so they're discoverable in the palette listing.
+
+**** [?] Q3 — Scope of L1 v1: nav-only or include contextual mutations
+Ship the palette with just =Go: …= commands + =Open as admin=
+(nav-only), or include the contextual JP-mutation commands
+(=Mark as duplicate of…=, =Compare with…=, =Nuclear delete=) in the
+same PR?
+
+Lean: nav-only v1 to keep blast radius small; mutations as a
+follow-up PR once the palette pattern is proven and Doug has
+clicked around it.
+
+**** [?] Q4 — MCP equivalents
+Should every command in the palette also be an MCP tool
+(=open_job_post_admin=, =mark_jp_duplicate=…)? Same surface, two
+clients (palette + chat).
+
+Lean: out of scope for v1; record the decision so the registry
+shape doesn't preclude it. The =run= callback's shape should be
+serializable (the args to transition / verb) so a future MCP layer
+can call the same registry.
+
+**** Depends on
+- L0 destination must ship before L1's =Open as admin= command works.
+- L1 palette must ship before L2's specific registration matters.
+- The four Q-blocks above need decisions before any cc-* dispatch.
+
+**** Related
+- Inbox/Feature "Promote duplicate-handling into its own resource" —
+  the dedupe-resource page would register its own palette commands
+  too (=Find duplicates=, etc.); same registry.
+- Inbox/Feature "Ranked dedupe-candidates composite endpoint" —
+  feeds L0's auto-candidates section.
+- feedback_staff_curation_under_admin — confirms /admin is the
+  right home for L0.
+- feedback_api_basic_crud_mcp_composites — informs Q1's lean.
+*** TODO Ranked dedupe-candidates composite endpoint
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-13]
+:END:
+Server-side ranked dedupe candidates for a JobPost. Powers the new
+duplicate-handling resource page (separate Inbox/Feature).
+
+Endpoint: =GET /api/v1/job-posts/:id/dedupe-candidates/= (extend the
+existing one if present; today its consumer is
+=app/adapters/job-post-duplicate-candidate.js= for the auto-banner).
+
+Behavior:
+
+- Run the canonical-link / fingerprint / apply-url reciprocity walk
+  on the server.
+- Augment with text-similarity over title + company name when an
+  optional =?q=<term>= is passed.
+- Optional filters: =?company=<id>=, =?posted_after=<iso>=.
+- Return JSON:API resource list with a =confidence= meta
+  (=high|medium|low=) and a =signals= meta listing which dedupe
+  rules fired.
+
+Belongs on the MCP side per
+=feedback_api_basic_crud_mcp_composites= (composite + ranked, not
+basic CRUD), but the simplest first cut can extend the existing api
+sub-collection endpoint and migrate to MCP later if the composite
+gets heavier.
+
+Depends on: nothing (today's auto-banner endpoint is the starting
+point).
+*** TODO Promote duplicate-handling into its own resource
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-13]
+:END:
+Promote duplicate-handling out of the jp.edit form into its own
+resource. The PowerSelect dropdown inside =components/job-posts/form.hbs:127-200=
+is cramped at 30 JPs; doesn't scale to thousands. Make it a full-page
+surface.
+
+Shape:
+
+- New route at =/admin/dedupe/find/:jp_id= (or =/job-posts/:id/find-duplicates=).
+- Top: existing auto-candidates banner (consumes =/job-posts/:id/duplicate-candidates/=).
+- Below: free-text search with Company-pre-filter dropdown, recency
+  window, and the new ranked composite endpoint (separate inbox item).
+- Each row: Compare → links to =/admin/dedupe/:a/compare/:b=, Mark as
+  dup → POST mark-duplicate-of, Promote canonical → POST promote-canonical.
+- Delete the duplicate-handling block from =form.hbs=; jp.edit gets a
+  single "Find duplicates" LinkTo.
+
+Depends on: ranked composite endpoint (separate Inbox/Feature).
+
+Out of scope: chat-driven dedupe suggestions; bulk-dedupe across a
+saved-search slice.
+**** TODO Q1 — Route shape is tentative; workshop alternatives
+Initial sketch said =/admin/dedupe/find/:jp_id=. Doug 2026-06-13: not sold on the =/admin/dedupe= pattern. Alternatives to weigh before any code lands:  - =/job-posts/:id/find-duplicates= — owns the resource on JP itself; reads naturally from a button on jp.show or jp.edit; visible to anyone who can edit that JP rather than staff-only. - =/job-posts/:id/dedupe/= with nested =/compare/:other_id= — co-locates find + compare in one parent route; today's =/admin/dedupe/:a/compare/:b= would be reachable from here AND from staff hubs. - =/dedupe/= top-level — generic dedupe console, parameterized by source JP; closer to a tool than a per-JP feature. - Keep current =/admin/dedupe/find/:jp_id= shape — colocate with the Phase C compare route already at =/admin/dedupe/:a/compare/:b=.  Decision blocks: who's expected to do dedupe (per-user vs staff-only), how often (jp.show button vs dedicated console), how it interacts with the auto-candidates banner already on jp.show.
+*** TODO Frontend reconciliation with Company self-FK aliases paradigm
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-13]
+:END:
+2026-06-12: Phase A of the =Company= self-FK aliases plan is in
+flight on the api side (=feat/company-self-alias-fk= branch — see
+parent todo =Active/Retire BaseSerializer.slim_attributes ...=
+sibling for the original aliases discussion). Once that PR ships,
+frontend needs to reconcile to the new paradigm: an alias IS a
+Company (no =CompanyAlias= model type), linked via the new
+=canonical_id= self-FK.
+
+Triggers (do NOT start until api Phase A is merged + deployed):
+- =CompanySerializer= exposes =relationships.aliases= (reverse self-FK)
+  + =relationships.canonical= (forward FK), JSON:API spec-shape
+  (links-only by default, sideload via =?include=aliases=).
+- =GET /api/v1/companies/:id/aliases/= sub-collection endpoint
+  available.
+- =POST /api/v1/companies/:id/mark-as-alias-of/= staff verb available
+  (=body: {target_id}=).
+
+Frontend scope:
+
+1. =frontend/app/models/company.js=
+   - Restore =@hasMany('company', { async: true, inverse: 'canonical' }) aliases=
+     (note: type is =company=, NOT =company-alias=).
+   - Add =@belongsTo('company', { async: true, inverse: 'aliases' }) canonical=.
+   - Drop the in-line comment explaining the prior runaway-fetch bug.
+2. =frontend/app/routes/admin/companies/show.js=
+   - Restore =include: 'aliases'= on the findRecord.
+3. =frontend/app/templates/admin/companies/show.hbs=
+   - Uncomment the =<Companies::AliasesPanel @company={{this.model}} />=
+     render. Drop the explanatory comment block above it.
+4. =frontend/app/components/companies/aliases-panel.js=
+   - Verify the existing =company.hasMany('aliases').value()= read
+     still works against the new paradigm (alias rows are =Company=
+     records now). The component's view contract (=name=, =nameSlug=,
+     =source=, =createdAt=) is satisfied by Company fields directly.
+5. =frontend/app/models/company-alias.js=
+   - DELETE this file entirely. There is no =company-alias= type
+     anymore.
+6. =frontend/tests/integration/components/companies/aliases-panel-test.js=
+   - Un-skip the previously skipped tests; update fixtures so the
+     panel's =@company= has aliases as =Company= records, not
+     =CompanyAlias= records.
+7. =frontend/app/templates/admin/companies/show.hbs= (merge panel)
+   - Replace the inline =<PowerSelect ... @search={{this.searchCompanies}}>=
+     with a typeahead-capable companies selector (see Doug's note on
+     =/companies/search component=). Wire it to call the new
+     =mark-as-alias-of= verb via =company.markAsAliasOf(targetId)=
+     model method (add this method using =apiAction=, analogous to
+     the existing =mergeInto=).
+   - Decide: keep =mergeInto= (destructive cut) as a secondary
+     button, or replace entirely with =mark-as-alias-of= (soft alias,
+     preserves source row). Recommend: keep both — destructive cut
+     stays as a dangerous-action button, soft alias becomes the
+     default.
+8. =frontend/app/components/companies/selector.{hbs,js}=
+   - The existing selector takes a pre-loaded =@companies= array. The
+     merge panel needs server-side typeahead. Either extend Selector
+     with an optional =@search= action, or extract a sibling
+     =<Companies::SearchSelector>= with typeahead. Operator's call.
+
+Acceptance:
+- =/admin/companies/:id= renders the AliasesPanel without runaway
+  fetches (DevTools Network tab: bounded request count on initial
+  load + on aliases panel interaction).
+- The merge panel uses a canonical companies search component (no
+  inline PowerSelect with custom search action).
+- =git ls-files frontend/app/models/ | grep company-alias= returns
+  nothing.
+- =grep -rn "company-alias" frontend/app= returns no live references
+  outside historical notes.
+- Existing =mergeInto= still works (test coverage preserved).
+- New =markAsAliasOf= shipped with at least one test that asserts
+  the staff verb is called and the source company's =canonical=
+  relationship updates after success.
+
+Cross-link: Phase A api in =Active/Retire BaseSerializer.slim_attributes=
+sibling discussion; cc-frontend new code-smell rules in
+=feedback_cc_frontend_requires_verification= memory.
+***** TODO Real-browser smoke test on cc.dev gates new deploys
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-12]
+:END:
+2026-06-10: Doug requires a real-browser smoke test against cc.dev
+before any new code is deployed.
+
+Decision recap:
+- Smoke scope: full (login + scrape a real URL + view it scored)
+- Gate behavior: notify on red, deploy anyway (no hard block on prod)
+
+Structural prerequisite: cc.dev has no auto-deploy from main today.
+=deploy.yml= only targets prod (racknerd). For "smoke before deploy"
+to mean anything, the SHA going to prod must first land on cc.dev.
+Otherwise we're smoking yesterday's code.
+
+Decomposes into three phases:
+
+Phase 1 — Auto-deploy main to cc.dev/omarchy
+- New job in =.github/workflows/deploy.yml= (or new
+  =deploy-dev.yml=) that runs after =ci= and before
+  =publish-and-deploy=.
+- Same SHA-tagged images, pushed to omarchy via SSH, =docker compose
+  -f docker-compose.dev.yml up -d=.
+- Runs migrations automatically (this is what bit us 2026-06-10 with
+  =0102_scrape_failure_reason=).
+- Needs: SSH secrets for omarchy, app-dir on omarchy, the dagger
+  =deploy()= function generalized to take a target host or a new
+  =deploy_dev()= sibling.
+
+Phase 2 — Smoke harness
+- Lives in =automation/tests/smoke/test_dev_e2e.py= (operator-side,
+  HTTP-only, fits the cc_auto contract).
+- Playwright + pytest. Headless Chromium drives
+  =https://careercaddy.dev=.
+- Steps: login → navigate to =/job-posts/new= → paste target URL →
+  submit scrape → poll the api for scrape status transition (hold →
+  in_progress → completed) → reload jp.show → assert description text
+  present + score badge rendered.
+- Timeout budget: 5-10 min total, with explicit per-step timeouts.
+- Open product decisions blocking implementation:
+  - Smoke target URL — recommend hosting a fixture HTML at
+    =careercaddy.dev/fixtures/sample-job.html= (self-contained,
+    eliminates third-party flake). Alternatives: pin an evergreen
+    Greenhouse post, or pass URL via GH Secret per run.
+  - Smoke account on cc.dev — dedicated user seeded with stable
+    credentials in GH Secrets, or reuse Danny Noonan if cc.dev runs
+    =make demo-data= after each dev-deploy.
+  - cc.dev scrape runner — needs to be up on omarchy with working
+    Camoufox. Today: status unclear; this needs verification before
+    Phase 2 can pass.
+
+Phase 3 — CI wiring + notify
+- New =.github/workflows/smoke-dev.yml=, triggered on
+  =workflow_run= after =deploy-dev= (or after the dev-deploy job
+  inside =deploy.yml=) completes successfully.
+- Runs the Playwright smoke from Phase 2 inside a dagger function or
+  a plain Actions step.
+- On red: post to GitHub job summary + secondary surface (Slack
+  webhook, Discord, email — Doug to pick).
+- Critically: does NOT block =publish-and-deploy=. Prod ships
+  regardless per Doug's "notify on red, deploy anyway" choice.
+
+Ordering: Phase 1 first (otherwise Phase 2 has nothing meaningful to
+smoke). Phase 2 + 3 can land together or split.
+
+Acceptance for the whole project:
+- A merge to parent main triggers: ci → deploy-dev → smoke-dev (in
+  parallel with publish-and-deploy → deploy-prod).
+- Smoke-dev result appears as a visible status on the PR or commit.
+- A migration-missing-on-dev scenario like 2026-06-10 fails smoke
+  loud before Doug discovers it manually.
+
+Open questions for Doug:
+- Which notify surface? (Slack webhook is the lowest-friction; GH
+  job summary alone is too easy to miss.)
+- Fixture page on cc.dev/fixtures, or evergreen external URL?
+- Should Phase 1 also auto-apply migrations, or stop short and have
+  the dev-deploy job leave a clear "needs migrate" status?
+****** TODO 2026-06-10 amendment — Cypress + e2e submodule + OSS-opt-in
+2026-06-10 amendment — Doug's clarifications:
+
+- **Framework**: Cypress (not Playwright). Headless Chromium driven
+  via =cypress run --headless --browser chrome=. Self-hosted, no
+  Cypress Cloud unless we add it later.
+- **Location**: new submodule =e2e/= in its own repo (provisional:
+  =github.com/overcast-software/career_caddy_e2e=). Optional in
+  =.gitmodules= so =git clone= without =--recursive= still produces
+  a working app. Standard Cypress layout: =e2e/cypress/e2e/=,
+  =e2e/cypress/fixtures/=, =e2e/cypress.config.js=, =e2e/package.json=.
+- **Scope confirmed**: full smoke (login → scrape real URL →
+  poll until status=completed → assert description + score).
+- **Gate confirmed**: notify-only. Prod ships regardless.
+- **NEW: OSS-opt-in principle**. Career Caddy is open source. Any
+  surface that targets Doug's hosted infra (cc.dev, racknerd,
+  omarchy, the smoke harness, the notify webhook) MUST degrade
+  cleanly for forks. Concrete asks:
+  - =smoke-dev.yml= and any =deploy-dev.yml= must skip cleanly when
+    their required secrets are unset. No red CI for forks who don't
+    have a cc.dev.
+  - The =e2e/= submodule is optional. README documents the opt-in.
+  - The default =deploy.yml= path stays clean and self-hostable.
+    Doug-specific glue goes in sibling workflows obviously named.
+  - Notification surface (Slack/Discord/email) is per-deployment
+    config, never required by the workflow itself.
+
+Implications on the three phases:
+
+Phase 1 (auto-deploy main → cc.dev/omarchy):
+- Lives in a new =deploy-dev.yml= sibling workflow, NOT a new job
+  inside =deploy.yml=. Skips when omarchy SSH secrets are absent.
+
+Phase 2 (Cypress smoke harness):
+- Lives in the new =e2e/= submodule.
+- Cypress 13+, Node 20+. Use =start-server-and-test= if local
+  iteration needs a local stack; in CI, run against the deployed URL
+  (=https://careercaddy.dev=).
+- Tests: =e2e/cypress/e2e/smoke_dev.cy.js= (login + scrape + score).
+- Fixtures: =e2e/cypress/fixtures/= for the target job content if we
+  go the self-hosted-fixture route.
+- Secrets needed at run time: =SMOKE_BASE_URL=, =SMOKE_USER=,
+  =SMOKE_PASS=, =SMOKE_TARGET_URL=. All absent → workflow skips.
+
+Phase 3 (CI wiring):
+- New =.github/workflows/smoke-dev.yml=, triggered on =workflow_run=
+  after =deploy-dev= completes successfully (and skipped if Phase 1
+  was skipped).
+- Initializes the =e2e/= submodule on checkout (=submodules:
+  recursive=).
+- Runs =cd e2e && npm ci && npx cypress run=.
+- Posts to GitHub job summary + secondary surface (open: Slack
+  webhook? Discord?). Surface URL/secret absent → falls back to job
+  summary only.
+- Does NOT block =publish-and-deploy=. Prod ships in parallel.
+
+Still-open product decisions (block design):
+- Smoke target URL: self-hosted fixture under
+  =careercaddy.dev/fixtures/sample-job.html=, or evergreen Greenhouse
+  post, or per-run =SMOKE_TARGET_URL= secret?
+- Smoke account: dedicated user on cc.dev with stable creds in GH
+  Secrets, or post-deploy =make demo-data= reset to Danny Noonan?
+- Notification surface: Slack / Discord / GH job summary only?
+- cc.dev scrape runner: currently unknown if one is running on
+  omarchy. Needed for the full-smoke to pass.
+
+Ordering: Phase 1 first (the migration-missing scenario from
+2026-06-10 morning would have been caught by Phase 1 alone). Phase 2
+and 3 land together as a pair.
+
+Cross-link: memory =feedback_oss_opt_in_infra= (codifies the
+opt-in principle for future infra additions).
+***** TODO [#B] Phase 6e — JP lifecycle activities wired to followers :federation:api:
 :PROPERTIES:
 :CREATED: [2026-06-06]
 :CANONICAL: Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6e — JP lifecycle activities wired to followers
-:LAST_TOUCHED: [2026-06-06]
+:LAST_TOUCHED: [2026-06-10]
 :END:
 Canonical plan: =notes.org/Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6e — JP lifecycle activities wired to followers=
 
@@ -771,7 +1041,7 @@ Canonical plan: =notes.org/Plans/PLAN Fediverse Phase 6 — job distribution + l
 *Out of scope*: per-follower notification preferences; Like / Announce receipt notifications (7e).
 
 *Bulk-operation safety*: add an explicit =JobPost.objects.bulk_close_quiet()= helper that bypasses dispatch; regular =save()= path emits.
-*** TODO Phase 6d — Employer self-serve + rel-me verification :federation:api:frontend:
+***** TODO [#B] Phase 6d — Employer self-serve + rel-me verification :federation:api:frontend:
 :PROPERTIES:
 :CREATED: [2026-06-06]
 :CANONICAL: Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6d — Employer self-serve + rel-me verification
@@ -804,7 +1074,7 @@ Canonical plan: =notes.org/Plans/PLAN Fediverse Phase 6 — job distribution + l
 *Out of scope*: multi-Company employer accounts (recruiting agencies); employer billing or tier; JP submission rate limits beyond global throttle.
 
 *Open questions*: lean for V1 — first-claim-wins per Company; staff override on dispute; BeautifulSoup for resilient HTML parse; bidirectional rel="me" emitted, only website→actor direction required to flip verified.
-*** TODO Phase 6c — Topic and role aggregator actors :federation:api:
+***** TODO [#B] Phase 6c — Topic and role aggregator actors :federation:api:
 :PROPERTIES:
 :CREATED: [2026-06-06]
 :CANONICAL: Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6c — Topic and role aggregator actors
@@ -831,7 +1101,7 @@ Canonical plan: =notes.org/Plans/PLAN Fediverse Phase 6 — job distribution + l
 *Dependencies*: 6a Company actors recommended (for proper =attributedTo= shape); not a hard block — degrades to creator Person actor.
 
 *Out of scope*: per-user dynamic topic actors (lean curated V1); cross-instance topic actor cooperation (would multiply fanout).
-*** TODO Phase 6b — Inbound JP ingest + cross-instance dedupe :federation:api:dedupe:
+***** TODO [#B] Phase 6b — Inbound JP ingest + cross-instance dedupe :federation:api:dedupe:
 :PROPERTIES:
 :CREATED: [2026-06-06]
 :CANONICAL: Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6b — Inbound JP ingest + cross-instance dedupe
@@ -862,7 +1132,7 @@ Canonical plan: =notes.org/Plans/PLAN Fediverse Phase 6 — job distribution + l
 *Dedupe-first*: THIS IS THE WRITE PATH. Walk the canonical-link, fingerprint, sticky-closed, response-shape rules before merging. Federated row colliding with local row's canonical_link: older =created_at= wins as root; newer becomes duplicate. Inbound =Update= merge-empty-fields only — never clobber local edits.
 
 *Out of scope*: actively pulling JPs from peers; inbound Like / Announce (7e); federated comments inbound (7c).
-*** TODO Phase 6a — Company Organization actors :federation:api:frontend:
+***** TODO [#B] Phase 6a — Company Organization actors :federation:api:frontend:
 :PROPERTIES:
 :CREATED: [2026-06-06]
 :CANONICAL: Plans/PLAN Fediverse Phase 6 — job distribution + later social presence/Phase 6a — Company Organization actors
@@ -894,51 +1164,7 @@ Canonical plan: =notes.org/Plans/PLAN Fediverse Phase 6 — job distribution + l
 *Out of scope*: per-user-of-Company actors, employer self-claim (6d), logo upload UI (6d).
 
 *Dedupe-first reminder*: this opens a new outbound write path but does NOT create new inbound JobPosts. Dedupe contract is exercised on outbound activity id idempotency, not on JobPost creation. Walk the dedupe-first memory at PR-review time anyway.
-*** TODO pibu deploy — Camoufox scrape runner systemd user unit
-:PROPERTIES:
-:LAST_TOUCHED: [2026-06-06]
-:END:
-SHIPPED 2026-05-31. cc_auto/deploy/pibu/ holds the canonical
-shape for running the agents-repo scrape runner on pibu.
-
-What landed:
-- =deploy/pibu/caddy-runner.service= — systemd user unit
-  (Camoufox + --attended + memory caps + Restart on-failure).
-- =deploy/pibu/install.sh= — idempotent installer with preflight.
-- =deploy/pibu/README.md= — setup/refresh/smoke recipe.
-- =~/.config/environment.d/career-caddy.conf= on pibu now uses
-  =BROWSER_ENGINE=camoufox= (was =chrome= which OOM-launched).
-- Architecture note added: Pibu scrape runner — Camoufox attended,
-  systemd user unit.
-
-Follow-up to track separately if it bites:
-- Camoufox fetch (~150MB) on pibu is slow over the constrained
-  network + Pi I/O. Document it in README (done) and only run it
-  during low-load windows.
-- Pibu runs a parallel dev career-caddy docker stack; that plus the
-  runner sits close to the 905MB RAM cap. If the runner gets OOM-
-  killed by the kernel rather than systemd MemoryMax, lower the
-  cap further or shut the dev stack down on pibu.
-*** DONE Catchall mail B2
-:PROPERTIES:
-:LAST_TOUCHED: [2026-06-07]
-:MERGE_SHA: 82e81af33eb1cf0a336bf70e264d7762fcd3b75d
-:AUTOMATION_PR_SHA: f35fb4533a6292142561a6935f6155e647f24c07
-:PR_URL:   https://github.com/overcast-software/career_caddy/pull/235
-:SHIPPED_AT: [2026-05-31]
-:END:
-*Signal*: Doug confirmed catchall =<username>@careercaddy.online= is live and accepting forwarded mail (per relay from cc, 2026-05-31). Phase B2 (=Inbox/Feature/Phase 2.5: ops — MX record + catchall mail server=) moved to SHIPPED.
-
-*B3 (this side) =src/pollers/email_catchall.py= remains blocked on these cc-side api tickets in cc/todo.org Inbox/Feature*:
-- =Phase 2.5: api — email-forward source + JobPostDiscovery.forwarded_via_address + JSON:API discoveries hasMany=
-- =Phase 2.5: api — discover_for_user_id on POST job-posts + staff-or-self RBAC + audit column=
-- =Phase 2.5: api — username catchall validator + audit_usernames mgmt command=
-- Also need =GET /api/v1/users/?filter[username]= queryable for the To-address resolver (covered by the validator ticket scope).
-
-*Next action when those ship*: promote =Inbox/Feature/Phase 2.5: cc_auto — inbox poller= out of Inbox (Backlog or Active) and start the build. Reference =~/.claude/plans/majestic-wiggling-sutton.md= Phase B for the full plan.
-
-*Out of scope here*: no api work; cc owns those three tickets. cc was the messenger, so no cross-repo inbox mirror needed — the tickets are already captured on their side.
-*** TODO Job-queue Phase 8 — Optional SSE push for long-running jobs
+***** TODO [#C] Job-queue Phase 8 — Optional SSE push for long-running jobs
 :PROPERTIES:
 :CREATED: [2026-05-30]
 :CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
@@ -966,7 +1192,7 @@ pain with the 62s polling cap.
 - Phase 7 has shipped.
 - User pain with the polling cap has been observed (specific routes
   documented in todo).
-*** TODO Job-queue Phase 7 — ActivityPub 5d dispatch wired on the queue
+***** TODO [#B] Job-queue Phase 7 — ActivityPub 5d dispatch wired on the queue
 :PROPERTIES:
 :CREATED: [2026-05-30]
 :CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
@@ -1001,7 +1227,7 @@ sub-phase 5d.
   backoff.
 - Permanent failure: target inbox returns 404 → after 6 attempts,
   =FederationActivity= row marked =dead-lettered=.
-*** TODO Job-queue Phase 6 — Operational surface: heartbeat alert, failed-task UI, retention
+***** TODO [#B] Job-queue Phase 6 — Operational surface: heartbeat alert, failed-task UI, retention
 :PROPERTIES:
 :CREATED: [2026-05-30]
 :CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
@@ -1032,7 +1258,7 @@ scope, not order.
   failures.
 - 30d-old successful task rows disappear after the retention task
   runs.
-*** TODO Job-queue Phase 5 — parse_scrape migration + score_poller deprecation
+***** TODO [#B] Job-queue Phase 5 — parse_scrape migration + score_poller deprecation
 :PROPERTIES:
 :CREATED: [2026-05-30]
 :CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
@@ -1043,15 +1269,22 @@ Canonical plan: =notes.org/Plans/Job-queue integration — django-q2 phased roll
 sub-phase Phase 5. The heaviest task migrates last so the queue infra
 is battle-tested.
 
+Validated 2026-06-10: parse_scrape migration SHIPPED early.
+api/job_hunting/lib/parsers/job_post_extractor.py:1330-1342 dispatches
+=async_task("job_hunting.lib.tasks.parse_scrape_job", ...)= instead of
+spawning a daemon thread; =parse_scrape_job= lives in tasks.py:621.
+score_poller deprecation NOT shipped — =score_pending_posts= mentioned
+only in tasks.py docstring (line 33), function not defined;
+=agents/pollers/score_poller.py= still alive as the operational daemon.
+
 *Scope*
-- =api/job_hunting/lib/job_post_extractor.py= =parse_scrape= daemon
-  thread (~line 436) becomes
-  =async_task('job_hunting.lib.tasks.parse_scrape_job', scrape_id, retry=0, timeout=600)=.
-  Override timeout to 600s because tier-1/2/3 fallback can take longer
-  than the default 300s.
+- =api/job_hunting/lib/parsers/job_post_extractor.py= =parse_scrape=
+  daemon-thread spawn ALREADY replaced by =async_task('job_hunting.lib.tasks.parse_scrape_job', ...)=.
+  Confirm =timeout=600= override is set at the call site (tier-1/2/3
+  fallback can exceed django-q2's default 300s).
 - =agents/pollers/score_poller.py= replaced by django-q2 =schedule()=
   registering =score_pending_posts= at the same cadence (or per
-  =[?]= score_poller cadence resolution).
+  =[?]= score_poller cadence resolution). STILL TODO.
 - Preserve =bounded_content= handling per
   =Plans/Bounded content extraction — ScrapeProfile.content_containers=
   if that work has landed by Phase 5 time. If not, leave the existing
@@ -1066,7 +1299,7 @@ is battle-tested.
   same posts the poller would have.
 
 After this phase: final daemon thread and final poller both gone.
-*** TODO Job-queue Phase 4 — Scrape dispatch + hold-poller atomic deprecation
+***** TODO [#B] Job-queue Phase 4 — Scrape dispatch + hold-poller atomic deprecation
 :PROPERTIES:
 :CREATED: [2026-05-30]
 :CANONICAL: Plans/Job-queue integration — django-q2 phased rollout
@@ -1095,8 +1328,10 @@ parallel.
 - Manual end-to-end: =POST /scrapes/= creates a row that reaches
   =completed= via the worker, with =agents/pollers/hold_poller.py=
   not running anywhere. Logfire trace shows worker execution.
-- Confirm pibu cutover is now strictly simpler: pibu just runs the
-  worker container (=docker compose up worker=).
+- Pibu-cutover assumption is DEAD (2026-06-10 — pibu fell over running
+  Camoufox; plan scrapped). Phase 4 needs a new home for the worker:
+  most likely omarchy (already runs the runner) or the racknerd VPS.
+  Revisit before dispatch.
 
 *Critical*: this is atomic. No parallel/shadow mode with hold-poller.
 The plan node justifies why. Failure mode: scrape_job tasks failing
@@ -1104,354 +1339,7 @@ shows up in the Phase 6 failed-task surface (Phase 6 must ship before
 Phase 4 or basic visibility is missing — see plan).
 
 *Out of scope*: parse_scrape (Phase 5), score_poller (Phase 5).
-*** SHIPPED ActivityPub Phase 5d — Outbound dispatch worker for new public JobPosts
-:PROPERTIES:
-:CREATED: [2026-05-29]
-:DEPENDS_ON: Phase 5c
-:LAST_TOUCHED: [2026-06-05]
-:END:
-*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
-sub-phase 5d. Placeholder; unblock after 5c.
-
-*Summary*: when a JobPost lands with =audience= containing AS2 Public,
-enqueue a Create(Note) activity for each FederationFollower of the
-post's =created_by=. Dispatch worker signs + POSTs to follower inboxes
-with exponential backoff retry; dead-letter at 7d.
-
-*Pre-conditions before picking up*
-- 5c has shipped (FederationFollower table populated; HTTP Signatures
-  outbound signing primitive available).
-- Q5 in the plan resolved: which job queue? Likely django-q2 — see the
-  archived =Plans/Job Queue Integration Plan= and revisit it as part
-  of this scoping pass.
-
-*Operational must-haves before merge*
-- Dispatch worker health heartbeat (=SchedulerHeartbeat= or equivalent);
-  stale heartbeat triggers an alert.
-- =FederationActivity= retention policy: delivered rows older than 30d
-  archived; failed/dead-letter rows kept indefinitely for audit.
-- =sharedInbox= optimization: deliver once per peer instance when the
-  followers there share a shared inbox.
-- Update / Delete activities for JP edits / deletions.
-*** SHIPPED ActivityPub Phase 5c — Inbox + Follow + Follower model + HTTP Signatures
-:PROPERTIES:
-:CREATED: [2026-05-29]
-:DEPENDS_ON: Phase 5a + 5b
-:LAST_TOUCHED: [2026-06-05]
-:END:
-*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
-sub-phase 5c. Placeholder; unblock after 5a + 5b ship.
-
-*Summary*: =POST /actors/<username>/inbox= accepts =Follow= / =Undo(Follow)=
-/ =Create(Note)= activities with HTTP Signatures verification. New
-=FederationFollower= and =FederationActivity= models. Outbound
-=Accept(Follow)= signed responses.
-
-*Pre-conditions before picking up*
-- 5a + 5b have shipped.
-- Open questions 5, 6, 8 in the plan node MUST be resolved before
-  scoping this todo into work:
-  - Q5: Job queue infrastructure (only needed for 5d but the dispatch
-    primitives might land in 5c if =Accept(Follow)= is dispatched
-    inline vs queued)
-  - Q6: HTTP Signatures library — roll our own or pull dep
-  - Q8: Allowlist vs blocklist for inbound federation
-- Operator-side decision on per-instance allowlist surface: where does
-  the operator add a peer instance to the trust list? Admin UI? API
-  verb? Settings file? Need a path before 5c merges.
-
-*Out of scope*: outbound dispatch on new JobPost creation (=5d=);
-federated JobPost ingestion semantics (=5e=).
-
-*Security must-haves before merge*
-- HTTP Signatures verification on every inbound POST.
-- Replay protection: reject signed activities with =date= header
-  older than 1h; dedup activity ID within 24h window.
-- Rate limiting: 10 req/min per actor, 100 req/min per instance.
-- AS2 payload validation: parse-or-reject; 100KB size cap.
-- Allowlist enforcement: non-allowlisted instances 403 before signature
-  verification.
-*** SHIPPED ActivityPub Phase 5a — Actor + WebFinger + Instance Actor + lazy RSA keypair
-:PROPERTIES:
-:CREATED: [2026-05-29]
-:LAST_TOUCHED: [2026-06-01]
-:END:
-*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
-sub-phase 5a. The =Resolved decisions= section there pins Q1 (URI shape),
-Q2 (Actor type), Q4 (lazy keypair). Read that whole node before starting;
-this todo is the actionable summary, the plan is the source of truth.
-
-*Owning agent*: cc-api (Django + DRF + the api submodule, plus a User-model
-migration). No frontend work in this todo — caddy reverse-proxy plumbing
-is a separate dc-side ask (file under =Inbox/cross-cutting= once 5a is
-ready to deploy).
-
-*Scope of 5a (do not expand without checking the plan)*
-- =GET /api/v1/actors/<username>/= returns AS2 Person object with these
-  fields exactly:
-  - =@context=: =["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"]=
-  - =id=: =https://<CAREER_CADDY_INSTANCE>/actors/<username>=
-  - =type=: ="Person"=
-  - =preferredUsername=: =user.username=
-  - =name=: =user.first_name + user.last_name= or fallback to =username=
-  - =summary=: empty string in V1 (user profile has no bio field today)
-  - =inbox=: =https://<host>/actors/<username>/inbox= (endpoint will 501 in 5a)
-  - =outbox=: =https://<host>/actors/<username>/outbox= (501 in 5a)
-  - =followers=: =https://<host>/actors/<username>/followers= (501 in 5a)
-  - =following=: =https://<host>/actors/<username>/following= (501 in 5a)
-  - =publicKey=: ={id: <actor>#main-key, owner: <actor>, publicKeyPem: <pem>}=
-  - =Content-Type: application/activity+json= in the response.
-- =GET /.well-known/webfinger?resource=acct:<username>@<host>= returns
-  JRD shape:
-  - =subject=: ="acct:<username>@<host>"=
-  - =aliases=: =[<actor URI>, <profile URI>]=
-  - =links=: =[{rel: self, type: application/activity+json, href: <actor URI>}, {rel: http://webfinger.net/rel/profile-page, type: text/html, href: <frontend profile URI>}]=
-  - Reject 400 on any resource that isn't =acct:<username>@<our host>=.
-  - Reject 404 on unknown username.
-  - =Content-Type: application/jrd+json= in the response.
-- =/.well-known/webfinger= must be served at the apex, not under
-  =/api/v1/=. Coordinate with dc to get the caddy reverse-proxy
-  routing right (separate cross-cutting todo).
-- Instance Actor at =GET /api/v1/actors/_instance/= (or similar — pick a
-  username that can't collide with a real user; underscore prefix is
-  safe). Same AS2 Person shape, =preferredUsername="_instance"=, owns
-  a separate keypair used later in 5c for fetching peer Actors when
-  the activity's signer isn't yet locally known. Land in 5a so the URI
-  is stable.
-- =/@<username>= route at the api edge: content-negotiates on Accept.
-  If =application/activity+json= → returns the Actor JSON. Otherwise →
-  302 to the frontend profile URL (=$FRONTEND_URL/users/<id>= or
-  whatever the frontend currently exposes for users; coordinate with
-  cc-frontend if uncertain).
-- New User model fields:
-  - =federation_private_key_pem= TextField, encrypted at rest (use
-    =django-cryptography= field wrapper OR =fernet= column-encryption
-    layer — pick one, document in the migration), nullable, default
-    null.
-  - =federation_public_key_pem= TextField, plaintext, nullable, default
-    null.
-  - Migration. Backfill is unnecessary (lazy generation handles it).
-- Lazy keypair generation in the Actor view:
-  - Wrap in =transaction.atomic()= + =select_for_update()= on the User
-    row to serialize concurrent first-hits.
-  - Generate RSA-2048 via
-    =cryptography.hazmat.primitives.asymmetric.rsa.generate_private_key(public_exponent=65537, key_size=2048)=.
-  - Serialize: private as =PEM / PKCS8 / NoEncryption()=, public as
-    =SubjectPublicKeyInfo=.
-  - Persist both fields, then return the Actor with the public key
-    embedded.
-- =manage.py generate_federation_keys= command: iterates Users where
-  =federation_private_key_pem IS NULL=, generates + persists keypairs.
-  Idempotent. Logs progress per N users.
-
-*Test plan*
-- =GET /api/v1/actors/<existing-username>/= returns 200 with the AS2
-  shape; verify =@context=, =id=, =type=, =publicKey.publicKeyPem=
-  parses as a valid RSA pubkey via cryptography.
-- =GET /api/v1/actors/<existing-username>/= twice on a never-fetched
-  user: first hit creates the keypair, second hit returns the same
-  pubkey (no re-generation).
-- Concurrent first-hits: spawn N threads hitting the same user; verify
-  exactly one keypair lands in DB (transaction.atomic +
-  select_for_update test).
-- =GET /api/v1/actors/<nonexistent>/= returns 404.
-- =GET /.well-known/webfinger?resource=acct:user@host= returns 200
-  JRD; =subject= matches request; =links[0].href= matches the Actor URI.
-- =GET /.well-known/webfinger?resource=acct:user@wrong.host= returns 400.
-- =GET /.well-known/webfinger?resource=https://example/foo= returns 400
-  (only acct: scheme accepted in V1).
-- =GET /.well-known/webfinger?resource=acct:nobody@host= returns 404.
-- =GET /api/v1/actors/_instance/= returns a valid Actor (separate from
-  any user); the keypair is per-instance, persisted somewhere
-  appropriate (a new singleton model row, or settings, or wherever fits
-  the codebase pattern — pick + document).
-- =GET /@user= with =Accept: application/activity+json= returns the
-  Actor JSON; with =Accept: text/html= 302s to the frontend profile
-  URL.
-- =manage.py generate_federation_keys= run twice in a row produces
-  zero work the second time (idempotent).
-
-*Files likely touched*
-- =api/job_hunting/api/views/federation.py= (new) — ActorView,
-  WebfingerView, InstanceActorView, AtUsernameRedirectView
-- =api/job_hunting/api/urls.py= — wire the new routes
-- =api/job_hunting/urls.py= (project-level) — wire =/.well-known/webfinger=
-  outside =/api/v1/=
-- =api/job_hunting/models/user.py= or wherever the auth User model
-  extension lives — add the two PEM fields
-- =api/job_hunting/migrations/0085_user_federation_keys.py= (next
-  unused number — confirm via =ls migrations/=)
-- =api/job_hunting/lib/federation.py= (new) — keypair generation +
-  serialization helpers; the Actor JSON-LD builder; the WebFinger JRD
-  builder
-- =api/job_hunting/management/commands/generate_federation_keys.py= (new)
-- Tests in =api/job_hunting/tests/test_federation.py= (new)
-
-*Out of scope for 5a (track in the plan's later sub-phases, do not pull in)*
-- Outbox endpoint (=5b=)
-- Inbox endpoint + HTTP Signatures verification (=5c=)
-- Follower model (=5c=)
-- Dispatch worker (=5d=)
-- Federated JobPost ingestion (=5e=)
-- Frontend follow / unfollow UI
-- Key rotation
-- Per-instance allowlist/blocklist
-
-*Definition of done*
-- All test plan items above pass via =make test-api PATHS="job_hunting.tests.test_federation"=
-- =make ci= green
-- Companion cross-cutting todo for dc (caddy reverse-proxy routing) is
-  filed before merge so prod deploy isn't blocked on missing /.well-known/
-  routing
-- Manual smoke: paste =acct:<your-username>@careercaddy.online= into
-  Mastodon's search (after prod deploy + dc's caddy work). Mastodon
-  should display the Actor card. Follow button shows but is expected
-  to error on click — that's 5c.
-*** TODO JobPost.audience for ActivityPub-aligned per-post visibility
-:PROPERTIES:
-:LAST_TOUCHED: [2026-05-29]
-:END:
-Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN ActivityPub plan, federation visibility belongs on each JobPost via AS2 audience primitives, not via a per-content-shape filter (avoids baking single-user assumptions like mailto=private into the data model). Spec: add JobPost.audience JSONField (Postgres JSONB), default [https://www.w3.org/ns/activitystreams#Public]. Helper JobPost.is_public() returns True iff the Public collection URI appears in audience. JSON:API serializer exposes audience. Migration adds the column and backfills existing rows to the public-default. Frontend: JobPost model gains audience attr; jp.edit form adds a Visibility selector with Public and Private for now (Public maps to [...#Public], Private maps to []). jp.show shows a small badge when non-public. Phase 4 /as-object/ adapter and Outbox dispatch will consult this field but those are not in scope here. Tests: model default + is_public + serializer round-trip + frontend form selector.
-*** SHIPPED Phase 5: infra — ActivityPub activity dispatch worker (django-q2 candidate) :api:infra:
-:PROPERTIES:
-:PHASE:    5
-:STATUS:   deferred
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-06-05]
-:END:
-*Goal*: background worker dispatches outbound Activities to all followers / subscribers.
-
-*Acceptance*:
-- [ ] Worker reads pending outbox rows; POSTs each to the recipient's inbox with HTTP signatures; retries with backoff on failure.
-- [ ] Pinned to django-q2 (per the archived =Job Queue Integration Plan=).
-- [ ] Status visible from a staff-only admin page.
-- [ ] Dead-letter queue for retry-exhausted Activities.
-
-*Files*:
-- =api/job_hunting/tasks/activitypub_dispatch.py= (new).
-- =api/job_hunting/admin.py= — admin view.
-- =api/pyproject.toml= — add =django-q2=.
-- =api/job_hunting/management/commands/qcluster.py= or compose service entry.
-
-*Tests*:
-- Round-trip a synthetic Activity to a mock follower; retry budget exhausted ⇒ alert + dead-letter row.
-
-*Status*: deferred placeholder.
-
-*Dependency*: HTTP signatures + Outbox tickets.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
-*** SHIPPED Phase 5: api — WebFinger endpoint :api:
-:PROPERTIES:
-:PHASE:    5
-:STATUS:   deferred
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-06-05]
-:END:
-*Goal*: let remote instances discover our Actor by handle.
-
-*Acceptance*:
-- [ ] =GET /.well-known/webfinger?resource=acct:careercaddy@careercaddy.online= returns the standard WebFinger JRD document pointing at the local Actor URI.
-- [ ] Caddy / Nginx route hits Django; not a static file.
-- [ ] 404 for unknown handles.
-- [ ] =Content-Type: application/jrd+json=.
-
-*Files*:
-- =api/job_hunting/api/views/webfinger.py= (new).
-- =api/job_hunting/api/urls.py= — route at =.well-known/webfinger=.
-- Caddyfile / reverse-proxy entry.
-
-*Tests*:
-- 200 for the local handle; correct JRD shape.
-- 404 otherwise; missing =resource= param = 400.
-
-*Status*: deferred placeholder.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
-*** SHIPPED Phase 5: api — HTTP signatures (RFC 9421) for ActivityPub :api:
-:PROPERTIES:
-:PHASE:    5
-:STATUS:   deferred
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-06-05]
-:END:
-*Goal*: sign outbound ActivityPub HTTP traffic and verify inbound signatures.
-
-*Acceptance*:
-- [ ] Sign outbound POSTs to remote inboxes with our local Actor's private key.
-- [ ] Verify inbound POSTs against the sender's published public key. Cache fetched public keys with a short TTL.
-- [ ] Bad signature → 401.
-- [ ] Vendored lib choice documented in =api/pyproject.toml= comments (candidates: =python-http-message-signatures=, =httpsig=, =cryptography= manual).
-
-*Files*:
-- =api/job_hunting/lib/http_signatures.py= (new).
-
-*Tests*:
-- Round-trip sign/verify against a fixed Actor + payload.
-- Bad signature rejected with 401.
-- Public key cache invalidation on key rotation.
-
-*Status*: deferred placeholder.
-
-*Dependency*: Actor model.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
-*** SHIPPED Phase 5: api — ActivityPub Outbox + Inbox endpoints :api:
-:PROPERTIES:
-:PHASE:    5
-:STATUS:   deferred
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-06-05]
-:END:
-*Goal*: announce + receive ActivityPub Activities.
-
-*Acceptance*:
-- [ ] =GET /outbox/= paginated list of Activities we have announced.
-- [ ] =POST /inbox/= accepts inbound Activities; verifies HTTP signature; routes by =type= (Create, Update, Delete, Announce, Follow, Undo).
-- [ ] Inbound =Delete= for a federated JP flips =posting_status=closed= and writes =source_deleted_at= (per =ActivityPub-readiness — minimum prep/Federated JP deletion handling= in the plan).
-- [ ] Inbound =Create= for a JobPost ⇒ create a local mirror row with =source_instance= = sender, =created_by= = the local service user.
-- [ ] All writes pass through =find_duplicate= so duplicates collapse.
-
-*Files*:
-- =api/job_hunting/api/views/activitypub.py=.
-- =api/job_hunting/lib/activitypub_inbox.py= (new dispatcher).
-
-*Tests*:
-- One per Activity type; bad signature = 401; bad shape = 400; =Delete= flips =posting_status= without dropping the row.
-
-*Status*: deferred placeholder.
-
-*Dependency*: Actor model + HTTP signatures tickets.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
-*** SHIPPED Phase 5: api — per-instance ActivityPub Actor model + actor URI :api:
-:PROPERTIES:
-:PHASE:    5
-:STATUS:   deferred
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-06-05]
-:END:
-*Goal*: every Career Caddy instance gains an Actor identity so remote instances can route Activities to us.
-
-*Acceptance*:
-- [ ] =Actor= model with =type=, =preferredUsername=, =inbox=, =outbox=, =publicKey=. One row per local instance for now (later: optionally per-user).
-- [ ] =GET /actor/= returns the Actor as JSON-LD =Content-Type: application/activity+json=.
-- [ ] Generate + persist the RSA keypair on first startup; refuse to start if the private key is missing in prod.
-- [ ] Public key surfaced under the Actor's =publicKey= property so remote instances can verify our HTTP signatures.
-
-*Files*:
-- =api/job_hunting/models/activitypub_actor.py= (new).
-- =api/job_hunting/api/views/activitypub.py= (new).
-- =api/job_hunting/migrations/00XX_actor.py= (new).
-- =api/job_hunting/management/commands/generate_actor_keys.py= (new — idempotent).
-
-*Tests*:
-- Actor JSON-LD shape conforms; keypair generated on bootstrap; missing key in prod = startup error.
-
-*Status*: deferred placeholder. Pick up when Phase 5 is greenlit.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
-*** TODO Phase 4: api — visibility audit for federated rows :api:
+***** TODO [#B] Phase 4: api — visibility audit for federated rows :api:
 :PROPERTIES:
 :PHASE:    4
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
@@ -1477,7 +1365,7 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 *Dependency*: =FederationSubscription= ticket (Phase 4) merged.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 4 — ActivityPub readiness
-*** TODO Phase 4: api — opt-in federation subscription stub endpoints :api:
+***** TODO [#B] Phase 4: api — opt-in federation subscription stub endpoints :api:
 :PROPERTIES:
 :PHASE:    4
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
@@ -1503,29 +1391,7 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 - =api/job_hunting/tests/test_federation.py= — CRUD; user can only see their own.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 4 — ActivityPub readiness
-*** TODO Phase 4 api — job-posts as-object JSON-LD adapter view :api:
-:PROPERTIES:
-:PHASE:    4
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
-:END:
-*Goal*: round-trip a JobPost as ActivityStreams 2.0 JSON-LD so a future Outbox just plumbs the same shape outward.
-
-*Acceptance*:
-- [ ] =GET /api/v1/job-posts/:id/as-object/= returns =Content-Type: application/activity+json=.
-- [ ] Body shape: =@context= = AS2, =type= = =JobPosting= (schema.org-compatible; document the choice), =id= = full canonical URI, =attributedTo= = the source instance Actor URI (placeholder until Actor model lands), =published= = =created_at=, =content= = =description=, =inReplyTo= = canonical URI of =duplicate_of= when set.
-- [ ] Respects the same visibility filter as the JSON:API endpoint.
-- [ ] No federation wiring yet — serializer-only ticket.
-
-*Files*:
-- =api/job_hunting/api/views/jobs.py= — new action method.
-- =api/job_hunting/lib/activitypub.py= (new) — shape helpers.
-
-*Tests*:
-- =api/job_hunting/tests/test_activitypub.py= — shape conforms; visibility filter applied; =duplicate_of= round-trips as =inReplyTo=.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 4 — ActivityPub readiness
-*** TODO Phase 4: api — JobPost.source_instance + source_deleted_at columns :api:
+***** TODO [#B] Phase 4: api — JobPost.source_instance + source_deleted_at columns :api:
 :PROPERTIES:
 :PHASE:    4
 :PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
@@ -1533,8 +1399,10 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 :END:
 *Goal*: mark federated rows with their origin instance + tombstone inbound =Delete= events without dropping the row.
 
+Validated 2026-06-10: source_instance SHIPPED (api/job_hunting/models/job_post.py:219 with =_default_source_instance= callable). source_deleted_at NOT shipped. Banner + serializer expose still TBD.
+
 *Acceptance*:
-- [ ] =JobPost.source_instance= CharField(max=253, db_index=True), defaults to env =CAREER_CADDY_INSTANCE= (e.g. =careercaddy.online=). Migration backfills existing rows with the local hostname.
+- [X] =JobPost.source_instance= CharField(max=253, db_index=True), defaults to env =CAREER_CADDY_INSTANCE= (e.g. =careercaddy.online=). Migration backfills existing rows with the local hostname.
 - [ ] =JobPost.source_deleted_at= DateTimeField nullable.
 - [ ] Serializer exposes both fields read-only.
 - [ ] =jp.show= renders a banner when =source_deleted_at IS NOT NULL=: "Original posting withdrawn on <date>. Your application record is intact."
@@ -1550,245 +1418,7 @@ Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN A
 - =api/job_hunting/tests/test_job_post_model.py= — default =source_instance= populates; backfill correct.
 
 *Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 4 — ActivityPub readiness
-*** TODO Phase 3 frontend — staff-only dedupe-feedback report :frontend:dedupe:
-:PROPERTIES:
-:PHASE:    3
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
-:END:
-*Goal*: surface the three reports the audit unlocks — missed signals, over-eager canonicalization, promote patterns.
-
-*Acceptance*:
-- [ ] Route =reports.dedupe-feedback= behind a staff gate.
-- [ ] Three tables on the page:
-  1. Manual =mark= with =signal_state= containing zero auto signals → flags missed =find_duplicate= rules.
-  2. Manual =unlink= where =signal_state.canonical_link_match=true= → flags over-eager canonicalization.
-  3. Manual =promote= grouped by =from_jp.source= → reveals which sources users treat as authoritative.
-- [ ] Data source: =GET /api/v1/duplicate-annotations/= with the right filters per table.
-- [ ] HyperUI + Tailwind only; no custom CSS.
-
-*Files*:
-- =frontend/app/routes/reports/dedupe-feedback.js= (new).
-- =frontend/app/templates/reports/dedupe-feedback.hbs= (new).
-- =frontend/app/router.js= — add route.
-
-*Tests*:
-- =frontend/tests/acceptance/reports/dedupe-feedback-test.js= — staff sees rows; non-staff gets redirected.
-
-*Dependency*: Phase 3 api ticket merged.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Manual dedup → learning loop
-*** TODO Phase 3: api — DuplicateAnnotation model + backfill + writes from duplicate verbs :api:dedupe:
-:PROPERTIES:
-:PHASE:    3
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
-:END:
-*Goal*: capture every manual dedupe gesture so we can learn the auto-dedup rules from human corrections.
-
-*Acceptance*:
-- [ ] New =DuplicateAnnotation= model with =from_jp= FK, =to_jp= FK (nullable), =previous_to= FK (nullable), =action= in (=mark=, =unlink=, =promote=, =historical=), =set_by= FK, =set_at= datetime, =signal_state= JSONField.
-- [ ] Migration backfills one =action=historical= row per existing =JobPost.duplicate_of= FK.
-- [ ] Each of the three Phase 2 verb endpoints writes an annotation row on every state change.
-- [ ] =signal_state= snapshots current =compute_duplicate_candidates= signals between from_jp and to_jp at write time (canonical_link match, fingerprint match, apply_url reciprocity, etc.).
-- [ ] Staff-only =GET /api/v1/duplicate-annotations/= exposes annotations as JSON:API with filters by =action=, =from_jp=, =to_jp=, =set_by=, =set_at__gte=.
-
-*Files*:
-- =api/job_hunting/models/duplicate_annotation.py= (new).
-- =api/job_hunting/migrations/00XX_duplicate_annotation.py= (new, with backfill data migration).
-- =api/job_hunting/api/views/jobs.py= — wire into verb endpoints.
-- =api/job_hunting/api/views/duplicate_annotations.py= (new).
-- =api/job_hunting/api/serializers.py= — new serializer.
-
-*Tests*:
-- =api/job_hunting/tests/test_duplicate_annotation.py= — backfill count matches historical FK count; each verb writes the correct =action=; =signal_state= round-trips.
-
-*Dependency*: Phase 2 api verb-endpoints ticket merged.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Manual dedup → learning loop
-*** SHIPPED Phase 2.5: ops — MX record + catchall mail server for *@careercaddy.online :infra:cc_auto:
-:PROPERTIES:
-:PHASE:    2.5
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-31]
-:END:
-*Goal*: deliver mail to a catchall mailbox cc_auto can read over Tailscale.
-
-*Acceptance*:
-- [ ] MX record for =careercaddy.online= points at our mail server.
-- [ ] Catchall config (Postfix / Maddy / equivalent) routes =*@careercaddy.online= to a single mailbox.
-- [ ] cc_auto reads via IMAP (or whatever the chosen MTA exposes); no public IMAP — Tailscale-only.
-- [ ] Spam filter (rspamd?) trims obvious garbage before cc_auto sees it.
-- [ ] DKIM + SPF on outbound so we can later send replies / bounces without ending up in spam.
-- [ ] Runbook entry under =notes.org Operations= via =claude/cc-notes-add-child=.
-
-*Files*:
-- DNS provider — MX + DKIM + SPF entries.
-- =docker-compose.prod.yml= or a separate compose file for the mailserver.
-- =notes.org Operations= runbook node.
-
-*Out of scope*: outbound SMTP for app email (registration, password reset) — separate ops concern.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Operational pieces (out of model scope but tracked here)
-*** TODO Phase 2.5: cc_auto — inbox poller + To-address resolver + bounce on unknown local-part :cc_auto:
-:PROPERTIES:
-:PHASE:    2.5
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
-:END:
-*Goal*: cc_auto polls the catchall inbox and posts to api via the new =discover_for_user_id= attribute.
-
-*Acceptance*:
-- [ ] New cc_auto poller (=src/pollers/email_catchall.py= or similar) reads the catchall inbox over IMAP.
-- [ ] Resolves =To:= header local-part → CC =username= via =GET /api/v1/users/?filter[username]==.
-- [ ] Unknown local-part → bounce with a clear "unknown Career Caddy username" body + log.
-- [ ] Extracts JobPost candidates using existing =url_extractor= / =span_validator= infrastructure from the multi-job digest work.
-- [ ] POSTs to =/api/v1/job-posts/= with =source=email-forward=, =discover_for_user_id=<resolved>=, =forwarded_via_address=<localpart>@careercaddy.online= on each discovery row.
-- [ ] Per-mail audit row in cc_auto: source mail-id, To address, resolved user id, JPs touched, dedup hits vs new rows.
-- [ ] Quota: cap forwards per user per day (configurable env; default 100). Over-quota → bounce.
-
-*Files (cc_auto)*:
-- =~/Network/syncthing/Projects/career_caddy_automation/src/pollers/email_catchall.py= (new).
-- =~/Network/syncthing/Projects/career_caddy_automation/src/client/api_client.py= — add =create_job_post(..., discover_for_user_id=...)= path.
-- =~/Network/syncthing/Projects/career_caddy_automation/tests/test_email_catchall.py= (new).
-
-*Dependency*: Phase 2.5 api tickets must ship first (=discover_for_user_id= and =email-forward= source + =forwarded_via_address=).
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest
-*** SHIPPED Phase 2.5: api — email-forward source + JobPostDiscovery.forwarded_via_address + JSON:API discoveries hasMany :api:dedupe:cc_auto:
-:PROPERTIES:
-:PHASE:    2.5
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-06-07]
-:MERGE_SHA: ba7b667fca2270c446e8359ab12909a992c5883c
-:END:
-*Goal*: surface forwarder provenance via the JSON:API =discoveries= relationship; the column lives where it logically belongs (=JobPostDiscovery=).
-
-*Acceptance*:
-- [ ] Add =email-forward= to =JobPost.source= enum and the trust ranking in =JobPostOverwriteDecision= (slot between =paste= and =scrape=; document the choice).
-- [ ] =JobPostDiscovery.forwarded_via_address= CharField(max=254, null=True). Required when =source=email-forward=; null otherwise. Serializer-level validation.
-- [ ] =JobPost= JSON:API resource exposes =discoveries= as =hasMany=. Per-discovery resource includes =source=, =forwarded_via_address=, =requested_by=.
-- [ ] Ember: =frontend/app/models/job-post.js= adds =@hasMany('job-post-discovery')=.
-
-*Files*:
-- =api/job_hunting/models/job_post.py= (source choices).
-- =api/job_hunting/models/job_post_discovery.py= (new column).
-- =api/job_hunting/api/serializers.py= (discovery serializer + JobPost relationship).
-- =api/job_hunting/migrations/00XX_jpd_forwarded_via.py= (new).
-- =frontend/app/models/job-post.js= (hasMany).
-- =frontend/app/models/job-post-discovery.js= (new model).
-
-*Tests*:
-- =api/job_hunting/tests/test_job_post_discovery.py= — column required for email-forward source; rejected otherwise.
-- =api/job_hunting/tests/test_job_post_viewset.py= — relationship serializes on jp.show.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Surfacing forwarder provenance
-*** SHIPPED Phase 2.5: api — discover_for_user_id on POST job-posts + staff-or-self RBAC + audit column :api:cc_auto:
-:PROPERTIES:
-:PHASE:    2.5
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-06-07]
-:MERGE_SHA: ba7b667fca2270c446e8359ab12909a992c5883c
-:END:
-*Goal*: let staff-level API keys (cc_auto's key) attribute =JobPostDiscovery= to an arbitrary user. No new endpoint; same =POST /api/v1/job-posts/= with a new attribute + RBAC.
-
-*Acceptance*:
-- [ ] =POST /api/v1/job-posts/= JSON:API attribute =discover_for_user_id= (optional; defaults to =request.user.id=).
-- [ ] RBAC: 403 unless =request.user.is_staff= OR =discover_for_user_id == request.user.id=.
-- [ ] =JobPostDiscovery= gains =requested_by_user_id= FK (nullable; null for legacy rows).
-- [ ] Migration backfills existing rows with =requested_by_user_id = user_id= (best-effort historical guess).
-- [ ] Discovery serializer exposes =requested_by= as a belongsTo relationship.
-
-*Files*:
-- =api/job_hunting/api/views/jobs.py= — create path.
-- =api/job_hunting/models/job_post_discovery.py= — new column.
-- =api/job_hunting/api/serializers.py= — discovery serializer.
-- =api/job_hunting/migrations/00XX_jpd_requested_by.py= (new).
-
-*Tests*:
-- =api/job_hunting/tests/test_job_post_viewset.py= — staff key attributes to other user; non-staff cannot; self always allowed.
-- =api/job_hunting/tests/test_job_post_discovery.py= — column populated correctly.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Why this changes the visibility math
-*** SHIPPED Phase 2.5: api — username catchall validator + audit_usernames mgmt command :api:cc_auto:
-:PROPERTIES:
-:PHASE:    2.5
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-06-07]
-:MERGE_SHA: ba7b667fca2270c446e8359ab12909a992c5883c
-:END:
-*Goal*: ensure =username= is safe to use as an email local-part before the catchall ingest lands.
-
-*Acceptance*:
-- [ ] Serializer validator on =User.username= enforces =[a-z0-9._-]+= (lowercase only) going forward.
-- [ ] =python manage.py audit_usernames= prints existing rows that fail the constraint, with =id=, =username=, =email=. Read-only; no auto-rename.
-- [ ] Client-side: signup form lowercases + validates before submit; setup wizard does the same.
-- [ ] Documentation entry in =/docs= explaining the catchall constraint.
-
-*Files*:
-- =api/job_hunting/api/serializers.py= or =api/job_hunting/serializers.py=.
-- =api/job_hunting/management/commands/audit_usernames.py= (new).
-- =frontend/app/components/users/signup-form.hbs= / =frontend/app/routes/setup.js=.
-
-*Tests*:
-- =api/job_hunting/tests/test_users.py= — validator accepts =foo.bar=, rejects =Foo Bar=, =foo@bar=, =foo+bar=.
-- Smoke the mgmt command against demo data via =make demo-data=.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Model implications
-*** TODO Phase 2: frontend jp.edit — duplicate picker + reverse-dups list + promote button :frontend:dedupe:
-:PROPERTIES:
-:PHASE:    2
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
-:END:
-*Goal*: UI on =job-posts.edit= for setting and clearing =duplicate_of= and listing reverse-FK duplicates.
-
-*Acceptance*:
-- [ ] PowerSelect picker searches visible JPs via =store.query('job-post', ...)= (visibility-scoped server-side).
-- [ ] Selecting a target calls =mark-duplicate-of= verb.
-- [ ] If =duplicate_of= already set: show target + "Unlink" button → =unlink-duplicate= verb.
-- [ ] "Duplicates of this post" reverse-FK list: rows render =source= badge + per-row "Unlink" button.
-- [ ] "Promote canonical" button shown only when =duplicate_of= is set; confirm before swap.
-- [ ] All verb calls use =.then/.catch=; refresh model on success.
-
-*Files*:
-- =frontend/app/components/job-posts/form.hbs= — new =panel-card= sections.
-- =frontend/app/components/job-posts/form.js= — verb action handlers.
-- =frontend/app/adapters/job-post.js= or model — wire the verb URLs.
-
-*Tests*:
-- =frontend/tests/integration/components/job-posts/form-test.js= — picker renders + verb calls fire.
-
-*Dependency*: api verb-endpoints ticket (Phase 2 api) merged first.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Job-post edit page additions
-*** TODO Phase 2 api JobPostViewSet — mark-duplicate-of, unlink-duplicate, promote-canonical :api:dedupe:
-:PROPERTIES:
-:PHASE:    2
-:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
-:LAST_TOUCHED: [2026-05-20]
-:END:
-*Goal*: three verb endpoints that let users curate =duplicate_of= relationships from the UI, gated by visibility.
-
-*Acceptance*:
-- [ ] =POST /api/v1/job-posts/:id/mark-duplicate-of/= body =target_id=. Sets =self.duplicate_of_id = target_id=.
-- [ ] =POST /api/v1/job-posts/:id/unlink-duplicate/=. Sets =self.duplicate_of_id = NULL=.
-- [ ] =POST /api/v1/job-posts/:id/promote-canonical/=. Swaps roles with =self.duplicate_of= so =self= becomes the root.
-- [ ] All three require both JPs in the caller's visibility set (five-clause filter at =JobPostViewSet.list=). Staff bypass. 403 otherwise.
-- [ ] Cycle guard on promote-canonical: never =duplicate_of_id = self.id=.
-- [ ] Each verb returns JSON:API resource document for the updated JP (and the affected sibling on promote).
-
-*Files*:
-- =api/job_hunting/api/views/jobs.py=
-- =api/job_hunting/api/serializers.py= (likely no changes; =duplicate_of_id= already writable).
-
-*Tests*:
-- =api/job_hunting/tests/test_job_post_viewset.py= — one test per verb covering happy path, visibility rejection, cycle guard.
-
-*Out of scope*: DuplicateAnnotation audit rows — that's the Phase 3 ticket.
-
-*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Proposed duplicate model — keep parent-child + add affordances
-*** TODO Extension settings screen
+***** TODO [#C] Extension settings screen
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-20]
 :END:
@@ -1811,7 +1441,7 @@ UX notes:
 - Footer (theme toggle, who, disconnect) stays consistent across all screens
 
 Tags: =:extension: :frontend:=. Future ship — not v1.0.x.
-*** TODO org -> md -> github wiki exporter for career_caddy
+***** TODO [#C] org -> md -> github wiki exporter for career_caddy
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
@@ -1833,16 +1463,437 @@ Implementation sketch (in =~/.config/doom/config.org=):
 Background context: came up while discussing how non-Emacs contributors would use the new variadic =cc-todo-read= / =cc-notes-read= helpers (they couldnt). Wiki publishing is the portable-docs answer.
 
 Tags: docs, infra
-*** TODO 'capture prompt used. :medium:
-*** TODO make pills so flex can stack nicely on mobile :frontend:
+***** TODO [#C] 'capture prompt used. :medium:
+***** TODO [#C] make pills so flex can stack nicely on mobile :frontend:
 https://www.hyperui.dev/components/application/tabs/#component-5-dark
+*** TODO Outline + Plane MCP shim + namespace migration
+:PROPERTIES:
+:CREATED:       [2026-06-13]
+:LAST_TOUCHED:  [2026-06-13]
+:END:
+:PROPERTIES:
+:CREATED:    [2026-06-13]
+:CROSS_REPO: diycloud/todo.org :: Inbox/Feature/Outline + Plane stack on omarchy
+:PLAN:       /home/oldbones/.claude/plans/find-me-an-agent-synthetic-rose.md
+:END:
+
+Cross-cutting work: replace notes.org + todo.org with Outline (wiki) +
+Plane (tickets). cc-side scope below; dc-side owns the omarchy deploy
+itself (see :CROSS_REPO: drawer).
+
+cc-side scope:
+- Install official Plane MCP (=github.com/makeplane/plane-mcp-server=) +
+  community Outline MCP locally; wire into =~/.claude.json= the same
+  way namecheap-mcp / pihole-mcp are wired.
+- Re-target the six =<ns>-notes-*= / =<ns>-todo-*= helper namespaces
+  (=cc=, =cap=, =cf=, =cag=, =ca=, =diy=) as MCP shims; preserve the
+  olp drilldown shape so existing prompts/subagents don't have to
+  re-learn anything. Fallback to org-file read when MCP absent (OSS
+  opt-in caveat).
+- Migration scripts in =~/Sandbox/scratch/=:
+  - =migrate_notes_to_outline.py= walks each namespace's =-notes-toc=
+    output, upserts each node into an Outline document keyed by a
+    stable =:CC_OLP:= property.
+  - =migrate_todo_to_plane.py= walks =-todo-by-state= for each state,
+    creates Plane issues with state mapping
+    =TODO→Backlog=, =STRT→In Progress=, =WAIT→Blocked=,
+    =DONE→Ready=, =SHIPPED→Done=, carrying =:MERGE_SHA:= /
+    =:RESOLVED:= drawers across as Plane properties.
+- Update boot-sequence references after pilot:
+  - parent CLAUDE.md + each submodule CLAUDE.md
+  - =~/.claude/agents/_shared-cc-defaults.md=
+  - =~/.claude/commands/{getup,gitup,init,dispatch,ship}.md=
+  - =~/.claude/agents/cc-*.md= definitions that mention the helper API
+  - memory files: =feedback_notes_wiki_drilldown=,
+    =feedback_todo_wiki_drilldown=,
+    =feedback_subagent_drill_boot_sequence=,
+    =feedback_notes_org_is_source_of_truth=
+- Rewrite cc-deploy-watcher to read Plane issue state + =:MERGE_SHA:=
+  property and POST a transition through the Plane MCP, instead of
+  walking todo.org DONE entries.
+
+Pilot ordering: diycloud namespace migrates first (smallest, isolated,
+dc-side owns it). Live for 7 days. cc namespaces follow.
+
+Mirror node in =cc/notes.org= under =Architecture/Knowledge stack
+(mirror)= will be opened once the dc-side canonical node is in place.
+
+State: STRT (will set on entry creation; queued behind the dc-side
+omarchy deploy completing first).
 ** Enhancement
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :END:
-*** TODO Fix or retire GH Actions Deploy workflow — currently targets dead Projects dir
+*** TODO jp.show banner — gate on local-instance match once frontend has instance-host config
+PR #199 (job-posts/show source-withdrawn banner) gates only on source_deleted_at IS NOT NULL. Strictly speaking it should also suppress when source_instance == local instance hostname — a row whose origin is us would never receive a foreign Delete.
+
+Frontend has no CAREER_CADDY_INSTANCE config wired through environment.js / build args / service today. Adding that plumbing is a separate concern (config var -> build-arg -> runtime-injected -> service or env-helper exposed to templates).
+
+When the config lands, extend the {{#if @model.sourceDeletedAt}} guard with an AND on (sourceInstance != localInstance).
+*** TODO Companies — add unmark-as-alias-of verb (Phase A follow-up)
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-12]
+:END:
+The Phase A api ships POST /companies/:id/mark-as-alias-of/ but no companion verb to promote an alias back to canonical. Staff who misclick the AliasesPanel today have no escape but a DB-level fix.
+
+Add either:
+- POST /companies/:id/unmark-as-alias-of/ (clears canonical), or
+- accept target_id: null in the existing mark-as-alias-of endpoint.
+
+Frontend follow-up: surface a promote-back-to-canonical action in Companies::AliasesPanel once the api lands.
+*** TODO Add Firefox launcher to local dev frontend image so agents can run browser tests
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-12]
+:END:
+2026-06-12: cc-frontend can't run browser tests in the docker frontend container — 'Launcher Firefox not found'. The launcher is intentionally omitted from the prod image to keep racknerd light (Firefox is RAM-hungry). Off racknerd it's only HD space.
+
+Proposal: build a Dockerfile variant or compose override that adds Firefox to the frontend container ONLY for local dev. cc-frontend's browser-verification gate (per agent definition) then has somewhere to run, and the Ember QUnit suite gets exercised on cc-frontend dispatches.
+
+Options:
+- Multi-stage Dockerfile with a =dev= target that adds firefox-esr.
+- docker-compose.override.yml that builds the dev variant on =make up=.
+- Separate =frontend-test= service in compose that the agent calls.
+
+Acceptance: =docker compose exec frontend npx ember test --filter='admin/companies'= runs without 'Launcher Firefox not found'. Prod image (built by dagger pipeline) unchanged — Firefox stays out of the racknerd-bound image.
+
+Cross-link: agent definition's browser-verification gate at =~/.claude/agents/cc-frontend.md=; cf-notes 'Test pattern' under Architecture.
+*** TODO api test suite slow: stub federation_dispatch + job_post_extractor + DescriptionArbiter in tests
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-12]
+:END:
+2026-06-12: =job_hunting= test suite takes 15-20 min for ~1440 tests
+(roughly 0.8s per test average — should be 20-30 sec total). Diagnosed
+during cc-api Phase A run: production code paths fire on every
+fixture-created JobPost and burn real wall-clock time.
+
+Top three offenders (observed in log):
+
+1. =federation_dispatch= — fires once or twice on every JobPost insert.
+   No-op for unauthenticated test users (=ap.dispatch.no_actor —
+   skipping fanout=) but still walks the dispatch logic +
+   handler-registration lookup. Hundreds of times across the suite.
+
+2. =job_post_extractor.generate_hints= — does multi-second work each
+   call ("Generated hints for example.com (607 tokens)"). Either calling
+   a real LLM in test mode, or a slow mock. Some fixture paths hit this.
+
+3. =DescriptionArbiter= — duration_ms=1553 per call. LLM-style
+   choose-between-descriptions; runs whenever fixture data lands on a
+   re-extract path.
+
+Fixes (each ships as its own scoped todo):
+
+- =federation_dispatch=: gate the top of the dispatch function on
+  =settings.TESTING or settings.DEBUG= (or a dedicated
+  =settings.FEDERATION_DISABLE_IN_TESTS=). Tests that want to exercise
+  federation explicitly override the setting. Saves the per-create
+  cost; existing "skipping fanout" log line goes away.
+
+- =job_post_extractor=: replace with a deterministic stub in test mode
+  (or a fixture-loaded canned hint blob). Hint generation is not the
+  unit under test for any of these tests.
+
+- =DescriptionArbiter=: same shape — deterministic stub returning a
+  fixed choice + duration_ms=0 in tests. Real arbiter behavior is
+  covered by its own focused test class.
+
+- Optional: move the small subset of tests that DO want to exercise
+  the real federation/extractor/arbiter paths into a separate module
+  (=tests/integration/=) that runs nightly, not on every focused or CI
+  invocation.
+
+Acceptance:
+- =~/.scripts/cc_run_test.sh job_hunting= completes in =< 60s= on
+  unchanged code.
+- =make ci= (parent Dagger) elapsed time drops accordingly.
+- Test-suite reliability unaffected — no new flake from stubbed
+  dependencies.
+
+Cross-link: =~/.scripts/cc_run_test.sh= captures full output without
+SIGPIPE; this todo is about the intrinsic cost, not the wrapper.
+*** TODO Migrate remaining 11 slim:1 callers to fields[<type>]= sparse fieldsets
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-12]
+:END:
+2026-06-12: api PR #175 (merged 1ff404e, parent #269) made =?slim=true=
+a deprecation alias for =?fields[<type>]=...&meta=counts= and emits
+=serializer.slim.deprecated= INFO logs on every legacy hit. The
+=job-posts.show.scores= route shipped as a pilot in frontend #196
+(parent #270, e50fdeb).
+
+Once Doug confirms the scores pilot is clean in prod, migrate the
+remaining 11 callers. Audit table (from api PR #175 body):
+
+| Route file                                                      | Type queried   | fields[<type>]=                                  |
+|-----------------------------------------------------------------|----------------|--------------------------------------------------|
+| =app/routes/resumes/index.js=                                   | resume         | =name,title,notes,favorite,profession=           |
+| =app/routes/cover-letters/index.js=                             | resume         | =name,title,notes,favorite,profession=           |
+| =app/routes/cover-letters/new.js=                               | resume         | =name,title,notes,favorite,profession=           |
+| =app/routes/scores/index.js=                                    | resume         | =name,title,notes,favorite,profession=           |
+| =app/routes/summaries/index.js=                                 | resume         | =name,title,notes,favorite,profession=           |
+| =app/routes/companies/show/job-applications/new.js=             | resume         | =name,title,notes,favorite,profession=           |
+| =app/routes/job-applications/edit.js=                           | resume         | =name,title,notes,favorite,profession=           |
+| =app/routes/job-posts/show/summaries.js=                        | resume         | =name,title,notes,favorite,profession=           |
+| =app/routes/job-posts/show/cover-letters.js=                    | resume         | =name,title,notes,favorite,profession=           |
+| =app/routes/job-posts/show/job-applications/index.js=           | resume         | =name,title,notes,favorite,profession=           |
+| =app/routes/job-posts/show/job-applications/new.js=             | resume         | =name,title,notes,favorite,profession=           |
+
+(Per the audit, every slim caller queries =resume= with the same
+slim_attributes — all 11 take the same field list.)
+
+Each route's diff:
+
+#+begin_src diff
+- this.store.query('resume', { slim: 1 }),
++ this.store.query('resume', {
++   'fields[resume]': 'name,title,notes,favorite,profession',
++   meta: 'counts',
++ }),
+#+end_src
+
+Dispatch shape: same template as scores pilot. All 11 in one PR or
+batched 3-4 per PR — operator's call. Each route gets validated by:
+
+#+begin_src sh
+grep -rnE 'slim:\s*1|slim:\s*true' frontend/app/routes/
+# expected: zero matches after migration
+#+end_src
+
+Once all 12 (pilot + remaining 11) are migrated AND prod logs stop
+emitting =serializer.slim.deprecated= for a sustained window (say a
+week), a follow-up api PR can rip out the slim machinery entirely:
+
+- =BaseSerializer.slim= flag + =slim_attributes= class attribute
+- =to_slim_resource= method (already deleted; nothing else to do)
+- =_is_slim_request= shim on BaseViewSet
+- Resume's =if self.slim:= branch on meta.counts (counts becomes
+  unconditionally opt-in via =?meta=counts=)
+- The =serializer.slim.deprecated= log emit itself
+
+Acceptance:
+- All 12 routes use =fields[<type>]= + =meta=counts= shape.
+- =grep -rnE 'slim:\s*(1|true)' frontend/app/= returns no matches in
+  route or component files.
+- Prod logs show =serializer.slim.deprecated= count trending to zero.
+- Optional follow-up: api removal PR drops the slim machinery.
+
+Cross-link: api PR #175, frontend pilot PR #196, parent pin bumps
+#269 + #270.
+*** TODO Collapse hardcoded mcp.careercaddy.online refs to careercaddy.online/mcp
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-12]
+:END:
+2026-06-11: diycloud commit =a738c66= shipped =careercaddy.online/mcp=
+as a transparent alias for =mcp.careercaddy.online/mcp= (same upstream,
+same response, same auth). Diycloud-agent flagged the housekeeping
+opportunity but explicitly said "none of it urgent."
+
+Now there's a single-hostname collapse path for any cc code referencing
+the mcp surface. Doing the migration removes a subdomain from the
+client-side mental model and aligns with Doug's broader "retire api
+subdomain, retire mcp subdomain, apex routing for everything"
+direction (see =Inbox/Enhancement/Retire api.careercaddy.online
+subdomain and route /mcp on apex=).
+
+Files with hardcoded =mcp.careercaddy.online= references (audit
+2026-06-11):
+
+Parent:
+- =CLAUDE.md= line 69, 168 (doc strings)
+- =README.md= line 35
+- =docker-compose.prod.yml= line 192 (comment), 227 (caddy label)
+
+agents/:
+- =CLAUDE.md= line 151
+- =README.md= line 11, 55
+- =mcp_servers/public_server.py= line 4, 8 (docstring)
+- =mcp_servers/README.md= line 7
+
+automation/:
+- =.env.example= line 5 (=CC_MCP_URL=)
+- =README.md= line 12
+- =scripts/analyze_screenshots.py= line 5, 46 (=DEFAULT_MCP_URL=)
+- =scripts/sharpen_profiles.py= line 41 (=DEFAULT_MCP_URL=)
+- =src/pipelines/web_ui.py= line 11, 194 (default arg / help text)
+
+Migration plan:
+
+Per-submodule PR per concern:
+1. agents — flip docstrings + README. Keep =public_server.py= server
+   name string as-is (=career-caddy-public=); only fix the
+   =Connect at:= line. No code path change.
+2. automation — flip =CC_MCP_URL= default and the two
+   =DEFAULT_MCP_URL= constants. Existing operators with
+   =.env= override should be unaffected. Bump the script docstrings.
+3. parent — flip =CLAUDE.md=, =README.md=, and the
+   =docker-compose.prod.yml= comment (the caddy label stays —
+   that's what creates the subdomain block; removing the label is
+   the SUBDOMAIN RETIREMENT step, tracked separately).
+
+Hold the =caddy: mcp.careercaddy.online= label removal for the
+matching =api.careercaddy.online= retirement PR; the two
+subdomains are part of the same one-hostname-end-state.
+
+Acceptance:
+- =rg "mcp.careercaddy.online" --type-add 'cfg:*.{json,yml,yaml,toml,env*,envrc*}' --type cfg --type md --type py= returns no hits on the cc tree except in archived/legacy notes (where the historical reference is informative, e.g. in todo.org context like this).
+- Existing prod traffic to =mcp.careercaddy.online/mcp= continues to
+  work (subdomain block stays alive until the separate retirement PR).
+
+Cross-link: =Inbox/Enhancement/Retire api.careercaddy.online
+subdomain and route /mcp on apex= covers the subdomain block removal
+itself. This todo is just the client-ref cleanup.
+*** TODO Retire api.careercaddy.online subdomain and route /mcp on apex
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-11]
+:END:
+2026-06-11: Two consolidations on prod caddy routing.
+
+** 1. Retire =api.careercaddy.online= entirely
+
+DNS, caddy labels, and any client config still hardcoding the
+subdomain. The apex =careercaddy.online= already handles =/api/*=
+via the frontend service label
+(=caddy.handle_0= → =reverse_proxy api:8000=), so the api
+subdomain has been redundant for a while.
+
+Today it's actively harmful: the static
+=/etc/caddy/sites/careercaddy.online.conf= defines an
+=api.careercaddy.online= block that collides with the
+docker-derived one and contributes to the "ambiguous site
+definition" outage that took prod down 2026-06-11 ~18:11.
+
+Cleanup checklist:
+- Drop the =caddy: api.careercaddy.online= label on the =api=
+  service in =docker-compose.prod.yml=.
+- Remove the =api.careercaddy.online= block from the static
+  =careercaddy.online.conf= (and wherever this conf is templated
+  from — see =Bug/Static caddy sites conf is being regenerated=).
+- Delete the DNS A/AAAA record for =api.careercaddy.online= once
+  no callers remain.
+- Audit clients: cc_auto, agents, frontend env builds, MCP server's
+  =CC_API_BASE_URL=. Any =https://api.careercaddy.online= →
+  =https://careercaddy.online=.
+- Update any docs that reference =api.careercaddy.online= as a
+  user-facing endpoint.
+- Grep parent + every submodule for the bare subdomain string.
+
+** 2. Expose =/mcp= on the apex, transparent to mcp.careercaddy.online
+
+Same shape as the existing =/api/*= handle: a path-based handle on
+the apex frontend block that reverse-proxies to the mcp container
+internally. From the client perspective,
+=https://careercaddy.online/mcp= behaves identically to
+=https://mcp.careercaddy.online/mcp= — no redirect, no
+subdomain, just internal routing.
+
+Why:
+- Drops another whole subdomain (mcp.careercaddy.online) from DNS
+  + cert renewal cycle eventually.
+- Simpler client config: one base URL for everything Career Caddy.
+- Removes another collision surface from the static-conf vs.
+  docker-derived caddy race.
+
+Implementation:
+- New =caddy.handle_1= label on the frontend service:
+  =caddy.handle_1: /mcp*= →
+  =caddy.handle_1.reverse_proxy: mcp:8000=
+- Caddy label syntax allows multiple =handle_N= blocks; verify the
+  index increments cleanly past the existing =handle_0= for
+  =/api/*=.
+- Keep =mcp.careercaddy.online= alive until clients migrate, then
+  retire it the same way as (1).
+- Update =.mcp.json= entries in this repo + submodules to point at
+  =https://careercaddy.online/mcp= once it's live.
+
+Acceptance for both:
+- =curl https://careercaddy.online/api/v1/healthcheck/= still
+  returns 200 JSON (existing behavior preserved).
+- =curl -X POST https://careercaddy.online/mcp= with the
+  =jh_*= bearer returns the same JSON-RPC initialize envelope as
+  =https://mcp.careercaddy.online/mcp= does.
+- No caddy logs about ambiguous site definitions involving any
+  =careercaddy.online= host.
+
+Cross-link: =Inbox/Bug/Static caddy sites conf is being
+regenerated=.
+*** TODO Sweep stale pin-bump and chore branches on parent + frontend remotes
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-11]
+:END:
+2026-06-10: Surfaced during =/ship= Phase 5 audit after merging
+parent #260. =git ls-remote --heads origin= on parent shows 14
+non-main branches; on frontend shows 9. Most are stale.
+
+Parent remote — appear safely deletable (SHAs reachable from main):
+- =chore/bump-api-pin-canonicalize-create= (8d324ea) — merged via #258
+- =chore/bump-api-pin-linkedin-failure-privacy= (899b01e) — merged via #259
+- =chore/bump-frontend-pin-jp-index-delete= (0fdc91d) — merged via #257
+- =chore/frontend-test-fix-pin-bump= (a40404f)
+- =feature/api-dedupe-phase-{a,b,c}-pin-bump=, =api-dedupe-rolling-last-seen-pin-bump=
+- =feature/api-popup-apply-url-pin-bump=, =api-scrape-profile-sharpen-pin-bump=, =api-sse-disconnect-fix-pin-bump=
+- =feature/dual-pin-sharpen-status-and-setupcontroller-cleanup=
+- =feature/frontend-admin-companies-search-pin-bump=, =feature/frontend-phase-a-admin-companies-pin-bump=, =feature/frontend-phase-c-compare-ui-pin-bump=, =feature/frontend-scrape-profile-sharpen-button-pin-bump=
+- =chore/api-q-workers-and-rn-drop-to-1=, =chore/file-p1-api-oom-and-sse-bugs=, =chore/make-up-includes-worker=, =chore/no-slashes-in-headings=, =chore/rollback-paths-wrappers=, =chore/todo-ledger-extension-direct-post=
+- =feature/scrape-graph-fix-and-ci-output-cleanup=
+
+Frontend remote — appear safely deletable:
+- =fix/scrape-graph-trace-toarray=
+- =feature/admin-companies-merge= (verify no open PR before deleting)
+- =feature/dedupe-phase-c-compare-and-repost-ui=
+- =chore/admin-companies-controller-test-notok= (merged via #187)
+- =chore/admin-companies-drop-setupcontroller= (merged via #186)
+- =feature/admin-companies-search-and-pagination= (merged via #184)
+- =feature/admin-scrape-profiles-sharpen-button= (merged via #185)
+
+Frontend remote — DO NOT delete:
+- =feature/scrapes-show-follow-redirect-chain= — open PR #188
+- =fix/session-logout-store-clear= — open PR #190
+
+Acceptance:
+- Verify each candidate branch's tip SHA is reachable from =main=
+  (=git -C <repo> branch -r --contains <sha>= shows =origin/main=)
+  before deletion.
+- Delete via =git push origin --delete <branch>= per repo.
+- Add the verification + sweep as a parent-side script under
+  =~/.scripts/= if this recurs (it will — pin-bump branches
+  accumulate every cycle since the PRs are merged but branches not
+  cleaned up).
+
+Why this matters: makes =gh pr list= and =git ls-remote= signal
+actual in-flight work instead of historical churn; also helps
+future-me reading the wiki because the live branch list maps to
+WAIT/STRT todo entries.
+*** TODO Speed up Deploy: GHCR layer cache + skip rebuild on pin-only parent changes
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-10]
+:END:
+Current Deploy: ~16 min per parent PR, mostly Docker image rebuilds. Two cheap wins:
+
+1. GHCR layer cache in dagger/src/career_caddy_pipeline.py publish() step. Pass --cache-from=type=registry,ref=ghcr.io/overcast-software/career_caddy_api:cache and matching --cache-to=. Should drop api image rebuild from ~8 min to ~1-2 min when Python deps unchanged.
+
+2. Skip parent rebuild when only submodule pin changed. Detect via git diff --name-only main.. — if only api or frontend submodule pointers changed, the submodule own CI already built the GHCR image when the submodule PR merged. Parent deploy can skip publish and go straight to docker compose pull + restart on racknerd.
+
+Filing because session 2026-06-10 shipped 5 parent PRs with 16-min deploys each = 80 min total deploy wait time for ~5 minutes of actual change.
+
+Tags: :infra:dagger:
+*** SHIPPED Fix or retire GH Actions Deploy workflow — currently targets dead Projects dir
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-16]
+:END:
 Prod has been relocated to /opt/stacks/careercaddy.online/ via ansible (~/Tools/ansible/playbooks/racknerd/careercaddy.online.yml). The .github/workflows/deploy.yml dagger step uses DEPLOY_APP_DIR secret which still points at the legacy /home/oldbones/Projects/career_caddy/ directory, so every Deploy run fails with 127.0.0.1:5432 already allocated (the real prod db in /opt/stacks holds it). Options: (a) update DEPLOY_APP_DIR to /opt/stacks/careercaddy.online and switch dagger to docker-compose.yml not docker-compose.prod.yml, OR (b) retire GH Actions Deploy and trigger ansible-playbook from CI instead. Either way the publish-images job must still emit images tagged with the merge SHA so prod has something to pull.
-*** TODO cc_auto inline-post mailto link from verified recruiter email
+**** SHIPPED prod verified 2026-06-16 — acute bug already fixed
+:PROPERTIES:
+:CREATED:       [2026-06-16]
+:LAST_TOUCHED: [2026-06-16]
+:END:
+Prod runs IMAGE_TAG=75ecb21 (latest merged main, PR #282), all 6 containers from /opt/stacks/careercaddy.online healthy (worker unhealthy, separate). Deploy step green since ~06-12. Root fix already landed: dagger app_dir default realigned to /opt/stacks (commit 2b6bb8f) AND DEPLOY_APP_DIR repointed (legacy /home/oldbones/Projects/career_caddy has no active compose — only .PRE-OPT-STACKS-CUTOVER backups, so a deploy there would fail; proves the secret no longer points there). Residual: deploy.yml:66 still threads --app-dir=secrets.DEPLOY_APP_DIR (only consumer) over the now-correct git-tracked default = drift risk that caused the original incident. Proposed hardening: drop the override.
+**** SHIPPED hardening shipped + verified 2026-06-16
+:PROPERTIES:
+:CREATED:       [2026-06-16]
+:LAST_TOUCHED: [2026-06-16]
+:END:
+PR #283 dropped the --app-dir secret override; deploy target is now solely the dagger default /opt/stacks/careercaddy.online. Merged 921184a; Deploy run 27648608018 green; prod verified IMAGE_TAG=921184a with all containers from /opt/stacks. Acute dead-dir/5432 bug was already resolved pre-session (2b6bb8f + secret repoint). DEPLOY_APP_DIR now unused — deletable from repo secrets.
+*** TODO [#B] cc_auto inline-post mailto link from verified recruiter email
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-27]
 :END:
@@ -1860,15 +1911,16 @@ Files to touch when picked up:
 - scripts/inbox_triage.py — _create_inline_job_post fetches From: from the source, compares to parsed recruiter_contact email, sets link conditionally. Helper _mailto_from_contact ("<email>" regex) was already drafted in the reverted change; pull it from this todo's diff history if useful.
 
 Backfill: JP 2914 specifically can be patched via update_job_post once we know the recruiter's actual From: address. Not blocking; the post is usable via the description prefix that already names Lovely.yadav@excelonsolutions.com.
-*** TODO canonicalize-direct-create — POST job-posts pre-canonicalize :api:dedupe:
+**** LOOP EmailSource protocol expansion
+*** SHIPPED [#A] canonicalize-direct-create — POST job-posts pre-canonicalize :api:dedupe:
 :PROPERTIES:
-:LAST_TOUCHED: [2026-05-15]
+:LAST_TOUCHED: [2026-06-10]
 :PRIORITY: P1
 :END:
 =POST /api/v1/job-posts/= creates a JP without calling =canonicalize_link()= before =find_duplicate=. Direct API creates therefore bypass the host-rewrite + tracking-strip pass that =/scrapes/from-text/= does, so a /comm/jobs/view/ POST silently creates a duplicate of an existing /jobs/view/ row. Five-line fix in =views/jobs.py= =create()=. Evidence: jp 1315 ↔ jp 1550 (linkedin /comm/ duplicate, see notes.org).
 
 Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md= for context. Deferred out of the cross-platform-dedup-hints PR because the from-text path already canonicalizes; this closes the silent hole on the other create endpoint.
-*** TODO multi-host-extractors — Indeed, Glassdoor, ZipRecruiter apply-button :extension:dedupe:
+*** TODO [#C] multi-host-extractors — Indeed, Glassdoor, ZipRecruiter apply-button :extension:dedupe:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :PRIORITY: P2
@@ -1876,7 +1928,7 @@ Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md= for context. Def
 Once ccsender 1.2.0 has 2 weeks of dogfood and the LinkedIn safety/go decoder proves out the model, add per-host apply-button extractors for the next tier of job boards: Indeed, Glassdoor, ZipRecruiter. Each is a small extractor block in =popup.js#grabHints=, hostname-gated like the LinkedIn one. Cost: small per-host code + one extension release each.
 
 Don't fan out before LinkedIn has shipped dedup wins in production. Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md=.
-*** TODO dogfood-eval-pr2 — 2-week empirical re-eval after PR1 :dedupe:
+*** TODO [#C] dogfood-eval-pr2 — 2-week empirical re-eval after PR1 :dedupe:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-15]
 :PRIORITY: P2
@@ -1889,12 +1941,12 @@ Concrete signals to track:
 - Did stub JPs cause more confusion than they solved? → tighten the stub-creation gate.
 
 Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md=.
-*** TODO remove expand caret on sidebar
+*** TODO [#C] remove expand caret on sidebar
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
-remove the expand carrot on the sidebar
-*** TODO Profile-as-resource — split User and Profile JSON-API conformity :api:frontend:chore:
+remove the expand carrot on the sidebar for reports.  it doesn't expand
+*** TODO [#C] Profile-as-resource — split User and Profile JSON-API conformity :api:frontend:chore:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-08]
 :END:
@@ -1922,7 +1974,7 @@ Deferred — touches every settings page, dozens of templates, the user serializ
 Tag: =:api:= =:frontend:= =:chore:=.
 Related: notes.org Plans/ccsender as the gateway/Phase 3a — ships onboarding-as-resource on the same JSON:API path; this enhancement extends the same conformity to Profile.
 
-*** TODO Extension presence vs auth — distinguish in postMessage signals :extension:auth:
+*** TODO [#C] Extension presence vs auth — distinguish in postMessage signals :extension:auth:
 :PROPERTIES:
 :CREATED: [2026-05-08]
 :LAST_TOUCHED: [2026-05-08]
@@ -1946,7 +1998,7 @@ Paired with =Extension SSO via SPA localStorage — no login dialog= (now SHIPPE
 
 Tag: =:extension:= =:auth:=.
 
-*** TODO DOCX export — archetype-specific resume templates
+*** TODO [#C] DOCX export — archetype-specific resume templates
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-07]
 :END:
@@ -1959,7 +2011,7 @@ Plan option (a) — recommended: maintain 2-3 archetype-flavored .docx templates
 Plan option (b): rewrite render_docx to use python-docx directly so order is data-driven. More code; more flexible long-term. Revisit only if (a) becomes painful.
 
 Not blocking: SE resumes (the bulk of users right now) keep rendering correctly with the existing template.
-*** TODO Profile.preferred_profession default to pre-fill new resumes
+*** TODO [#C] Profile.preferred_profession default to pre-fill new resumes
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-07]
 :END:
@@ -1972,7 +2024,7 @@ Proposal:
 - Per-resume override still works (some users target multiple fields)
 
 Not blocking M4. Easy follow-up; one migration + one form field on settings + one default in resume create.
-*** TODO Audit cover-letter, summary, orgmode-export prompts for dev-leaning copy
+*** TODO [#C] Audit cover-letter, summary, orgmode-export prompts for dev-leaning copy
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-07]
 :END:
@@ -1985,7 +2037,7 @@ Out of scope from the audience-aware resume import ship. M3 only touched RESUME_
 Likely fix shape mirrors M3: build_*_prompt(profession) function, archetype-specific tone/examples appended when profession is known, free-form rule still applies.
 
 Defer until a non-dev user reports a generated cover letter or summary that misses the mark for their field.
-*** TODO Resume archetype-specific section types — Publications, Volunteer, Awards
+*** TODO [#C] Resume archetype-specific section types — Publications, Volunteer, Awards
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-07]
 :END:
@@ -2004,7 +2056,7 @@ Wiring needed:
 - Per-archetype defaults in SECTION_ORDER_DEFAULTS
 
 Defer until a user actually asks. The M4 dispatch shape (each section type has its own renderer) means each addition is local to its section, not architectural.
-*** TODO Show top score on extension tracked panel
+*** TODO [#C] Show top score on extension tracked panel
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-07]
 :END:
@@ -2017,7 +2069,7 @@ Two surfaces:
 When no score exists yet, render nothing (no 'Score: —' placeholder); the slot stays empty.
 
 Tags: =:extension: :frontend:=. Follows the v1.0.x extension thread; ride along with the next ship after extension WIP lands.
-*** TODO cc-todo and cc-notes helpers should accept variadic path segments instead of slash-joined olp
+*** TODO [#B] cc-todo and cc-notes helpers should accept variadic path segments instead of slash-joined olp
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-05]
 :END:
@@ -2033,7 +2085,7 @@ Backcompat: when called with a single string arg, fall back to =(split-string s 
 
 Lives in =~/.config/doom/config.org=.
 
-*** TODO Extension API-key sprawl: dedupe on Connect or auto-expire server-side
+*** TODO [#C] Extension API-key sprawl: dedupe on Connect or auto-expire server-side
 Each popup Connect mints a fresh =Career Caddy Sender — YYYY-MM-DD= key; Disconnect best-effort revokes. Leaks happen on uninstall, profile reset, or offline disconnect. Severity is low — keys are scoped to the minting user — but the API-keys list grows unbounded.
 
 Two paths, in order of cheapness:
@@ -2042,7 +2094,7 @@ Two paths, in order of cheapness:
 
 Neither blocks store submission. Revisit when there are paid users.
 *** PLAN buy me coffee.  cofee leaderborad :frontend:
-*** TODO Vertical slide animation for jp.show.questions index <-> detail :frontend:
+*** TODO [#C] Vertical slide animation for jp.show.questions index <-> detail :frontend:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-12]
 :END:
@@ -2086,62 +2138,345 @@ controllers/job-posts/show/questions.js were deleted before ship.
 :END:
 Untriaged. Run =(cc-todo-triage)= to autoroute high-confidence entries; low-confidence ones stay here with a =:TRIAGE_NOTE:= drawer.
 
-*** TODO SSE events endpoint holds gunicorn worker open on client disconnect :api:bugs:
+*** TODO mcp public_server returns 500 from uvicorn on initialize with valid bearer
+2026-06-11 ~17:53 UTC: =POST mcp.careercaddy.online/mcp= returned
+HTTP 500 from uvicorn (=Server: uvicorn=, body =Internal Server
+Error= plain text, =via: 1.1 Caddy=) on JSON-RPC =initialize=
+when called with a valid =jh_*= bearer token. Without auth →
+clean 401. Isolated the crash to the auth/verifier path.
+
+Resolved transiently by =docker restart careercaddy-mcp=. After
+restart, =initialize= with bearer returns 200. So the crash was
+runtime state, not bad code shipped that day — the mcp container
+hadn't been redeployed since the prior day.
+
+Note: the 502 outage that followed the restart was a separate
+issue (caddy static-conf regeneration colliding with docker-proxy
+labels), tracked in diycloud
+=Operations/Caddy static sites confs are being regenerated on
+racknerd=. Not the same root cause as the 500.
+
+Strongest theories for the 500 (in order):
+
+A. Memory pressure in the 256m container
+   (=docker-compose.prod.yml:225=). The verifier stores the
+   entire =/me/= JSON:API response (Doug: 280+ scores, 250+
+   job_applications, etc.) into =AccessToken.claims["user"]=
+   (=agents/mcp_servers/public_server.py:108=). Per-request session
+   state may carry claims; sustained traffic could OOM a uvicorn
+   worker. After restart, the worker pool is fresh; the leak (if
+   any) hasn't accumulated yet.
+
+B. The oversized =/me/= response itself (separate Inbox/Bug for
+   =GET /api/v1/me/ violates JSON:API=). Even without OOM, a
+   transient httpx timeout / connection-pool exhaustion fetching
+   that blob would bubble as an uncaught exception in the
+   verifier and surface as 500.
+
+C. Some FastMCP 3.2 internal state corruption that =initialize=
+   exposes. Not a code bug we shipped; would be a regression in
+   the dep.
+
+Investigation that couldn't run in-session (and the reasons):
+
+- =docker logs careercaddy-mcp= during the failing window. SSH was
+  denied by policy at the time; by the time Doug authorized it,
+  the container had been restarted and logs were no longer about
+  the crashing state.
+- Logfire =/v1/query=. The =LOGFIRE_READ_TOKEN= validates against
+  =/v1/info= (project metadata) but is rejected by =/v1/query=
+  with =Invalid token=. Likely a write-scope token mis-labeled as
+  read. Separate follow-up: reissue a real read-scoped token and
+  set =LOGFIRE_READ_TOKEN= to it. Without this, the IDE-side
+  =arbitrary_query= MCP tool is useless for incident triage.
+
+Fix options (cheapest first):
+
+1. **Wrap verifier in try/except.** Any exception in
+   =ApiKeyTokenVerifier.verify_token= currently leaks as uvicorn
+   500. Catching and returning =None= would degrade gracefully to
+   401 with =WWW-Authenticate=. Doesn't fix the root cause but
+   stops the 500 from masking it next time. Trivial PR on agents/.
+
+2. **Slim =claims["user"]= to just the fields
+   =get_current_user= consumes.** Read
+   =agents/mcp_servers/public_server.py:153-171= for the consumer
+   set; cap =claims["user"]= to that subset in the verifier.
+   Trade-off: a JSON:API include for the same user later won't
+   see new fields cached. That's already true today.
+
+3. **Drop the =claims["user"]= cache entirely.** Make
+   =get_current_user= always fetch fresh =/me/=. One extra
+   round-trip per call. Removes the OOM vector outright.
+
+4. **Bump =mem_limit: 256m=** in =docker-compose.prod.yml=. Cheap;
+   masks the symptom. Worth doing alongside (1)–(3) as defense in
+   depth.
+
+5. **Fix the underlying =/me/= JSON:API violation.** Separate
+   Inbox/Bug entry. Helps every consumer, not just mcp.
+
+Acceptance:
+
+- =POST /mcp= initialize with valid bearer returns 200 + proper
+  JSON-RPC envelope, consistently, under sustained call rate.
+- A simulated verifier exception (e.g. mock api unreachable)
+  surfaces as 401 not 500.
+- Container at 256m holds up under at-least 60min of repeated
+  =initialize= calls without uvicorn worker churn.
+- Logfire token is read-scoped so future MCP traces can be pulled
+  from the IDE without ssh.
+
+Cross-link: =Inbox/Bug/GET /api/v1/me/ violates JSON:API=;
+diycloud =Operations/Caddy static sites confs are being
+regenerated on racknerd= (concurrent unrelated outage 2026-06-11).
+*** TODO GET /api/v1/me/ violates JSON:API by eagerly including relationship data arrays
 :PROPERTIES:
-:LAST_TOUCHED: [2026-06-09]
-:PRIORITY: P1
+:LAST_TOUCHED: [2026-06-11]
 :END:
-*Repro:* gunicorn worker pid 139 was inside =_event_stream= 's =select.select= in =api/job_hunting/api/events.py:191= when the kernel SIGKILL'd it 2026-06-09 07:51:13 PDT. The worker had been holding the SSE connection open for an undetermined duration; under the 512 MiB cap, retained per-connection state plus any concurrent request burst exceeded the limit.
+2026-06-11: GET =/api/v1/me/= returns every relationship's full
+=data: [{...}, ...]= array eagerly. Doug's user produces a single
+response with 280+ score links, 250+ job_application links, plus
+resumes / summaries / cover-letters / job-posts. The blob is
+hundreds of KB.
 
-*Hypothesis:* the SSE handler 's =select.select= loop does not promptly release the worker when the client disconnects (frontend tab close, network blip). Worker stays "busy" from gunicorn 's perspective, accreting state, until something kills it.
+Per JSON:API spec, relationships objects should hold =links= (and
+optionally =meta=) but should NOT include =data: [...]= unless the
+client requested it. Compound documents (the =data= arrays and the
+top-level =included[]=) are only populated when the client passes
+=?include=scores,job-applications,…=.
 
-*Fix shape:* audit =_event_stream= for:
-  - bounded =select.select= timeout (e.g. 30s) with a top-level disconnect-check between iterations
-  - explicit cleanup of any per-connection buffers / queue subscriptions when the client goes away
-  - structured logging of connection lifecycle so we can see in logfire how long SSE sessions actually live
+Today's behavior is non-compliant and triggers downstream pain:
 
-*Why P1:* this is the upstream cause of the OOM. Bumping the memory limit (sibling Bug) buys headroom; this fix removes the leak shape entirely.
+- The mcp public_server verifier
+  (=agents/mcp_servers/public_server.py:60-111=) jams the entire
+  =/me/= response into =AccessToken.claims["user"]=, which then
+  participates in per-request session state. Under memory pressure
+  this contributes to runtime degradation on the 256m container.
+- The frontend pays bandwidth + parse cost on every login refresh.
+- Any other consumer doing =GET /api/v1/me/= pays the same.
 
-*Related:* api worker OOM under SSE load (sibling Bug entry).
-*** TODO api worker OOM under SSE load — bump memory limit from 512 MiB :api:bugs:infra:
+Fix:
+
+- Find the =/me/= serializer in api (likely
+  =api/job_hunting/api/views/me.py= or the UserSerializer used by
+  it). Strip =data: [...]= from default relationships output;
+  preserve =links= so the related-resource URL is still walkable.
+- Respect =?include=…= so callers who DO want compound docs can
+  opt in.
+- Mirror the change in any other endpoint that violates the same
+  rule (audit JobPost / Company / etc serializers).
+- Update the mcp public_server verifier to either (a) request
+  =?include=…= for the fields it actually caches or (b) drop the
+  =claims["user"]= blob entirely and let get_current_user always
+  hit =/me/= fresh — the latter is simpler and avoids stale-cache
+  races.
+
+Acceptance:
+
+- =GET /api/v1/me/= returns =data.relationships.scores= as
+  =\{"links": \{...\}\}= (no =data= array).
+- =GET /api/v1/me/?include=scores= populates =included[]= with
+  score resources.
+- mcp =get_current_user= MCP tool still returns the slim user dict
+  the frontend expects (or fails gracefully if the cache shape
+  changed).
+- Frontend doesn't visibly regress on login.
+
+Cross-link: this surfaced during the 2026-06-11 mcp prod outage
+(public_server 500 on initialize) that turned out to be ambient
+runtime degradation (tailscale down + 256m container under
+sustained big-payload pressure), but the oversized =/me/= response
+is a real underlying contributor and a JSON:API spec violation
+regardless.
+*** TODO ccsender popup: Sent but no scrape id returned — from-text 2xx response missing data.id
 :PROPERTIES:
-:LAST_TOUCHED: [2026-06-09]
-:PRIORITY: P1
+:LAST_TOUCHED: [2026-06-11]
 :END:
-*Repro:* gunicorn worker pid 139 received SIGKILL at 2026-06-09 07:51:13 PDT inside =job_hunting/api/events.py:191= (=select.select= in =_event_stream=). Kernel marker: "Worker (pid:139) was sent SIGKILL! Perhaps out of memory?" Replacement worker (pid 216) booted within 1s but every MCP call in the window 500'd because =public_server.verify_token= 's =httpx.get(api/v1/me/)= hit =httpx.ReadTimeout=.
+2026-06-10: Doug reported via popup screenshot (v1.3.0). After
+clicking "Send this page", popup shows red error:
+=Sent, but no scrape id returned.= HINTS TO SEND row showed all
+dashes (canonical / apply / referrer all empty), so structured
+prefill was empty → useDirectPost=false → the from-text path.
 
-*Memory limits today:* =docker-compose.prod.yml= caps the api service at 512 MiB. Post-restart, idle steady-state is 318 MiB / 512 MiB (62%). One SSE connection plus any other request burst pushes the worker past the limit.
+Error fires at
+=frontend/public/extensions/career-caddy-sender/popup.js:1267=:
 
-*Proposed fix:* bump api =mem_limit= (and the matching reservation) to 768 MiB or 1 GiB in =docker-compose.prod.yml=. Cheapest immediate stop-loss; pairs with the SSE-cleanup bug below.
+#+begin_src js
+const scrapeId = body?.data?.id;
+if (!scrapeId) {
+  setStatus(sendStatus, 'Sent, but no scrape id returned.', 'error');
+  ...
+#+end_src
 
-*Why P1:* OOM kills every in-flight request including MCP auth, so the user sees the whole api flicker red even for tools that have nothing to do with SSE.
+Response wasn't 4xx/5xx (else =!resp.ok= at 1257 would have caught
+with "Error: HTTP N"), and wasn't 409 (handled at 1234). So api
+returned a 2xx body whose =data.id= is missing/falsy.
 
-*Related:* SSE worker not releasing on client disconnect (sibling Bug entry).
-*** SHIPPED Consolidated frontend pin bump — dual-flash + scrape-graph dagre
+The api endpoint at
+=api/job_hunting/api/views/scrapes.py:932-942= returns:
+
+#+begin_src python
+return Response(
+    {
+        "data": scr_ser.to_resource(scrape),
+        "meta": {"apply_match": ..., "referrer_match": ...,
+                 "canonical_redirect": ...},
+    },
+    status=status.HTTP_202_ACCEPTED,
+)
+#+end_src
+
+So =body.data.id= should be the scrape id under normal flow.
+
+Investigation paths:
+1. Did =ScrapeSerializer.to_resource(scrape)= regress to a shape
+   without =id=? Recent api commit =26caa82 feat(scrape): Phase A
+   extension direct-POST primitives= may have touched it.
+2. Is there a short-circuit return on from-text that emits
+   =Response({"data": None, ...}, 202)=? Grep =scrapes.py= for any
+   202 without scr_ser.to_resource.
+3. Could the popup hit an unexpected status (e.g. 204 — body parsed
+   to null at popup.js:1228-1232)? If so, =resp.ok && body===null=
+   would skip the 4xx/5xx branches and land at line 1265 with
+   undefined =body.data.id=.
+
+Repro hint: the page Doug was on captured no structured prefill
+(all hints dashes). That's compatible with either a page with no
+matching ScrapeProfile selectors or a page the content script
+couldn't reach (e.g. file://, chrome://, or PDF). The from-text
+fallback should still succeed — find which host pattern broke.
+
+Acceptance:
+- Identify which 2xx shape lacks =data.id= (serializer bug vs
+  short-circuit vs 204 status).
+- Either fix the api response shape OR the popup's fallback
+  message (if there's a legitimate scrape-less code path, the
+  error string is wrong).
+- Add a regression test on whichever side moved.
+
+Cross-link: extension lives in =frontend/public/extensions/career-caddy-sender/=
+(see memory =reference_extension_lives_in_frontend=). cc-frontend
+or cc-api own this depending on which side regressed.
+*** SHIPPED [#A] Same prompt-ordering anti-pattern in job_scorer_prompt.j2 + summary_service_prompt.j2
 :PROPERTIES:
-:CREATED: [2026-06-03]
-:LAST_TOUCHED: [2026-06-09]
+:LAST_TOUCHED: [2026-06-10]
+:MERGE_SHA: d786c26
+:API_PR: 165
+:PARENT_PR: 257
 :END:
+2026-06-10: Surfaced while fixing =cover_letter_prompt.j2= (PR #163). The cc-api agent's pattern survey found the same trailing =Additional Instructions:= anti-pattern in two more templates:
 
-Two frontend fixes accumulated; consolidated parent pin bump in
-flight via cc-orchestrator agent:
+- =api/templates/job_scorer_prompt.j2=
+- =api/templates/summary_service_prompt.j2=
 
-- PR #172 (=fd4ad6d=) — answer-save dual-flash fix
-- PR #173 (=d1c0b89=) — scrape-graph dagre node-width fix
+Both put =injected_prompt= AFTER leading hard constraints, so any user-injected instruction is anchored-out by the leading directives — exactly the failure mode diagnosed in =application_prompt_builder.py:215-219=.
 
-Bump target: frontend =b54229d= → =d1c0b89=. Both fixes ride along.
+*** SHIPPED careercaddy-worker perma-unhealthy — inherits api image curl:8000 healthcheck
+:PROPERTIES:
+:CREATED:       [2026-06-16]
+:LAST_TOUCHED: [2026-06-16]
+:END:
+Found 2026-06-16 while verifying the GH-deploy fix. careercaddy-worker shows Up (unhealthy) since container start (FailingStreak 8732 = every 30s probe since boot). Root cause: the worker shares the api image, whose Dockerfile HEALTHCHECK curls http://127.0.0.1:8000/api/v1/healthcheck. Correct for gunicorn api; the worker runs manage.py qcluster with no HTTP surface so the probe is always connection-refused. The worker is actually FINE — django_q_task shows scheduled sweeps (federation_dispatch_sweep, sweep_stale_scrape_claims) completing every minute, all success. A 06-15 17:26 'could not translate host name db' CRITICAL was transient (disk-full/docker-instability aftermath); db resolves now (same network, alias present) and the cluster reincarnated+recovered. Fix: healthcheck disable:true on the worker in docker-compose.prod.yml + docker-compose.yml (no cheap worker probe catches the real failure mode; disable beats green-theater). Branch fix/worker-disable-inherited-healthcheck (commit 5cb77bd) pushed; PR pending gh re-auth. STRT until merged+deployed.
+*** TODO Flaky test_non_stub_link_hit_is_duplicate_not_overwritten
+:PROPERTIES:
+:CREATED:       [2026-06-16]
+:LAST_TOUCHED:  [2026-06-16]
+:END:
+Passes in isolation but fails inside the full api suite (1527 tests). In job_hunting/tests/test_job_post_extractor.py it asserts a non-stub JobPost description is not overwritten on a same-link hit. Run alone, DescriptionArbiter chooses keep_existing and it passes; buried in the full run it overwrote (got Replacement description instead of the rich text). The same batch logged a real tracker_resolver network read timeout, so DescriptionArbiter likely makes a nondeterministic or networked call under load. Causes spurious CI reds. Found 2026-06-16 while shipping the api signals.py pin bump.
+** Fix
+Mirror PR #163's pattern: move the =injected_prompt= block to the TOP of each template under the verbatim header used by the answer-builder:
 
-Parked stale local branch =feature/bump-frontend-dual-flash-fix=
-(pin target =fd4ad6d=, predates PR #173) will be deleted by
-orchestrator as part of cleanup.
+#+begin_example
+## User Instructions (PRIORITY — these override the default behavior and output format guidance below)
+{{ injected_prompt }}
+#+end_example
 
-** Smoke after Deploy
+** Receipts
+- Anti-pattern source: =api/job_hunting/lib/services/application_prompt_builder.py:215-225=
+- Cover-letter fix (precedent): PR #163 (https://github.com/overcast-software/career_caddy_api/pull/163)
 
-- =https://careercaddy.online/job-posts/<id>/questions/<qid>/answers/new=
-  → submit a plain answer, confirm exactly one flash
-- =https://careercaddy.online/scrapes/<id>/graph=
-  → confirm rightmost node label is visible
+** Followups
+- Verify each template's call site actually passes =injected_prompt= through the service layer before fixing. If a template renders =injected_prompt= but no caller supplies it, the fix is dead code; either delete the block OR wire the caller.
+- Add the same ordering test pattern (=TestCoverLetterPromptOrdering=-style) to the scorer + summary services.
+*** TODO jp.show — completed scrape doesn't trigger JobPost description re-render
+2026-06-10: Followup deferred from frontend PR #191 (commit f8de6de,
+"fix(jp.new): land paste/scrape submit on the nested scrape detail").
 
+That PR fixed the navigation only — both =/job-posts/new/paste= and
+=/job-posts/new/scrape= now route to =job-posts.show.scrapes.show=
+on save. What it did NOT fix: when the scrape completes, the
+JobPost's description / extracted fields don't re-render in the
+parent =job-posts.show= context until the user manually refreshes.
+
+Suspect: =job-posts/show= route's =model()= resolves the JobPost
+once at navigate-in; when the nested scrape transitions =hold= →
+=running= → =done= and the api writes back to the JobPost columns,
+the parent model isn't reloaded.
+
+Likely fix: on the scrape completion event (already polled by the
+scrapes.show controller via the pollable service), trigger
+=this.modelFor('job-posts.show').reload()= so the description
+panel and downstream computed-properties refresh. Verify against
+the existing pollable wiring — there may already be a hook.
+
+Repro:
+1. Submit a URL at =/job-posts/new/scrape=.
+2. Land on =job-posts.show.scrapes.show= (PR #191 fix).
+3. Scrape runner picks it up, completes.
+4. Scrape detail UI updates (status badge etc.).
+5. But the JobPost description / title / company fields on the
+   parent show route remain at their pre-scrape state until a hard
+   refresh.
+
+Acceptance: post-scrape-completion, the JobPost-level fields
+visible on =job-posts.show= reflect the scrape's extracted data
+without manual reload.
+*** SHIPPED Cover-letter injected_prompt ignored — template ordering puts it after hard constraints
+:PROPERTIES:
+:API_PR:   https://github.com/overcast-software/career_caddy_api/pull/163
+:LAST_TOUCHED: [2026-06-16]
+:END:
+2026-06-10: =injected_prompt= reaches the LLM via =api/templates/cover_letter_prompt.j2= but is placed at the BOTTOM in a weak =Additional Instructions:= block, after a long list of leading hard constraints (=Output plain text only=, =No Markdown=, =Do not use the words moreover…=). The model anchors on the leading constraints and ignores the trailing injection.
+
+The same anti-pattern is explicitly diagnosed in =api/job_hunting/lib/services/application_prompt_builder.py:215-219=, which is what =answer_service= uses — that builder lifts =injected_prompt= to the TOP under a =## User Instructions (PRIORITY — these override the default behavior and output format guidance below)= header. Answers work because of that ordering; cover-letters don't because they ignored it.
+
+**** SHIPPED verified shipped 2026-06-16
+:PROPERTIES:
+:CREATED:       [2026-06-16]
+:LAST_TOUCHED: [2026-06-16]
+:END:
+api fb121a9 lifts injected_prompt to top of templates/cover_letter_prompt.j2 (PRIORITY block, mirrors application_prompt_builder.py). Parent pin 43dc340 / PR #280, Deploy run 27472390135 green 2026-06-13. fb121a9 is ancestor of the pinned api SHA. No remaining work.
+*** STRT SSE disconnect fix incomplete — stuck stream pegs gunicorn worker
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-10]
+:API_PR:   https://github.com/overcast-software/career_caddy_api/pull/164
+:END:
+2026-06-10 incident: API became unresponsive during interview-prep window. Healthcheck went 14.7s → 504 in 120s. Root cause: an SSE =/api/v1/events/= stream wedged a sync gunicorn worker for the full 120s timeout; with only 2 workers, one stuck stream effectively halved capacity and queued all other requests behind it.
+
+Recent =feature/api-sse-disconnect-fix-pin-bump= (api commit 1d09e6f) did not catch this case. Stack trace from prod log:
+
+#+begin_example
+File "/app/job_hunting/api/events.py", line 221, in _event_stream
+  readable, _, _ = select.select(...)
+... WORKER TIMEOUT (pid:298) ... SIGKILL ... Perhaps out of memory?
+#+end_example
+
+The select.select() blocked past the disconnect-detection path. Worker was SIGKILL'd by gunicorn arbiter, not OOM (mem was 277M / 768M).
+
+Hot mitigations applied on racknerd =/opt/stacks/careercaddy.online/docker-compose.prod.yml=:
+- =GUNICORN_WORKERS= 2 → 4
+- =Q_WORKERS= 1 → 4
+
+Followups:
+- Diagnose why disconnect detection didn't fire on this SSE connection (timing? client behavior?). Re-read =job_hunting/api/events.py= around the select loop.
+- Consider an async/gevent worker class for the SSE endpoint specifically, OR move SSE off the sync gunicorn worker pool entirely.
+- Revisit whether 4 gunicorn workers is the right steady-state for racknerd's 768M api =mem_limit=, or if SSE-on-async is the durable fix and we can drop back to 2.
+- Decide whether to keep =Q_WORKERS=4= or roll back to 1 once SSE is resolved.
+
+Same incident: stopped =nesarad.com= + =wedgewood= ghost stacks to reclaim ~740M RAM; those need to come back online post-interview.
+*** TODO [#C] Resume import failed resume id 41
+** Followups
 ** Cross-links
 
 - Parent PR: filed by orchestrator (will land in this same Inbox item
@@ -2152,7 +2487,7 @@ Orchestrator will report parent PR URL + merge SHA + Deploy run URL
 when it lands. I (orchestrator-claude) will promote this entry to
 DONE when the parent PR merges and to SHIPPED when its Deploy is
 green.
-*** TODO inspect_scrape_html serialization crashes on BS4 class lists
+*** TODO [#B] inspect_scrape_html serialization crashes on BS4 class lists
 :PROPERTIES:
 :CREATED: [2026-05-28]
 :LAST_TOUCHED: [2026-06-03]
@@ -2174,27 +2509,27 @@ Error calling tool 'inspect_scrape_html':
 *Test that would have caught it*: a fixture HTML with =<div class="a b c">= matched by a selector, asserted to round-trip through =yaml.safe_dump(query_selector(html, selector))= without raising.
 
 *Scope*: agents/lib/scrape_inspector.py + tests/test_scrape_inspector.py
-*** TODO sweep_stuck_scoring cron — paired with model.isPending gate
+*** TODO [#B] sweep_stuck_scoring cron — paired with model.isPending gate
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-28]
 :END:
 Now that the spinner gate reads =status= directly off the record (per-model =isPending= getter, shipped 2026-05-13), a Score / CoverLetter / Summary / Scrape that gets stuck in a non-terminal state on the server (worker dies mid-flight, OOM, exception bypasses the =finally=) will spin forever in the UI on every visit. We already have =sweep_stuck_extracting= for Scrape; need the equivalent for Score (and probably CoverLetter / Summary). Two-prong: (1) wrap the worker entrypoints in =try / except / finally= that ALWAYS sets a terminal status, (2) periodic management command (cron) that flips records older than N minutes in pending states to =error= with a reason. Surfaces as =/api/v1/sweep_stuck_<resource>/= mgmt commands; runs on the api container schedule. Should mirror =sweep_stuck_extracting= shape exactly so ops behavior is consistent.
-*** TODO from-text inline scorer span detached from parent request :api:agents:
+*** TODO [#B] from-text inline scorer span detached from parent request :api:agents:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
 Diagnosing the JP 2045 description-clobber required pulling a gpt-5 scorer span (id 4254ad0101bf8519) whose =parent_span_id= was null even though it was kicked off inline by =POST /scrapes/from-text/=. Naive logfire trace queries by trace_id miss it; you have to widen by user/time. This hid the score-vs-extract ordering on the from-text path and matters anytime we investigate any score/extract race on extension-sourced scrapes. Fix shape: when =/scrapes/from-text/= triggers the inline scorer, propagate the request's span context so the scorer span attaches to its parent. Affects =api/job_hunting/api/views/scrapes.py= from-text handler + the scorer kickoff. Verification: a new from-text POST should show the scorer span as a child of the request span in logfire.
-*** TODO linkedin.com extraction_hints overfires on rich extension captures :scrape:extension:
+*** TODO [#A] linkedin.com extraction_hints overfires on rich extension captures :scrape:extension:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
 ScrapeProfile id=2 (linkedin.com) =extraction_hints= emits =[DESCRIPTION NOT CAPTURED]= whenever ="Use AI to assess how you fit"= appears followed by ="Looking for talent?"=. That gate is correct for Camoufox poller partial-hydration captures (added 2026-05-03) but misfires on EVERY cc_sender extension capture of a LinkedIn jobs/view page — top card always carries the AI button, LinkedIn footer always carries ="Looking for talent?"=, and the full description sits BETWEEN them. The rule is presence-only and never measures body length / absence-of-description tokens. Concrete repro: JP 2045 / scrape 422 — Stripe Backend/API Engineer, ~9KB cc_sender capture, scorer correctly scored 82 from =Scrape.job_content= but extractor wrote the placeholder into =JobPost.description=. Fix shape: tighten extraction_hints to require body between company-name and LinkedIn-footer is <~500 chars OR contains NONE of {Responsibilities, Qualifications, About the job, What you'll do, Who you are, Minimum Requirements} BEFORE emitting the placeholder. Belt-and-suspenders: =parse_scrape= should bypass the partial-render heuristic when =scrape.source = 'extension'=. Verification: re-run =parse_scrape= against scrape 422 post-fix; JP 2045 description should land as the real Stripe body, not the placeholder. Architecture note exists in =Operations/Scrape Log= [2026-05-13 14:35].
-*** TODO stagger-rows replays after logout-and-back or row delete on list pages :frontend:
+*** TODO [#C] stagger-rows replays after logout-and-back or row delete on list pages :frontend:
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
 Narrow regression introduced by the destroyed-record invalidation in =frontend/app/utils/list-model.js= (shipped 2026-05-13). When the cached =InfinityModel= holds destroyed records — happens after logout/login or after =record.destroyRecord()= — the cache is invalidated, the DOM is rebuilt, and the =stagger-rows= entry animation replays from row 1. Reads as a full page reload. Normal tab nav between list routes is unaffected; cache hits + animation stays suppressed. Defer; users can not log in is the higher priority. Architecture note: =Architecture/list-model.js cache — list-route InfinityModel + destroyed-record invalidation= for full context.
-*** TODO Logout then login shows another user's score
+*** TODO [#A] Logout then login shows another user's score
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-13]
 :END:
@@ -2204,7 +2539,7 @@ After logout + login as the same user, the popup (or app?) displayed a score bel
 :LAST_TOUCHED: [2026-05-06]
 :END:
 On scrapes/:id (e.g. /scrapes/334), when the scrape redirected to a canonical child (e.g. 335), the show page renders no job-post or company even though JobPost 1735 was successfully created from 335. The graph-trace endpoint already walks meta.chain across source_scrape; scrapes.show frontend does not. Two reasonable fixes: (a) on the api side, when PersistJobPost runs on the canonical scrape, also set the parent tracker scrapes job_post FK so both ids resolve the same JobPost; (b) on the frontend, when scrape model carries a redirected_to_id (or the latest_status_note matches /redirected to scrape (\d+)/), follow the chain in the scrapes.show route and render the canonical scrapes JobPost. Repro: scrape 334 (governmentjobs.com tracker) → forks scrape 335 (canonical with jobId param) → JobPost 1735 created. /scrapes/334 shows no JobPost; /scrapes/335 should and presumably does.
-*** TODO SPC o c should reload todo.org before capture
+*** TODO [#C] SPC o c should reload todo.org before capture
 :PROPERTIES:
 :CREATED:  [2026-05-04]
 :TAGS:     bugs:emacs:
@@ -2219,13 +2554,13 @@ changes) on the target file before inserting.
 ** PLAN ActivityPub
 *** i want frontend:job-posts.edit to allow me to edit canonical link, apply_url, and duplicates.
 *** There can be duplicates from more than one source, and this is a not a parent relationship as we coded up.  It feels more like a many-to-many is a many to many for me.  if we need to make a new jp for the apply_url that is a consideration.
-**** TODO Document all columns in job post and add comments to the model
-**** TODO validate this statement: are we saying an apply_url should be a job-post parent and that duplicates are ATS generated links?
-**** TODO question: how does canonical link help with deduping
+**** TODO [#C] Document all columns in job post and add comments to the model
+**** TODO [#C] validate this statement: are we saying an apply_url should be a job-post parent and that duplicates are ATS generated links?
+**** TODO [#C] question: how does canonical link help with deduping
 background: while working with ccsender it's obvious that we fail to grab this.
-**** TODO Document deduping as a mermaid uml diagram.  add the plaintext to the root
+**** TODO [#C] Document deduping as a mermaid uml diagram.  add the plaintext to the root
 ***  i have documentation of research for making this application a [[file:~/.claude/plans/sequential-scribbling-wall.md][activitypub]] application (link in notes seems lost now)
-**** TODO please consult or recreate documentation for this appliction
+**** TODO [#C] please consult or recreate documentation for this appliction
 *** in activity pub job-posts would shared across instances.  with this in mind, re-architect a job post's relationship to other job posts.
 *** I want to be able to link items that are the same job post but came via different email  (linkedin, ziprecruiter, indeed etc.)
 *** While activity pub is a future roadmap item, I want it brought into consideration in anticipation of it's adoption.
@@ -2235,33 +2570,30 @@ background: while working with ccsender it's obvious that we fail to grab this.
 *** right now out deduping feels flawed
 **** I suspect that if I am able to set duplicates and see the relationships I will be better able to inform you how to setup deduplication logic
 *** job searching is going to be a collaborate effort between career caddy instances
-** TODO https:  careercaddy.online job-posts 985 job-applications
+** TODO [#C] https:  careercaddy.online job-posts 985 job-applications
 :PROPERTIES:
 :LAST_TOUCHED: [2026-05-04]
 :END:
 what jp.show.job-application.show
-** TODO spc o c should reload the file before adding capture
-** TODO I can only see one user in ai-spend
-** TODO ban 84.32.70.55
-:PROPERTIES:
-:TRIAGE_NOTE: candidate=infra conf=0.75
-:END:
-** TODO block 195.178.110.9
-:PROPERTIES:
-:TRIAGE_NOTE: candidate=infra conf=0.75
-:END:
-** TODO https:  careercaddy.online job-posts 1551
+** TODO [#B] I can only see one user in ai-spend
+** TODO [#C] https:  careercaddy.online job-posts 1551
 why two canonical?
 ** boot IP 130.12.180.144
 :PROPERTIES:
 :TRIAGE_NOTE: candidate=infra conf=0.75
 :END:
 attempted /.env
-** TODO I want to see if camoufox can get passed click blockers
+** TODO [#C] I want to see if camoufox can get passed click blockers
 detectobsticle
 ** PROJ [#B] when adding "vetted bad good' the current filters on jp.index filter out the item dynamically
-** TODO didn't we want mailto: as a link ?
-** TODO deleting a job-post makes job-posts.index freak out and claim job-post doesn't have a company :bug:
+** TODO [#C] didn't we want mailto: as a link ?
+** SHIPPED [#A] deleting a job-post makes job-posts.index freak out and claim job-post doesn't have a company :bug:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-10]
+:MERGE_SHA: d786c26
+:FRONTEND_PR: 189
+:PARENT_PR: 257
+:END:
 :PROPERTIES:
 :TRIAGE_NOTE: candidate=bugs conf=0.70
 :END:
@@ -2337,7 +2669,7 @@ Projects
 * Active :IMPORTANT:
 Work that should happen. Categories carry =[done/total]= cookies.
 
-** TODO Ingest abuse defense — Phase 2 (provenance + pipeline) :api:agents:security:scrape:
+** TODO [#B] Ingest abuse defense — Phase 2 (provenance + pipeline) :api:agents:security:scrape:
 Phase 2 follow-up. Single deliverable for vector I5
 (client-asserted (link, text) pair). Plan at
 =~/.claude/plans/dazzling-stirring-church.md=.
@@ -2382,7 +2714,7 @@ redirect-resolve vs path-rewrite classes before any next attempt.
 
 Toggle ladder (per-user, per-source overrides) deferred to Phase 3.
 
-** TODO LinkedIn off-platform-managed variant detection :ai:scrape:linkedin:
+** TODO [#B] LinkedIn off-platform-managed variant detection :ai:scrape:linkedin:
 :PROPERTIES:
 :CREATED:  2026-05-02
 :END:
@@ -2431,7 +2763,7 @@ distinguishing markers, recovery options). cc_auto/notes.org
 mirror under =LinkedIn off-platform-managed posting variant —
 known-unscrapable [2026-05-02]=.
 
-** TODO LinkedIn flagship-web SPA needs hydration-aware wait, not just CSS :scrape:ai:
+** TODO [#B] LinkedIn flagship-web SPA needs hydration-aware wait, not just CSS :scrape:ai:
 :PROPERTIES:
 :CREATED:  2026-05-01
 :END:
@@ -2453,9 +2785,10 @@ client-side. Options:
   ScrapeProfile fields (currently the wait timing is hard-coded in
   =agents/scrape_graph/nodes/wait_ready.py= / =capture.py=).
 
-** TODO Scrape parent left in =running= when ResolveFinalUrl forks a child :scrape:api:
+** SHIPPED [#A] Scrape parent left in =running= when ResolveFinalUrl forks a child :scrape:api:
 :PROPERTIES:
 :CREATED:  2026-05-01
+:LAST_TOUCHED: [2026-06-10]
 :END:
 Scrape #257 (linkedin login URL) ran StartScrape → LoadProfile →
 Navigate → DetectObstacle → ResolveFinalUrl, where the
@@ -2495,9 +2828,9 @@ Scope: read-only, gated to staff or scrape-owner. Source of motivation:
 "Senior Software Engineer Code Scanning", correctly landed but extractor
 failed on both tiers — no JobPost created, user couldn't tell why
 without external tooling).
-** TODO replace ↗ with {{link.hostname}} ↗ :scrape:
+** TODO [#C] replace ↗ with {{link.hostname}} ↗ :scrape:
 https://job-boards.greenhouse.io/defenseunicorns?error=true
-** TODO Verify apply-resolver on a real scrape per seeded host :tier6:scrape:
+** TODO [#B] Verify apply-resolver on a real scrape per seeded host :tier6:scrape:
 Queue one job URL per seeded host (linkedin, greenhouse + boards,
 lever + jobs, jobot, indeed, ziprecruiter), let the poller pick up,
 confirm =JobPost.apply_url{,_status,_resolved_at}= populates and
@@ -2524,17 +2857,6 @@ Do NOT conflate with =JobPost.application_url= — one is the entry point
 (per-application). See =notes.org::*Apply-destination resolution= for
 the full semantic split.
 
-** TODO [#C] Subnav control sizing is inconsistent :frontend:scrape:
-[2026-04-20] =/job-posts= subnav stacks =Search= (input), =Filters= (compact
-HyperUI-style dropdown trigger =px-2.5 py-1 text-xs= bordered), and
-=+ New Job Post= (app =.btn=, taller + bigger text). Heights don't line
-up. Same mismatch will land anywhere else we add more subnav controls
-(applications, scrapes, resumes). Decide:
-- unify on =.btn= height with a =.btn.ghost= variant for non-primary
-  actions like Filters, OR
-- downsize =.btn= on list/index pages to match the compact control.
-Pick one and roll out so subnav reads as a single bar. Blocks clean
-filter-menu rollout beyond job-posts.
 ** https:  careercaddy.online scrapes 189 :scrape:
 its a stubbed that short circuted
 
@@ -2548,7 +2870,7 @@ I have not approved the list
 ** TODO [#C] Reactive Resume plugin resumerx :PENDING_APPROVAL:frontend:
 [[file:notes.org::*Reactive Resume as a PDF-render plugin][Plugin architecture + scope → notes.org]]
 
-*** TODO ResumeRX MVP spike :api:frontend:
+*** TODO [#C] ResumeRX MVP spike :api:frontend:
 [2026-04-20] Pre-plugin round-trip proof on =feature/rxresume-mvp=.
 Steps: (1) =api/rxresume-dev.yml= compose brings up rxresume +
 postgres + minio + chromium on localhost:3333; (2) manual API-key
@@ -2559,10 +2881,9 @@ import→print→delete round-trip; (5) =?format=pdf= on existing
 feeds the eventual plugin PR.
 [[file:notes.org::*Reactive Resume — MVP spike][Full plan → notes.org]]
 
-** IDEA Flash message slide-wipe transition :frontend:
-Queue sequential display instead of stacking. First flash finishes its time, slides left, next slides in.
-** TODO tiny button to go to  companies <id> :frontend:
-** TODO Reports: applies-by-hostname cut on sources sankey :tier6:frontend:
+** TODO [#C] tiny button to go to  companies <id> :frontend:
+where did I want this?  job-posts/show
+** TODO [#C] Reports: applies-by-hostname cut on sources sankey :tier6:frontend:
 Add an "applies-by-hostname" cut on the sources sankey distinct
 from the entry-URL hostname — postings often live on a tracker but
 resolve through to a real ATS, and the rollup should reflect the
@@ -2586,7 +2907,7 @@ the BaseSerializer fields[<type>] patch.
 *** Resume is different in that we presume includes most of the time. :frontend:
 this problem seesaws on either remove slim and use includes explicitly and fields when you want slim.  removing implicit includes has it's own trade offs
 
-** TODO Retire dead jinja resume-export path :api:
+** TODO [#B] Retire dead jinja resume-export path :api:
 [2026-04-26] Cleanup follow-up after [#A] audit. Three orphaned
 artifacts of the deprecated docxtpl-based export, all reachable only
 via =ResumeExportService= (which has no callers):
@@ -2617,7 +2938,7 @@ solely for the dead surface. One PR, one concern.
 
 [[file:notes.org::*Resume Word-export jinja audit][Original audit]]
 
-** TODO Deep-link navigate targets into resume edit form (anchors) :APPROVED:chat:
+** TODO [#C] Deep-link navigate targets into resume edit form (anchors) :APPROVED:chat:
 [2026-04-18 ai+frontend] Follow-on from the "no editing linked
 resources via chat" decision. When chat sends a user to
 =/resumes/{id}/edit= to fix something, it currently drops them at
@@ -2682,7 +3003,7 @@ Career Data this session. Still TODO:
   the current one so Career Data picks it up; then add a job post")
   and embed it as an App Guide section the agent can quote.
 
-** TODO JobPost dedupe — merge company_id into NULL-fingerprint stubs :api:dedupe:
+** TODO [#B] JobPost dedupe — merge company_id into NULL-fingerprint stubs :api:dedupe:
 
 :PROPERTIES:
 :CREATED: [2026-04-30]
@@ -2699,26 +3020,14 @@ the existing stub has a NULL company (Microsoft regression #22 in the
 =stage5.fingerprint_null_risk= warnings once the introspection PR
 (E+F+H) ships, so we'll have data on how often the precondition fires
 before designing the fix.
-** TODO delete ->
+** TODO [#C] delete :frontend:
 *** delete everything ( nuclear ) should scroll to section with the aditional dialog.
 job-post.show.delete
 *** regular users should not be able to remove job-posts if other people have data on them.
-** TODO jp 2045
+** TODO [#B] jp 2045 - ensure job-application isn't updated by caddy inbox.
 how did that get complete designation
-** PLAN need to either merge jps together or associate them better i.e. join table
-*** how?
-*** why?
-I see duplicate jps but I want to do something about it
-*** what?
-duplicates feels like a chore I can't action upon
-**** IDEA application to one that's deemed duplicate could be referenced
-**** IDEA give duplicatation pill on list view
+it was email correspondence incorrectly applying "complete" instead of "contact"
 
-*** when?
-When encountering a duplicate I want to be able to take action
-I don't know if that's in the edit page or the show page.
-show page does have a lot of actions, but we hide complexity in the edit page.
-***
 * Backlog
 ** PROJ [#C] Electron desktop app feasibility :PENDING_APPROVAL:
 :PROPERTIES:
@@ -2760,27 +3069,38 @@ Tasks:
   navigate marker is present in the sub-agent's response.
 
 ** PROJ Feature sorting tables
+** TODO [#C] Subnav control sizing is inconsistent :frontend:scrape:
+[2026-04-20] =/job-posts= subnav stacks =Search= (input), =Filters= (compact
+HyperUI-style dropdown trigger =px-2.5 py-1 text-xs= bordered), and
+=+ New Job Post= (app =.btn=, taller + bigger text). Heights don't line
+up. Same mismatch will land anywhere else we add more subnav controls
+(applications, scrapes, resumes). Decide:
+- unify on =.btn= height with a =.btn.ghost= variant for non-primary
+  actions like Filters, OR
+- downsize =.btn= on list/index pages to match the compact control.
+Pick one and roll out so subnav reads as a single bar. Blocks clean
+filter-menu rollout beyond job-posts.
 * Icebox
 Deferred but not dead. Same category layout.
 
-** TODO Ian Finnis letter :PENDING_APPROVAL:APPROVED:
+** TODO [#C] Ian Finnis letter :PENDING_APPROVAL:APPROVED:
 [[file:notes.org::*Ian Finnis letter][Considerations → notes.org]]
 
 
 ** LOOP [#C] As a superuser I want to be able to manage user accounts :APPROVED:infra:
 [[file:notes.org::*Superuser account management][Considerations → notes.org]]
-** TODO decide on user roles and be able to manage them as admin :infra:
+** TODO [#C] decide on user roles and be able to manage them as admin :infra:
 
-** TODO scrape icon better than paperclip ? :extension:
+** TODO [#C] scrape icon better than paperclip ? :extension:
 
-** TODO Wizard assistance — contextual flash messages or chat surface :frontend:wizard:
+** TODO [#C] Wizard assistance — contextual flash messages or chat surface :frontend:wizard:
 :PROPERTIES:
 :CREATED: [2026-05-07]
 :LAST_TOUCHED: [2026-05-08]
 :END:
 Iceboxed 2026-05-08. No evidence users get stuck mid-wizard; static copy + sidebar-visible "Setup wizard" link covers the surface. Reopen if real users report confusion. Option A (flash hints, ~1hr) is the cheap revival path; Option B (chat-embed in wizard) is dead — see =:dead:= notes.org Phase 3b.2 mention if it exists, otherwise the chat-embed surface is not getting built without a different reason than onboarding-help.
 
-** TODO Extension help button — context-passing /help route :extension:
+** TODO [#C] Extension help button — context-passing /help route :extension:
 :PROPERTIES:
 :CREATED: [2026-05-08]
 :LAST_TOUCHED: [2026-05-08]
@@ -2862,3 +3182,5 @@ api-1       | 172.19.0.1 - - [30/Apr/2026:16:57:50 -0700] "POST /api/v1/scrapes/
 *** who is calling llm-extract? :scrape:
 *** what is the error for? :scrape:
 *** My resume never parsed :( :scrape:
+** IDEA Flash message slide-wipe transition :frontend:
+Queue sequential display instead of stacking. First flash finishes its time, slides left, next slides in.

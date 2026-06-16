@@ -8134,3 +8134,1386 @@ Plumbing:
 3. =POST /scrapes/from-text/= accepts optional =structured_prefill= dict; persisted on =Scrape= (new JSONField), surfaced as a Tier1 prior in the extractor.
 
 Reload =~/.claude/plans/you-have-the-diagram-woolly-sifakis.md= for the parent context — this is the natural next step after =extension_selectors= proves the api-as-source-of-truth model works.
+
+* SHIPPED chat_server httpx.ReadTimeout on api v1 me — root cause for no-response fallback
+:PROPERTIES:
+:CREATED: [2026-06-04]
+:REPORTED_BY: orchestrator-claude via logfire
+:RELATED_TO: Inbox/chat reply renders the no-response fallback literal — empty-accumulated path in chat.js
+:LAST_TOUCHED: [2026-06-04]
+:PR_URL:   https://github.com/overcast-software/career_caddy_agents/pull/35
+:MERGE_SHA: 2b0e548de2f2ead9263c02e4ba3a309f494f33ca
+:NEEDS_PIN_BUMP: yes
+:AGENTS_PR_SHA: 401ede20f662a35a1e8530d718bf4f7108dc0238
+:DEPLOYED_AT: [2026-06-04 16:30]
+:DEPLOYED_RUN: 26963292164
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+Tags: =:agents:mcp:chat:bugs:=.
+
+Symptom: =chat_server= MCP intermittently hangs on its outbound
+HTTP call to =/api/v1/me/= for ~5 seconds, raises
+=httpx.ReadTimeout=, and returns no assistant text. The frontend
+then renders the =(no response from agent)= fallback. This is the
+root cause for the sibling frontend entry above.
+
+Logfire evidence — last 48h, same =url_full=
+=http://api:8000/api/v1/me/=:
+
+| time UTC               | service           | result                          |
+|------------------------+-------------------+---------------------------------|
+| 2026-06-04 15:17:37    | chat_server       | httpx.ReadTimeout 5.04s         |
+| 2026-06-02 21:27:38    | chat_server       | httpx.ReadTimeout 5.02s         |
+| 2026-06-02 21:27:10    | chat_server       | httpx.ReadTimeout 5.04s         |
+| same window many calls | public_mcp_server | OK 50-200ms, hundreds of times  |
+
+The api endpoint is fine. Only =chat_server= hangs. Both servers
+live in =agents/mcp_servers/= and call the same upstream.
+
+Suspects:
+
+1. *Auth header difference.* =public_mcp_server= passes a per-client
+   =jh_*= API key under =Authorization: Bearer=. =chat_server= may
+   be passing a JWT that has expired by the time =/me/= is hit, and
+   the api side hangs instead of 401-ing cleanly. Compare the two
+   servers' httpx client construction in =agents/mcp_servers/=.
+2. *httpx client pool exhaustion or stale connection.* If the
+   =chat_server= keeps a single =httpx.AsyncClient= for the lifetime
+   of an SSE conversation and the underlying TCP connection gets
+   killed by the docker network mid-call, the next call hangs to
+   the default 5s read timeout. =public_mcp_server= may construct a
+   fresh client per request and dodge this.
+3. *Token refresh deadlock.* If =chat_server='s auth path acquires a
+   lock to refresh the JWT and that lock is never released on
+   failure, subsequent calls block — but logfire would show the
+   block as a non-=httpx= hang, not =httpx.ReadTimeout=. Less
+   likely.
+
+Acceptance criteria:
+- Identify the structural difference between =chat_server= and
+  =public_mcp_server='s httpx clients / auth header construction.
+- Either fix =chat_server= to use the same shape as
+  =public_mcp_server= for the =/me/= call, or wrap the call with a
+  timeout + recovery path so a transient hang doesn't return zero
+  text to the SSE stream.
+- When the timeout fires, =chat_server= should still emit an
+  =AG_UI.RUN_ERROR= event so the frontend can render a real error
+  message instead of the bare fallback.
+- Add a logfire alert / pydantic-graph trace marker so this
+  regression surfaces immediately if it recurs.
+
+No cc-agents subagent exists yet — this stays in Inbox until
+either the general-purpose agent picks it up or a cc-agents
+subagent is created. See parent =todo.org Inbox=
+=diycloud — thin CLAUDE.md ...= entry for the broader question
+of whether to carve a cc-agents subagent.
+
+Cross-links:
+- [[file:notes.org::*AI Chat — Architecture Reference]] — chat
+  message flow, AG-UI wiring
+- [[file:agents/notes.org::*Architecture/MCP server boundary]] —
+  the four-MCP-server table, which servers ship to prod
+- [2026-06-04] orchestrator-claude shipped agents PR 35 — merges /me/ into one fetch + emits RunErrorEvent on httpx failure
+
+* SHIPPED chat reply renders the no-response fallback literal — empty-accumulated path in chat.js
+:PROPERTIES:
+:CREATED: [2026-06-04]
+:REPORTED_BY: Doug
+:SEEN_AT: production chat
+:LAST_TOUCHED: [2026-06-04]
+:PR_URL:   https://github.com/overcast-software/career_caddy_frontend/pull/175
+:MERGE_SHA: 2b0e548de2f2ead9263c02e4ba3a309f494f33ca
+:NEEDS_PIN_BUMP: yes
+:FRONTEND_PR_SHA: 831be57d0d6dc40719b9e0b9d6dfba2c413721e3
+:DEPLOYED_AT: [2026-06-04 16:30]
+:DEPLOYED_RUN: 26963292164
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+Tags: =:frontend:chat:bugs:=.
+
+Symptom: chat reply rendered as the literal fallback string
+=no response from agent= surrounded by parens for at least one turn
+observed in prod chat.
+
+Location of the fallback emit:
+- =frontend/app/services/chat.js:299-301= — the
+  =if (!accumulated)= branch at end-of-stream calls
+  =_replaceLastMessage= with the fallback literal.
+
+Two plausible paths into this branch — investigate both before
+choosing a fix:
+
+1. *Server sent no text at all.* The SSE stream produced no
+   =TEXT_MESSAGE_CONTENT= events; =accumulated= stayed empty;
+   fallback fires. If this is the path, the bug is upstream
+   (chat_server / agent run produced no assistant text) and the
+   frontend response should be observability: surface
+   =conversation_id= + usage so the operator can root-cause
+   server-side. Don't silently swallow.
+2. *Stream contained ONLY a navigate marker.* The block at
+   =chat.js:289-297= strips =NAVIGATE_RE= matches from
+   =accumulated= and calls =router.transitionTo=. If the WHOLE
+   accumulated body is a navigate marker, =accumulated.replace=
+   leaves an empty string, the strip-branch already called
+   =_replaceLastMessage= with the empty body, then the
+   =if !accumulated= guard at line 299 fires and overwrites
+   with the fallback literal just before the route transition.
+   Race-y; can briefly flash the literal to the user.
+
+Acceptance criteria:
+- Identify which of 1 or 2 actually fired. If diagnosis depends
+  on prod logs the frontend cannot see, surface that in the
+  handoff envelope and file a parent todo for cc-api or
+  scrape-profile-enhancer to add the upstream observability.
+- Fix the frontend behavior so the user never sees the literal
+  fallback when the agent actually DID respond — case 2, pure
+  navigate. For case 1 truly empty agent response, the fallback
+  can stay but should carry actionable detail =conversation_id=
+  + a re-try affordance, not the bare string.
+- Add a QUnit test that covers the empty-after-strip case so the
+  regression cannot re-enter.
+
+Cross-links:
+- [[file:notes.org::*AI Chat — Architecture Reference]] — chat
+  message flow + AG-UI wiring in parent notes.org Architecture
+- [[file:frontend/notes.org::*Architecture/Async getters + .then chains]]
+  — sibling pattern; the dual-flash bug PR 172 was a related
+  failure in the answer-save flow
+
+Logfire confirmed root cause is CASE 1 (server returned no text), not
+case 2 (nav marker). Three =httpx.ReadTimeout= incidents on
+=chat_server= calling =/api/v1/me/= over 48h, including Doug's
+2026-06-04 15:17 incident. Same call from =public_mcp_server=
+succeeds in 50-200ms; the api endpoint is fine.
+
+Scope for this todo (cc-frontend only):
+- Replace the bare =(no response from agent)= literal at
+  =frontend/app/services/chat.js:299-301= with an actionable
+  fallback that carries =conversation_id= + a retry affordance.
+- Keep the strip-navigate branch correct (case 2 doesn't fire in
+  the observed incident but the order-of-operations there is still
+  worth tightening so an empty post-strip body doesn't briefly
+  overwrite with the fallback).
+- Add a QUnit test for the empty-accumulated path.
+
+Parallel agents-side investigation is a separate todo —
+"chat_server httpx.ReadTimeout on api/v1/me/" — root cause for the
+server returning no text. Cross-link to that entry once filed.
+- [2026-06-04] cc-frontend shipped PR 175 to frontend main, awaits parent pin bump
+
+* SHIPPED jp.show duplicate-candidates banner — Ember Data sub-collection sideload :api:frontend:bug:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-05-25]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Closed [2026-05-13]: jp.show banner was empty even when /duplicate-candidates/ returned candidates, because the JP payload had no relationships.duplicate-candidates block — Ember Data hasMany.reload() silently no-op'd.
+
+Fix is the canonical Ember Data sub-collection pipeline:
+- =api/job_hunting/api/serializers.py=: new =compute_duplicate_candidates(post, request)= helper (single source of truth), new =JobPostDuplicateCandidateSerializer= class registered in =TYPE_TO_SERIALIZER=, =relationships["duplicate-candidates"]= declared on =JobPostSerializer= with a =get_related= override.
+- =api/job_hunting/api/views/jobs.py=: refactored standalone =/duplicate-candidates/= action to call the helper.
+- =api/job_hunting/tests/test_job_post_duplicate_candidates.py=: +2 tests (links.related on every JP payload, ?include= sideload).
+- =frontend/app/routes/job-posts/show.js=: route now =findRecord(... { include: 'scrapes,duplicate-candidates' })=, dropped the explicit =.reload()=. One round-trip.
+- =frontend/app/adapters/job-post.js=: deleted (vestigial — the auto-emitted =links.related= replaces it).
+
+Reference: =Architecture/Ember Data sub-collection reads — the canonical pattern= in notes.org. Refactor candidates for the same pattern parked under separate Inbox entry.
+
+* SHIPPED Extension direct-POST :extension:api:dedupe:scrape:
+:PROPERTIES:
+:CREATED: [2026-06-06]
+:CANONICAL: Plans/PLAN Extension direct-POST when capture is complete
+:MERGE_SHA: b3088cf551a5f9aa66f2d20729fa72d0eb18c1a8
+:LAST_TOUCHED: [2026-06-07]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Canonical plan: =notes.org/Plans/PLAN Extension direct-POST when capture is complete=
+
+*Goal*: extension that already has title + company + description in hand POSTs a scrape with the captured contents and a new =source_mode=extension-direct= flag. Scrape graph short-circuits the browser tier and goes straight to PersistJobPost via the same JobPostExtractor.parse_scrape() entry point. One write path, zero server-side browser cost on the hot path.
+
+*Decisions baked in*
+- Trust presence, iterate — non-empty title + company + description is the gate; no validator threshold at v1.
+- Bias the present URL on merge — extension =link= wins canonical when colliding with a server scrape; other fields merge via empty-merge invariant.
+- Scrape carries contents — no parallel POST endpoint on JobPost; Scrape is the canonical write entry.
+
+*Phase A — api primitives*
+- =Scrape.source_mode= CharField default =browser=, choices =browser=, =extension-direct=. Migration on =scrapes=.
+- =Scrape.captured_payload= JSONField nullable. Holds title / company / description / apply_url / location / extraction_hints when fast path.
+- Serializer validation: =source_mode=extension-direct= requires =captured_payload= present; payload requires non-empty title + company + description.
+- =JobPostOverwriteDecision= merge-bias: prefer extension-direct rows when replacing =link= on canonical-collision merge.
+
+*Phase B — scrape-graph fast path*
+- =StartScrape= gate detects =source_mode=extension-direct= + payload present → branch to a thin =SkipBrowserTier= node.
+- =SkipBrowserTier= copies payload fields onto persistence path, calls =ResolveApplyUrl= only if =captured_payload.apply_url= null, then =PersistJobPost=.
+- Other browser-tier nodes (Navigate → DetectObstacle → ResolveFinalUrl → WaitReady → Capture → Tier0CSS → Tier1Mini → Tier2Haiku → Tier3Sonnet → EvaluateExtraction → ValidateExtraction) never enter on this branch.
+- Screenshots, if extension uploads via existing relationship, persist as today.
+
+*Phase C — extension cc_sender*
+- Content-script capture grows the gate: title + company + description all non-empty → POST scrape with payload + =source_mode=extension-direct=.
+- Fall through to today's link-only POST when gate fails (any field missing/empty).
+- Ship as extension v0.3.x.
+
+*Phase D — operator observability (low priority)*
+- Staff-only count panel: extension-direct vs browser scrapes per day.
+
+*Order*: A and B parallel (B is dead code until C lands). C ships last to flip the switch. D anytime.
+
+*Dependencies*: cc-api Phase 2.5 catchall tickets (email-forward + discover_for_user_id + username validator) land first to avoid stacking write-path migrations.
+
+*Dedupe-first reminder*: WRITE PATH change at PersistJobPost entry. The fast path still routes through =JobPostExtractor.parse_scrape()= which calls =find_duplicate= — canonical_link, fingerprint, sticky-closed response shape all preserved. Walk the dedupe-first memory at PR review.
+
+*Out of scope*: separate =POST /api/v1/job-posts/= path; server re-validation of extension contents; markup-level capture; apply_url click-follow on fast path.
+
+*Open questions*: see plan node — apply_url in v1, screenshot opt-in, source_mode vs status overload, fallback discipline, confidence-gate trigger.
+
+*Cross-links*
+- =notes.org/Plans/PLAN Extension direct-POST when capture is complete=
+- =notes.org/Plans/Apply-destination resolution=
+- =notes.org/Architecture/Scrape → Parse → JobPost workflow (post-refactor)=
+- =notes.org/Plans/Browser Extension v0.3.2–0.3.5=
+- Adjacent extension tickets in Inbox/Enhancement (multi-host-extractors, presence-vs-auth, linkedin extraction_hints overfire)
+
+* SHIPPED ActivityPub Phase 5d — Outbound dispatch worker for new public JobPosts
+:PROPERTIES:
+:CREATED: [2026-05-29]
+:DEPENDS_ON: Phase 5c
+:LAST_TOUCHED: [2026-06-05]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
+sub-phase 5d. Placeholder; unblock after 5c.
+
+*Summary*: when a JobPost lands with =audience= containing AS2 Public,
+enqueue a Create(Note) activity for each FederationFollower of the
+post's =created_by=. Dispatch worker signs + POSTs to follower inboxes
+with exponential backoff retry; dead-letter at 7d.
+
+*Pre-conditions before picking up*
+- 5c has shipped (FederationFollower table populated; HTTP Signatures
+  outbound signing primitive available).
+- Q5 in the plan resolved: which job queue? Likely django-q2 — see the
+  archived =Plans/Job Queue Integration Plan= and revisit it as part
+  of this scoping pass.
+
+*Operational must-haves before merge*
+- Dispatch worker health heartbeat (=SchedulerHeartbeat= or equivalent);
+  stale heartbeat triggers an alert.
+- =FederationActivity= retention policy: delivered rows older than 30d
+  archived; failed/dead-letter rows kept indefinitely for audit.
+- =sharedInbox= optimization: deliver once per peer instance when the
+  followers there share a shared inbox.
+- Update / Delete activities for JP edits / deletions.
+
+* SHIPPED ActivityPub Phase 5c — Inbox + Follow + Follower model + HTTP Signatures
+:PROPERTIES:
+:CREATED: [2026-05-29]
+:DEPENDS_ON: Phase 5a + 5b
+:LAST_TOUCHED: [2026-06-05]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
+sub-phase 5c. Placeholder; unblock after 5a + 5b ship.
+
+*Summary*: =POST /actors/<username>/inbox= accepts =Follow= / =Undo(Follow)=
+/ =Create(Note)= activities with HTTP Signatures verification. New
+=FederationFollower= and =FederationActivity= models. Outbound
+=Accept(Follow)= signed responses.
+
+*Pre-conditions before picking up*
+- 5a + 5b have shipped.
+- Open questions 5, 6, 8 in the plan node MUST be resolved before
+  scoping this todo into work:
+  - Q5: Job queue infrastructure (only needed for 5d but the dispatch
+    primitives might land in 5c if =Accept(Follow)= is dispatched
+    inline vs queued)
+  - Q6: HTTP Signatures library — roll our own or pull dep
+  - Q8: Allowlist vs blocklist for inbound federation
+- Operator-side decision on per-instance allowlist surface: where does
+  the operator add a peer instance to the trust list? Admin UI? API
+  verb? Settings file? Need a path before 5c merges.
+
+*Out of scope*: outbound dispatch on new JobPost creation (=5d=);
+federated JobPost ingestion semantics (=5e=).
+
+*Security must-haves before merge*
+- HTTP Signatures verification on every inbound POST.
+- Replay protection: reject signed activities with =date= header
+  older than 1h; dedup activity ID within 24h window.
+- Rate limiting: 10 req/min per actor, 100 req/min per instance.
+- AS2 payload validation: parse-or-reject; 100KB size cap.
+- Allowlist enforcement: non-allowlisted instances 403 before signature
+  verification.
+
+* SHIPPED ActivityPub Phase 5a — Actor + WebFinger + Instance Actor + lazy RSA keypair
+:PROPERTIES:
+:CREATED: [2026-05-29]
+:LAST_TOUCHED: [2026-06-01]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Canonical plan*: =notes.org/Plans/ActivityPub Phase 5 — federation proper=
+sub-phase 5a. The =Resolved decisions= section there pins Q1 (URI shape),
+Q2 (Actor type), Q4 (lazy keypair). Read that whole node before starting;
+this todo is the actionable summary, the plan is the source of truth.
+
+*Owning agent*: cc-api (Django + DRF + the api submodule, plus a User-model
+migration). No frontend work in this todo — caddy reverse-proxy plumbing
+is a separate dc-side ask (file under =Inbox/cross-cutting= once 5a is
+ready to deploy).
+
+*Scope of 5a (do not expand without checking the plan)*
+- =GET /api/v1/actors/<username>/= returns AS2 Person object with these
+  fields exactly:
+  - =@context=: =["https://www.w3.org/ns/activitystreams", "https://w3id.org/security/v1"]=
+  - =id=: =https://<CAREER_CADDY_INSTANCE>/actors/<username>=
+  - =type=: ="Person"=
+  - =preferredUsername=: =user.username=
+  - =name=: =user.first_name + user.last_name= or fallback to =username=
+  - =summary=: empty string in V1 (user profile has no bio field today)
+  - =inbox=: =https://<host>/actors/<username>/inbox= (endpoint will 501 in 5a)
+  - =outbox=: =https://<host>/actors/<username>/outbox= (501 in 5a)
+  - =followers=: =https://<host>/actors/<username>/followers= (501 in 5a)
+  - =following=: =https://<host>/actors/<username>/following= (501 in 5a)
+  - =publicKey=: ={id: <actor>#main-key, owner: <actor>, publicKeyPem: <pem>}=
+  - =Content-Type: application/activity+json= in the response.
+- =GET /.well-known/webfinger?resource=acct:<username>@<host>= returns
+  JRD shape:
+  - =subject=: ="acct:<username>@<host>"=
+  - =aliases=: =[<actor URI>, <profile URI>]=
+  - =links=: =[{rel: self, type: application/activity+json, href: <actor URI>}, {rel: http://webfinger.net/rel/profile-page, type: text/html, href: <frontend profile URI>}]=
+  - Reject 400 on any resource that isn't =acct:<username>@<our host>=.
+  - Reject 404 on unknown username.
+  - =Content-Type: application/jrd+json= in the response.
+- =/.well-known/webfinger= must be served at the apex, not under
+  =/api/v1/=. Coordinate with dc to get the caddy reverse-proxy
+  routing right (separate cross-cutting todo).
+- Instance Actor at =GET /api/v1/actors/_instance/= (or similar — pick a
+  username that can't collide with a real user; underscore prefix is
+  safe). Same AS2 Person shape, =preferredUsername="_instance"=, owns
+  a separate keypair used later in 5c for fetching peer Actors when
+  the activity's signer isn't yet locally known. Land in 5a so the URI
+  is stable.
+- =/@<username>= route at the api edge: content-negotiates on Accept.
+  If =application/activity+json= → returns the Actor JSON. Otherwise →
+  302 to the frontend profile URL (=$FRONTEND_URL/users/<id>= or
+  whatever the frontend currently exposes for users; coordinate with
+  cc-frontend if uncertain).
+- New User model fields:
+  - =federation_private_key_pem= TextField, encrypted at rest (use
+    =django-cryptography= field wrapper OR =fernet= column-encryption
+    layer — pick one, document in the migration), nullable, default
+    null.
+  - =federation_public_key_pem= TextField, plaintext, nullable, default
+    null.
+  - Migration. Backfill is unnecessary (lazy generation handles it).
+- Lazy keypair generation in the Actor view:
+  - Wrap in =transaction.atomic()= + =select_for_update()= on the User
+    row to serialize concurrent first-hits.
+  - Generate RSA-2048 via
+    =cryptography.hazmat.primitives.asymmetric.rsa.generate_private_key(public_exponent=65537, key_size=2048)=.
+  - Serialize: private as =PEM / PKCS8 / NoEncryption()=, public as
+    =SubjectPublicKeyInfo=.
+  - Persist both fields, then return the Actor with the public key
+    embedded.
+- =manage.py generate_federation_keys= command: iterates Users where
+  =federation_private_key_pem IS NULL=, generates + persists keypairs.
+  Idempotent. Logs progress per N users.
+
+*Test plan*
+- =GET /api/v1/actors/<existing-username>/= returns 200 with the AS2
+  shape; verify =@context=, =id=, =type=, =publicKey.publicKeyPem=
+  parses as a valid RSA pubkey via cryptography.
+- =GET /api/v1/actors/<existing-username>/= twice on a never-fetched
+  user: first hit creates the keypair, second hit returns the same
+  pubkey (no re-generation).
+- Concurrent first-hits: spawn N threads hitting the same user; verify
+  exactly one keypair lands in DB (transaction.atomic +
+  select_for_update test).
+- =GET /api/v1/actors/<nonexistent>/= returns 404.
+- =GET /.well-known/webfinger?resource=acct:user@host= returns 200
+  JRD; =subject= matches request; =links[0].href= matches the Actor URI.
+- =GET /.well-known/webfinger?resource=acct:user@wrong.host= returns 400.
+- =GET /.well-known/webfinger?resource=https://example/foo= returns 400
+  (only acct: scheme accepted in V1).
+- =GET /.well-known/webfinger?resource=acct:nobody@host= returns 404.
+- =GET /api/v1/actors/_instance/= returns a valid Actor (separate from
+  any user); the keypair is per-instance, persisted somewhere
+  appropriate (a new singleton model row, or settings, or wherever fits
+  the codebase pattern — pick + document).
+- =GET /@user= with =Accept: application/activity+json= returns the
+  Actor JSON; with =Accept: text/html= 302s to the frontend profile
+  URL.
+- =manage.py generate_federation_keys= run twice in a row produces
+  zero work the second time (idempotent).
+
+*Files likely touched*
+- =api/job_hunting/api/views/federation.py= (new) — ActorView,
+  WebfingerView, InstanceActorView, AtUsernameRedirectView
+- =api/job_hunting/api/urls.py= — wire the new routes
+- =api/job_hunting/urls.py= (project-level) — wire =/.well-known/webfinger=
+  outside =/api/v1/=
+- =api/job_hunting/models/user.py= or wherever the auth User model
+  extension lives — add the two PEM fields
+- =api/job_hunting/migrations/0085_user_federation_keys.py= (next
+  unused number — confirm via =ls migrations/=)
+- =api/job_hunting/lib/federation.py= (new) — keypair generation +
+  serialization helpers; the Actor JSON-LD builder; the WebFinger JRD
+  builder
+- =api/job_hunting/management/commands/generate_federation_keys.py= (new)
+- Tests in =api/job_hunting/tests/test_federation.py= (new)
+
+*Out of scope for 5a (track in the plan's later sub-phases, do not pull in)*
+- Outbox endpoint (=5b=)
+- Inbox endpoint + HTTP Signatures verification (=5c=)
+- Follower model (=5c=)
+- Dispatch worker (=5d=)
+- Federated JobPost ingestion (=5e=)
+- Frontend follow / unfollow UI
+- Key rotation
+- Per-instance allowlist/blocklist
+
+*Definition of done*
+- All test plan items above pass via =make test-api PATHS="job_hunting.tests.test_federation"=
+- =make ci= green
+- Companion cross-cutting todo for dc (caddy reverse-proxy routing) is
+  filed before merge so prod deploy isn't blocked on missing /.well-known/
+  routing
+- Manual smoke: paste =acct:<your-username>@careercaddy.online= into
+  Mastodon's search (after prod deploy + dc's caddy work). Mastodon
+  should display the Actor card. Follow button shows but is expected
+  to error on click — that's 5c.
+
+* SHIPPED Phase 5: infra — ActivityPub activity dispatch worker (django-q2 candidate) :api:infra:
+:PROPERTIES:
+:PHASE:    5
+:STATUS:   deferred
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-05]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: background worker dispatches outbound Activities to all followers / subscribers.
+
+*Acceptance*:
+- [ ] Worker reads pending outbox rows; POSTs each to the recipient's inbox with HTTP signatures; retries with backoff on failure.
+- [ ] Pinned to django-q2 (per the archived =Job Queue Integration Plan=).
+- [ ] Status visible from a staff-only admin page.
+- [ ] Dead-letter queue for retry-exhausted Activities.
+
+*Files*:
+- =api/job_hunting/tasks/activitypub_dispatch.py= (new).
+- =api/job_hunting/admin.py= — admin view.
+- =api/pyproject.toml= — add =django-q2=.
+- =api/job_hunting/management/commands/qcluster.py= or compose service entry.
+
+*Tests*:
+- Round-trip a synthetic Activity to a mock follower; retry budget exhausted ⇒ alert + dead-letter row.
+
+*Status*: deferred placeholder.
+
+*Dependency*: HTTP signatures + Outbox tickets.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
+
+* SHIPPED Phase 5: api — WebFinger endpoint :api:
+:PROPERTIES:
+:PHASE:    5
+:STATUS:   deferred
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-05]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: let remote instances discover our Actor by handle.
+
+*Acceptance*:
+- [ ] =GET /.well-known/webfinger?resource=acct:careercaddy@careercaddy.online= returns the standard WebFinger JRD document pointing at the local Actor URI.
+- [ ] Caddy / Nginx route hits Django; not a static file.
+- [ ] 404 for unknown handles.
+- [ ] =Content-Type: application/jrd+json=.
+
+*Files*:
+- =api/job_hunting/api/views/webfinger.py= (new).
+- =api/job_hunting/api/urls.py= — route at =.well-known/webfinger=.
+- Caddyfile / reverse-proxy entry.
+
+*Tests*:
+- 200 for the local handle; correct JRD shape.
+- 404 otherwise; missing =resource= param = 400.
+
+*Status*: deferred placeholder.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
+
+* SHIPPED Phase 5: api — HTTP signatures (RFC 9421) for ActivityPub :api:
+:PROPERTIES:
+:PHASE:    5
+:STATUS:   deferred
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-05]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: sign outbound ActivityPub HTTP traffic and verify inbound signatures.
+
+*Acceptance*:
+- [ ] Sign outbound POSTs to remote inboxes with our local Actor's private key.
+- [ ] Verify inbound POSTs against the sender's published public key. Cache fetched public keys with a short TTL.
+- [ ] Bad signature → 401.
+- [ ] Vendored lib choice documented in =api/pyproject.toml= comments (candidates: =python-http-message-signatures=, =httpsig=, =cryptography= manual).
+
+*Files*:
+- =api/job_hunting/lib/http_signatures.py= (new).
+
+*Tests*:
+- Round-trip sign/verify against a fixed Actor + payload.
+- Bad signature rejected with 401.
+- Public key cache invalidation on key rotation.
+
+*Status*: deferred placeholder.
+
+*Dependency*: Actor model.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
+
+* SHIPPED Phase 5: api — ActivityPub Outbox + Inbox endpoints :api:
+:PROPERTIES:
+:PHASE:    5
+:STATUS:   deferred
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-05]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: announce + receive ActivityPub Activities.
+
+*Acceptance*:
+- [ ] =GET /outbox/= paginated list of Activities we have announced.
+- [ ] =POST /inbox/= accepts inbound Activities; verifies HTTP signature; routes by =type= (Create, Update, Delete, Announce, Follow, Undo).
+- [ ] Inbound =Delete= for a federated JP flips =posting_status=closed= and writes =source_deleted_at= (per =ActivityPub-readiness — minimum prep/Federated JP deletion handling= in the plan).
+- [ ] Inbound =Create= for a JobPost ⇒ create a local mirror row with =source_instance= = sender, =created_by= = the local service user.
+- [ ] All writes pass through =find_duplicate= so duplicates collapse.
+
+*Files*:
+- =api/job_hunting/api/views/activitypub.py=.
+- =api/job_hunting/lib/activitypub_inbox.py= (new dispatcher).
+
+*Tests*:
+- One per Activity type; bad signature = 401; bad shape = 400; =Delete= flips =posting_status= without dropping the row.
+
+*Status*: deferred placeholder.
+
+*Dependency*: Actor model + HTTP signatures tickets.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
+
+* SHIPPED Phase 5: api — per-instance ActivityPub Actor model + actor URI :api:
+:PROPERTIES:
+:PHASE:    5
+:STATUS:   deferred
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-05]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: every Career Caddy instance gains an Actor identity so remote instances can route Activities to us.
+
+*Acceptance*:
+- [ ] =Actor= model with =type=, =preferredUsername=, =inbox=, =outbox=, =publicKey=. One row per local instance for now (later: optionally per-user).
+- [ ] =GET /actor/= returns the Actor as JSON-LD =Content-Type: application/activity+json=.
+- [ ] Generate + persist the RSA keypair on first startup; refuse to start if the private key is missing in prod.
+- [ ] Public key surfaced under the Actor's =publicKey= property so remote instances can verify our HTTP signatures.
+
+*Files*:
+- =api/job_hunting/models/activitypub_actor.py= (new).
+- =api/job_hunting/api/views/activitypub.py= (new).
+- =api/job_hunting/migrations/00XX_actor.py= (new).
+- =api/job_hunting/management/commands/generate_actor_keys.py= (new — idempotent).
+
+*Tests*:
+- Actor JSON-LD shape conforms; keypair generated on bootstrap; missing key in prod = startup error.
+
+*Status*: deferred placeholder. Pick up when Phase 5 is greenlit.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 5 — federation proper (out of scope here)
+
+* SHIPPED Phase 2.5: ops — MX record + catchall mail server for *@careercaddy.online :infra:cc_auto:
+:PROPERTIES:
+:PHASE:    2.5
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-05-31]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: deliver mail to a catchall mailbox cc_auto can read over Tailscale.
+
+*Acceptance*:
+- [ ] MX record for =careercaddy.online= points at our mail server.
+- [ ] Catchall config (Postfix / Maddy / equivalent) routes =*@careercaddy.online= to a single mailbox.
+- [ ] cc_auto reads via IMAP (or whatever the chosen MTA exposes); no public IMAP — Tailscale-only.
+- [ ] Spam filter (rspamd?) trims obvious garbage before cc_auto sees it.
+- [ ] DKIM + SPF on outbound so we can later send replies / bounces without ending up in spam.
+- [ ] Runbook entry under =notes.org Operations= via =claude/cc-notes-add-child=.
+
+*Files*:
+- DNS provider — MX + DKIM + SPF entries.
+- =docker-compose.prod.yml= or a separate compose file for the mailserver.
+- =notes.org Operations= runbook node.
+
+*Out of scope*: outbound SMTP for app email (registration, password reset) — separate ops concern.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Operational pieces (out of model scope but tracked here)
+
+* SHIPPED Phase 2.5: api — email-forward source + JobPostDiscovery.forwarded_via_address + JSON:API discoveries hasMany :api:dedupe:cc_auto:
+:PROPERTIES:
+:PHASE:    2.5
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-07]
+:MERGE_SHA: ba7b667fca2270c446e8359ab12909a992c5883c
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: surface forwarder provenance via the JSON:API =discoveries= relationship; the column lives where it logically belongs (=JobPostDiscovery=).
+
+*Acceptance*:
+- [ ] Add =email-forward= to =JobPost.source= enum and the trust ranking in =JobPostOverwriteDecision= (slot between =paste= and =scrape=; document the choice).
+- [ ] =JobPostDiscovery.forwarded_via_address= CharField(max=254, null=True). Required when =source=email-forward=; null otherwise. Serializer-level validation.
+- [ ] =JobPost= JSON:API resource exposes =discoveries= as =hasMany=. Per-discovery resource includes =source=, =forwarded_via_address=, =requested_by=.
+- [ ] Ember: =frontend/app/models/job-post.js= adds =@hasMany('job-post-discovery')=.
+
+*Files*:
+- =api/job_hunting/models/job_post.py= (source choices).
+- =api/job_hunting/models/job_post_discovery.py= (new column).
+- =api/job_hunting/api/serializers.py= (discovery serializer + JobPost relationship).
+- =api/job_hunting/migrations/00XX_jpd_forwarded_via.py= (new).
+- =frontend/app/models/job-post.js= (hasMany).
+- =frontend/app/models/job-post-discovery.js= (new model).
+
+*Tests*:
+- =api/job_hunting/tests/test_job_post_discovery.py= — column required for email-forward source; rejected otherwise.
+- =api/job_hunting/tests/test_job_post_viewset.py= — relationship serializes on jp.show.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Surfacing forwarder provenance
+
+* SHIPPED Phase 2.5: api — discover_for_user_id on POST job-posts + staff-or-self RBAC + audit column :api:cc_auto:
+:PROPERTIES:
+:PHASE:    2.5
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-07]
+:MERGE_SHA: ba7b667fca2270c446e8359ab12909a992c5883c
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: let staff-level API keys (cc_auto's key) attribute =JobPostDiscovery= to an arbitrary user. No new endpoint; same =POST /api/v1/job-posts/= with a new attribute + RBAC.
+
+*Acceptance*:
+- [ ] =POST /api/v1/job-posts/= JSON:API attribute =discover_for_user_id= (optional; defaults to =request.user.id=).
+- [ ] RBAC: 403 unless =request.user.is_staff= OR =discover_for_user_id == request.user.id=.
+- [ ] =JobPostDiscovery= gains =requested_by_user_id= FK (nullable; null for legacy rows).
+- [ ] Migration backfills existing rows with =requested_by_user_id = user_id= (best-effort historical guess).
+- [ ] Discovery serializer exposes =requested_by= as a belongsTo relationship.
+
+*Files*:
+- =api/job_hunting/api/views/jobs.py= — create path.
+- =api/job_hunting/models/job_post_discovery.py= — new column.
+- =api/job_hunting/api/serializers.py= — discovery serializer.
+- =api/job_hunting/migrations/00XX_jpd_requested_by.py= (new).
+
+*Tests*:
+- =api/job_hunting/tests/test_job_post_viewset.py= — staff key attributes to other user; non-staff cannot; self always allowed.
+- =api/job_hunting/tests/test_job_post_discovery.py= — column populated correctly.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Why this changes the visibility math
+
+* SHIPPED Phase 2.5: api — username catchall validator + audit_usernames mgmt command :api:cc_auto:
+:PROPERTIES:
+:PHASE:    2.5
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-07]
+:MERGE_SHA: ba7b667fca2270c446e8359ab12909a992c5883c
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: ensure =username= is safe to use as an email local-part before the catchall ingest lands.
+
+*Acceptance*:
+- [ ] Serializer validator on =User.username= enforces =[a-z0-9._-]+= (lowercase only) going forward.
+- [ ] =python manage.py audit_usernames= prints existing rows that fail the constraint, with =id=, =username=, =email=. Read-only; no auto-rename.
+- [ ] Client-side: signup form lowercases + validates before submit; setup wizard does the same.
+- [ ] Documentation entry in =/docs= explaining the catchall constraint.
+
+*Files*:
+- =api/job_hunting/api/serializers.py= or =api/job_hunting/serializers.py=.
+- =api/job_hunting/management/commands/audit_usernames.py= (new).
+- =frontend/app/components/users/signup-form.hbs= / =frontend/app/routes/setup.js=.
+
+*Tests*:
+- =api/job_hunting/tests/test_users.py= — validator accepts =foo.bar=, rejects =Foo Bar=, =foo@bar=, =foo+bar=.
+- Smoke the mgmt command against demo data via =make demo-data=.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest/Model implications
+
+* SHIPPED Consolidated frontend pin bump — dual-flash + scrape-graph dagre
+:PROPERTIES:
+:CREATED: [2026-06-03]
+:LAST_TOUCHED: [2026-06-09]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Followups
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: SHIPPED
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+Two frontend fixes accumulated; consolidated parent pin bump in
+flight via cc-orchestrator agent:
+
+- PR #172 (=fd4ad6d=) — answer-save dual-flash fix
+- PR #173 (=d1c0b89=) — scrape-graph dagre node-width fix
+
+Bump target: frontend =b54229d= → =d1c0b89=. Both fixes ride along.
+
+Parked stale local branch =feature/bump-frontend-dual-flash-fix=
+(pin target =fd4ad6d=, predates PR #173) will be deleted by
+orchestrator as part of cleanup.
+
+
+* DONE Catchall mail B2
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-07]
+:MERGE_SHA: 82e81af33eb1cf0a336bf70e264d7762fcd3b75d
+:AUTOMATION_PR_SHA: f35fb4533a6292142561a6935f6155e647f24c07
+:PR_URL:   https://github.com/overcast-software/career_caddy/pull/235
+:SHIPPED_AT: [2026-05-31]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:13
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Signal*: Doug confirmed catchall =<username>@careercaddy.online= is live and accepting forwarded mail (per relay from cc, 2026-05-31). Phase B2 (=Inbox/Feature/Phase 2.5: ops — MX record + catchall mail server=) moved to SHIPPED.
+
+*B3 (this side) =src/pollers/email_catchall.py= remains blocked on these cc-side api tickets in cc/todo.org Inbox/Feature*:
+- =Phase 2.5: api — email-forward source + JobPostDiscovery.forwarded_via_address + JSON:API discoveries hasMany=
+- =Phase 2.5: api — discover_for_user_id on POST job-posts + staff-or-self RBAC + audit column=
+- =Phase 2.5: api — username catchall validator + audit_usernames mgmt command=
+- Also need =GET /api/v1/users/?filter[username]= queryable for the To-address resolver (covered by the validator ticket scope).
+
+*Next action when those ship*: promote =Inbox/Feature/Phase 2.5: cc_auto — inbox poller= out of Inbox (Backlog or Active) and start the build. Reference =~/.claude/plans/majestic-wiggling-sutton.md= Phase B for the full plan.
+
+*Out of scope here*: no api work; cc owns those three tickets. cc was the messenger, so no cross-repo inbox mirror needed — the tickets are already captured on their side.
+
+* Receipts
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-06-10 Wed 09:14
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+- Code chain is otherwise correct: view (cover_letters.py:280-287, 351) → task (tasks.py:362-438) → service (cover_letter_service.py:14-39) → template. All pass =injected_prompt= through. Only the template ORDERING is wrong.
+- Repro: any user-injected instruction on cover-letter generation (e.g. =mention X=, =use a casual tone=) is silently ignored, while the same pattern on answers works.
+
+
+* Smoke after Deploy
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-06-10 Wed 09:14
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+- =https://careercaddy.online/job-posts/<id>/questions/<qid>/answers/new=
+  → submit a plain answer, confirm exactly one flash
+- =https://careercaddy.online/scrapes/<id>/graph=
+  → confirm rightmost node label is visible
+
+
+* DONE caddy-inbox + hold_poller drowning in 401s — confirm token or scheme
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-01]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:36
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Since 2026-05-31 16:00 UTC, caddy-inbox throws ~300-450 errors/hr and
+hold_poller mirrors it. All are HTTP 401 from api.careercaddy.online.
+
+Failing call sites: followup_processor agent → CareerCaddyToolset →
+src/client/api_client.py (Authorization: Bearer CC_API_TOKEN).
+Hot endpoints: GET /api/v1/job-applications/?filter[company]=...,
+GET /api/v1/job-posts/{id}/job-applications/, POST /api/v1/companies/.
+
+Action items:
+1. Confirm whether the api's accepted auth scheme for jh_* staff keys is
+   currently 'Bearer' or 'Api-Key'. Parent CLAUDE.md documents 'Api-Key';
+   cc_auto sends 'Bearer'. If api never accepted Bearer for these keys, the
+   prior baseline of ~0 errors/day is suspicious — figure out what changed.
+2. Check whether CC_API_TOKEN in the caddy-inbox loop environment expired or
+   rotated near 2026-05-31 16:00 UTC. If yes, refresh it.
+3. Same fix for hold_poller (uses same client).
+4. Investigation note: cc_auto notes.org Operations/2026-05-31 caddy-inbox
+   401 spike — ongoing auth failure, not DisallowedHost.
+
+Cross-repo: if the answer is 'api requires Api-Key scheme', a parent-side
+todo is needed — but more likely cc_auto just needs to switch its header
+prefix or refresh its token.
+
+* DONE [dc] Phase 5a federation harness — recommend dev environment + ship prod INSTANCE_ORIGIN fix anyway
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-04]
+:ARCHIVE_TIME: 2026-06-10 Wed 09:36
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Cross-cutting reply from dc on the two findings the cc-side agent surfaced
+(prod /actors/dough returning AS2 JSON-LD with localhost:8000 URIs;
+careercaddy.dev /actors/dough returning 404 from some api with the right
+content-type but no Actor rows).
+
+*TL;DR*
+1. Prod: set =INSTANCE_ORIGIN=https://careercaddy.online= and restart api.
+   Latent-bug fix, no federation involvement.
+2. Find which api backend serves =careercaddy.dev/actors/*= (Angular dev
+   proxy config will tell you) before running any backfill.
+3. Dev: backfill + =INSTANCE_ORIGIN=https://careercaddy.dev= on the
+   actual api container that path hits.
+4. Run the Phase 5a Mastodon smoke against *dev*, not prod.
+
+*Why dev for the harness, not prod*
+
+Phase 5a is first contact. Once a Mastodon peer caches your
+=/actors/<user>= response it stickies the URIs and publicKey. If
+later Phase 5b/5c work surfaces a bug — wrong key encoding, malformed
+inbox URI, signature off by a byte — you fix the code locally, but
+every peer that already cached the buggy actor sees the old version
+until /their/ cache expires, and you do not control their TTL.
+Federation has long memory.
+
+Dev is the throwaway identity. If the harness produces a malformed
+actor and three test Mastodon peers cache it, you can blow away the
+dev DB or rename the actor. Same accident on prod and you have burned
+careercaddy.online with whatever fediverse instances probed first.
+
+Setup cost on dev is two manage.py commands + one env var.
+Cheap. Run on dev.
+
+*Ship the prod INSTANCE_ORIGIN fix regardless of harness choice*
+
+Do not leave =localhost:8000= URIs in prod's actor responses just
+because you are not federating yet. Any crawler or curious peer that
+hits =api.careercaddy.online/actors/dough= today caches an actor
+pointing at localhost. Cheap, isolated fix — ship it:
+
+  ssh racknerd "echo 'INSTANCE_ORIGIN=https://careercaddy.online' \
+    >> /opt/stacks/careercaddy.online/.env && \
+    docker compose -f /opt/stacks/careercaddy.online/docker-compose.yml \
+    restart api"
+
+*Watch-out before backfilling on dev*
+
+The other agent's path-trace assumption — =careercaddy.dev → racknerd
+→ tunnel → laptop ember → laptop api= — is shaky. The actual dc-shipped
+path is:
+
+  careercaddy.dev (apex, public DNS)
+    → racknerd:443 (caddy edge, LE cert for careercaddy.dev wildcard)
+    → via_pibu snippet (tailscale to 100.84.193.34 = pibu)
+    → pibu:443 (caddy, terminates cd_tls)
+    → 192.168.1.101:4200 (omarchy ng serve, Angular dev)
+
+That last hop is the Angular dev server, not Django. The 404 with
+=Content-Type: application/activity+json= proves Angular is proxying
+=/actors/*= to /some/ Django backend (proxy.conf.json or similar). It
+could be:
+
+  - pibu's =careercaddy-dev-api= container (from
+    =playbooks/pibu/careercaddy.dev.yml=)
+  - the laptop's local api over a tunnel
+  - some other api on omarchy
+
+Whichever it is, that is where you must run:
+
+  docker compose exec api python manage.py bootstrap_instance_actor
+  docker compose exec api python manage.py generate_federation_actors
+
+Inspect =proxy.conf.json= (or whatever the frontend uses for dev
+proxying) before running the backfill, so you do not seed the wrong db.
+
+*Also: INSTANCE_ORIGIN on dev*
+
+If the dev api also defaults to =http://localhost:8000= in absence of
+INSTANCE_ORIGIN, set =INSTANCE_ORIGIN=https://careercaddy.dev= on the
+dev api's env at the same time as the backfill. The harness needs the
+canonical apex in the URIs or Mastodon will reject the actor at
+verification time.
+
+*dc-side surface that is now ready*
+
+- =https://careercaddy.dev/= returns 200 (verified 2026-06-01).
+- LE wildcard cert in place for =careercaddy.dev= +
+  =*.careercaddy.dev=. Distributed to pibu via cert-puller.
+- racknerd's caddy bridges =careercaddy.dev= +
+  =careercaddy.dev.robotbellybutton.com= → pibu via_pibu.
+- Pibu's caddy terminates both hostnames; apex skips internal_only so
+  external federation traffic gets through.
+- =careercaddy.dev/actors/dough= reaches an api somewhere and returns
+  a real 404 with the activitypub content-type — so the route is
+  functionally plumbed; only the data is missing.
+
+*Out of scope for this reply / still cc-owned*
+
+- The federation routes themselves (=/.well-known/webfinger=,
+  =/actors/<x>=) at the apex are tracked under the other open inbox
+  item =[cc] Caddy reverse-proxy routing for ActivityPub federation
+  surface=. dc has not added apex-path routing yet because dev now
+  reaches whatever Angular's proxy resolves to and the request did
+  in fact land on a Django api. If the harness later needs a
+  dedicated apex carve-out (e.g. webfinger short-circuit), file it
+  there.
+- ALLOWED_HOSTS / CSRF_TRUSTED_ORIGINS additions for =careercaddy.dev=
+  on the dev api are cc-side (=playbooks/pibu/careercaddy.dev.yml= env
+  block or the dev =.env=).
+
+*Tags*: =:dc:phase5a:federation:caddy:dev:=
+
+* PLAN need to either merge jps together or associate them better i.e. join table
+:PROPERTIES:
+:ARCHIVE_TIME: 2026-06-10 Wed 10:07
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Active
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: PLAN
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+** how?
+** why?
+I see duplicate jps but I want to do something about it
+** what?
+duplicates feels like a chore I can't action upon
+*** IDEA application to one that's deemed duplicate could be referenced
+*** IDEA give duplicatation pill on list view
+
+** when?
+When encountering a duplicate I want to be able to take action
+I don't know if that's in the edit page or the show page.
+show page does have a lot of actions, but we hide complexity in the edit page.
+***
+
+* DONE [dc] careercaddy.online ansible ownership unwound — proceed with Deploy PR :dc:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-10]
+:ARCHIVE_TIME: 2026-06-10 Wed 14:24
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+
+dc has unwound ansible ownership of careercaddy.online on racknerd
+per cc's Inbox/Bug ask. Concretely:
+
+1. =playbooks/racknerd/careercaddy.online.yml= is ARCHIVED with a
+   fail-fast guard (=tags: always= so neither =--tags= nor =--skip-tags=
+   bypass it). The file is kept as archaeology — original tasks remain
+   below the guard but ansible will never reach them.
+
+2. =/opt/stacks/careercaddy.online/docker-compose.yml= will not be
+   re-templated by dc. cc's Deploy scp owns that file unambiguously.
+
+3. Subdomains still dc-owned (no change): metabase.careercaddy.online,
+   careercaddy.dev, analytics.careercaddy.online. The
+   =*.careercaddy.online= wildcard catch-all in
+   =tasks/debian/caddy-racknerd.yml= stays — it picks up any subdomain
+   NOT matched by a more-specific block, which is exactly the dc
+   surface.
+
+4. Question answered: =proxy= external docker network on racknerd is
+   DC-CREATED via =tasks/debian/caddy.yml= as part of the caddy stack
+   deploy. cc's compose should reference it as:
+     networks:
+       proxy:
+         external: true
+   and add caddy labels (=caddy: careercaddy.online, ...= +
+   =caddy.reverse_proxy: "{{upstreams 8000}}"= etc.) —
+   caddy-docker-proxy on racknerd will pick them up and add specific
+   site blocks that take precedence over the dc-owned wildcard catch-all.
+
+cc can ship the Deploy PR (caddy labels + proxy network reference)
+without dc needing to touch racknerd further. ping dc if anything on
+the caddy edge misbehaves.
+
+dc-side record: =~/Network/syncthing/Projects/diycloud/notes.org= ::
+=Operations/Unwound careercaddy.online ansible ownership= (2026-05-31).
+
+* DONE pibu deploy — Camoufox scrape runner systemd user unit
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-10]
+:ARCHIVE_TIME: 2026-06-10 Wed 14:24
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+PLAN SCRAPPED 2026-06-10. Pibu fell over running Camoufox. Both engines (Chrome OOM-launched, Camoufox crashed under load) failed in practice — the Pi's RAM/IO ceiling doesn't accommodate the runner. Artifacts under cc_auto/deploy/pibu/ remain as archaeology.
+
+Implications:
+- The omarchy workstation is the only runner. The multi-runner deploy section in agents/CLAUDE.md describes a state we never reached and should be flagged.
+- Job-queue Phase 4 plan assumed pibu would host the django-q2 worker container (=docker compose up worker= on pibu). That assumption is dead too — revisit before Phase 4 dispatch.
+
+Original ship note (kept for archaeology):
+cc_auto/deploy/pibu/ holds the canonical shape for running the agents-repo scrape runner on pibu.
+
+What landed:
+- =deploy/pibu/caddy-runner.service= — systemd user unit
+  (Camoufox + --attended + memory caps + Restart on-failure).
+- =deploy/pibu/install.sh= — idempotent installer with preflight.
+- =deploy/pibu/README.md= — setup/refresh/smoke recipe.
+- =~/.config/environment.d/career-caddy.conf= on pibu now uses
+  =BROWSER_ENGINE=camoufox= (was =chrome= which OOM-launched).
+- Architecture note added: Pibu scrape runner — Camoufox attended,
+  systemd user unit.
+
+Follow-up to track separately if it bites:
+- Camoufox fetch (~150MB) on pibu is slow over the constrained
+  network + Pi I/O. Document it in README (done) and only run it
+  during low-load windows.
+- Pibu runs a parallel dev career-caddy docker stack; that plus the
+  runner sits close to the 905MB RAM cap. If the runner gets OOM-
+  killed by the kernel rather than systemd MemoryMax, lower the
+  cap further or shut the dev stack down on pibu.
+
+* DONE JobPost.audience for ActivityPub-aligned per-post visibility
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-10]
+:ARCHIVE_TIME: 2026-06-10 Wed 14:24
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+Phase 3.5 prep for Phase 4 ActivityPub readiness. Per the notes.org Plans/PLAN ActivityPub plan, federation visibility belongs on each JobPost via AS2 audience primitives, not via a per-content-shape filter (avoids baking single-user assumptions like mailto=private into the data model). Spec: add JobPost.audience JSONField (Postgres JSONB), default [https://www.w3.org/ns/activitystreams#Public]. Helper JobPost.is_public() returns True iff the Public collection URI appears in audience. JSON:API serializer exposes audience. Migration adds the column and backfills existing rows to the public-default. Frontend: JobPost model gains audience attr; jp.edit form adds a Visibility selector with Public and Private for now (Public maps to [...#Public], Private maps to []). jp.show shows a small badge when non-public. Phase 4 /as-object/ adapter and Outbox dispatch will consult this field but those are not in scope here. Tests: model default + is_public + serializer round-trip + frontend form selector.
+
+* DONE Phase 4 api — job-posts as-object JSON-LD adapter view :api:
+:PROPERTIES:
+:PHASE:    4
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-10]
+:ARCHIVE_TIME: 2026-06-10 Wed 14:24
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: round-trip a JobPost as ActivityStreams 2.0 JSON-LD so a future Outbox just plumbs the same shape outward.
+
+*Acceptance*:
+- [ ] =GET /api/v1/job-posts/:id/as-object/= returns =Content-Type: application/activity+json=.
+- [ ] Body shape: =@context= = AS2, =type= = =JobPosting= (schema.org-compatible; document the choice), =id= = full canonical URI, =attributedTo= = the source instance Actor URI (placeholder until Actor model lands), =published= = =created_at=, =content= = =description=, =inReplyTo= = canonical URI of =duplicate_of= when set.
+- [ ] Respects the same visibility filter as the JSON:API endpoint.
+- [ ] No federation wiring yet — serializer-only ticket.
+
+*Files*:
+- =api/job_hunting/api/views/jobs.py= — new action method.
+- =api/job_hunting/lib/activitypub.py= (new) — shape helpers.
+
+*Tests*:
+- =api/job_hunting/tests/test_activitypub.py= — shape conforms; visibility filter applied; =duplicate_of= round-trips as =inReplyTo=.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Phase 4 — ActivityPub readiness
+
+* DONE Phase 3 frontend — staff-only dedupe-feedback report :frontend:dedupe:
+:PROPERTIES:
+:PHASE:    3
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-10]
+:ARCHIVE_TIME: 2026-06-10 Wed 14:24
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: surface the three reports the audit unlocks — missed signals, over-eager canonicalization, promote patterns.
+
+*Acceptance*:
+- [ ] Route =reports.dedupe-feedback= behind a staff gate.
+- [ ] Three tables on the page:
+  1. Manual =mark= with =signal_state= containing zero auto signals → flags missed =find_duplicate= rules.
+  2. Manual =unlink= where =signal_state.canonical_link_match=true= → flags over-eager canonicalization.
+  3. Manual =promote= grouped by =from_jp.source= → reveals which sources users treat as authoritative.
+- [ ] Data source: =GET /api/v1/duplicate-annotations/= with the right filters per table.
+- [ ] HyperUI + Tailwind only; no custom CSS.
+
+*Files*:
+- =frontend/app/routes/reports/dedupe-feedback.js= (new).
+- =frontend/app/templates/reports/dedupe-feedback.hbs= (new).
+- =frontend/app/router.js= — add route.
+
+*Tests*:
+- =frontend/tests/acceptance/reports/dedupe-feedback-test.js= — staff sees rows; non-staff gets redirected.
+
+*Dependency*: Phase 3 api ticket merged.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Manual dedup → learning loop
+
+* DONE Phase 3: api — DuplicateAnnotation model + backfill + writes from duplicate verbs :api:dedupe:
+:PROPERTIES:
+:PHASE:    3
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-10]
+:ARCHIVE_TIME: 2026-06-10 Wed 14:24
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: capture every manual dedupe gesture so we can learn the auto-dedup rules from human corrections.
+
+*Acceptance*:
+- [ ] New =DuplicateAnnotation= model with =from_jp= FK, =to_jp= FK (nullable), =previous_to= FK (nullable), =action= in (=mark=, =unlink=, =promote=, =historical=), =set_by= FK, =set_at= datetime, =signal_state= JSONField.
+- [ ] Migration backfills one =action=historical= row per existing =JobPost.duplicate_of= FK.
+- [ ] Each of the three Phase 2 verb endpoints writes an annotation row on every state change.
+- [ ] =signal_state= snapshots current =compute_duplicate_candidates= signals between from_jp and to_jp at write time (canonical_link match, fingerprint match, apply_url reciprocity, etc.).
+- [ ] Staff-only =GET /api/v1/duplicate-annotations/= exposes annotations as JSON:API with filters by =action=, =from_jp=, =to_jp=, =set_by=, =set_at__gte=.
+
+*Files*:
+- =api/job_hunting/models/duplicate_annotation.py= (new).
+- =api/job_hunting/migrations/00XX_duplicate_annotation.py= (new, with backfill data migration).
+- =api/job_hunting/api/views/jobs.py= — wire into verb endpoints.
+- =api/job_hunting/api/views/duplicate_annotations.py= (new).
+- =api/job_hunting/api/serializers.py= — new serializer.
+
+*Tests*:
+- =api/job_hunting/tests/test_duplicate_annotation.py= — backfill count matches historical FK count; each verb writes the correct =action=; =signal_state= round-trips.
+
+*Dependency*: Phase 2 api verb-endpoints ticket merged.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Manual dedup → learning loop
+
+* DONE Phase 2.5: cc_auto — inbox poller + To-address resolver + bounce on unknown local-part :cc_auto:
+:PROPERTIES:
+:PHASE:    2.5
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-10]
+:ARCHIVE_TIME: 2026-06-10 Wed 14:24
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: cc_auto polls the catchall inbox and posts to api via the new =discover_for_user_id= attribute.
+
+*Acceptance*:
+- [ ] New cc_auto poller (=src/pollers/email_catchall.py= or similar) reads the catchall inbox over IMAP.
+- [ ] Resolves =To:= header local-part → CC =username= via =GET /api/v1/users/?filter[username]==.
+- [ ] Unknown local-part → bounce with a clear "unknown Career Caddy username" body + log.
+- [ ] Extracts JobPost candidates using existing =url_extractor= / =span_validator= infrastructure from the multi-job digest work.
+- [ ] POSTs to =/api/v1/job-posts/= with =source=email-forward=, =discover_for_user_id=<resolved>=, =forwarded_via_address=<localpart>@careercaddy.online= on each discovery row.
+- [ ] Per-mail audit row in cc_auto: source mail-id, To address, resolved user id, JPs touched, dedup hits vs new rows.
+- [ ] Quota: cap forwards per user per day (configurable env; default 100). Over-quota → bounce.
+
+*Files (cc_auto)*:
+- =~/Network/syncthing/Projects/career_caddy_automation/src/pollers/email_catchall.py= (new).
+- =~/Network/syncthing/Projects/career_caddy_automation/src/client/api_client.py= — add =create_job_post(..., discover_for_user_id=...)= path.
+- =~/Network/syncthing/Projects/career_caddy_automation/tests/test_email_catchall.py= (new).
+
+*Dependency*: Phase 2.5 api tickets must ship first (=discover_for_user_id= and =email-forward= source + =forwarded_via_address=).
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Email forwarding catchall — user-attributed JobPost ingest
+
+* DONE Phase 2: frontend jp.edit — duplicate picker + reverse-dups list + promote button :frontend:dedupe:
+:PROPERTIES:
+:PHASE:    2
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-10]
+:ARCHIVE_TIME: 2026-06-10 Wed 14:24
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: UI on =job-posts.edit= for setting and clearing =duplicate_of= and listing reverse-FK duplicates.
+
+*Acceptance*:
+- [ ] PowerSelect picker searches visible JPs via =store.query('job-post', ...)= (visibility-scoped server-side).
+- [ ] Selecting a target calls =mark-duplicate-of= verb.
+- [ ] If =duplicate_of= already set: show target + "Unlink" button → =unlink-duplicate= verb.
+- [ ] "Duplicates of this post" reverse-FK list: rows render =source= badge + per-row "Unlink" button.
+- [ ] "Promote canonical" button shown only when =duplicate_of= is set; confirm before swap.
+- [ ] All verb calls use =.then/.catch=; refresh model on success.
+
+*Files*:
+- =frontend/app/components/job-posts/form.hbs= — new =panel-card= sections.
+- =frontend/app/components/job-posts/form.js= — verb action handlers.
+- =frontend/app/adapters/job-post.js= or model — wire the verb URLs.
+
+*Tests*:
+- =frontend/tests/integration/components/job-posts/form-test.js= — picker renders + verb calls fire.
+
+*Dependency*: api verb-endpoints ticket (Phase 2 api) merged first.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Job-post edit page additions
+
+* DONE Phase 2 api JobPostViewSet — mark-duplicate-of, unlink-duplicate, promote-canonical :api:dedupe:
+:PROPERTIES:
+:PHASE:    2
+:PLAN:     Plans/PLAN ActivityPub prep + job-post adaptation
+:LAST_TOUCHED: [2026-06-10]
+:ARCHIVE_TIME: 2026-06-10 Wed 14:24
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Feature
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Goal*: three verb endpoints that let users curate =duplicate_of= relationships from the UI, gated by visibility.
+
+*Acceptance*:
+- [ ] =POST /api/v1/job-posts/:id/mark-duplicate-of/= body =target_id=. Sets =self.duplicate_of_id = target_id=.
+- [ ] =POST /api/v1/job-posts/:id/unlink-duplicate/=. Sets =self.duplicate_of_id = NULL=.
+- [ ] =POST /api/v1/job-posts/:id/promote-canonical/=. Swaps roles with =self.duplicate_of= so =self= becomes the root.
+- [ ] All three require both JPs in the caller's visibility set (five-clause filter at =JobPostViewSet.list=). Staff bypass. 403 otherwise.
+- [ ] Cycle guard on promote-canonical: never =duplicate_of_id = self.id=.
+- [ ] Each verb returns JSON:API resource document for the updated JP (and the affected sibling on promote).
+
+*Files*:
+- =api/job_hunting/api/views/jobs.py=
+- =api/job_hunting/api/serializers.py= (likely no changes; =duplicate_of_id= already writable).
+
+*Tests*:
+- =api/job_hunting/tests/test_job_post_viewset.py= — one test per verb covering happy path, visibility rejection, cycle guard.
+
+*Out of scope*: DuplicateAnnotation audit rows — that's the Phase 3 ticket.
+
+*Plan*: Plans/PLAN ActivityPub prep + job-post adaptation/Proposed duplicate model — keep parent-child + add affordances
+
+* DONE SSE events endpoint holds gunicorn worker open on client disconnect :api:bugs:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-10]
+:PRIORITY: P1
+:ARCHIVE_TIME: 2026-06-10 Wed 14:24
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Followups
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Repro:* gunicorn worker pid 139 was inside =_event_stream= 's =select.select= in =api/job_hunting/api/events.py:191= when the kernel SIGKILL'd it 2026-06-09 07:51:13 PDT. The worker had been holding the SSE connection open for an undetermined duration; under the 512 MiB cap, retained per-connection state plus any concurrent request burst exceeded the limit.
+
+*Hypothesis:* the SSE handler 's =select.select= loop does not promptly release the worker when the client disconnects (frontend tab close, network blip). Worker stays "busy" from gunicorn 's perspective, accreting state, until something kills it.
+
+*Fix shape:* audit =_event_stream= for:
+  - bounded =select.select= timeout (e.g. 30s) with a top-level disconnect-check between iterations
+  - explicit cleanup of any per-connection buffers / queue subscriptions when the client goes away
+  - structured logging of connection lifecycle so we can see in logfire how long SSE sessions actually live
+
+*Why P1:* this is the upstream cause of the OOM. Bumping the memory limit (sibling Bug) buys headroom; this fix removes the leak shape entirely.
+
+*Related:* api worker OOM under SSE load (sibling Bug entry).
+
+* DONE api worker OOM under SSE load — bump memory limit from 512 MiB :api:bugs:infra:
+:PROPERTIES:
+:LAST_TOUCHED: [2026-06-09]
+:PRIORITY: P1
+:ARCHIVE_TIME: 2026-06-10 Wed 14:24
+:ARCHIVE_FILE: ~/Network/syncthing/Projects/career_caddy/todo.org
+:ARCHIVE_OLPATH: Inbox/Followups
+:ARCHIVE_CATEGORY: todo
+:ARCHIVE_TODO: DONE
+:ARCHIVE_ITAGS: IMPORTANT
+:END:
+*Repro:* gunicorn worker pid 139 received SIGKILL at 2026-06-09 07:51:13 PDT inside =job_hunting/api/events.py:191= (=select.select= in =_event_stream=). Kernel marker: "Worker (pid:139) was sent SIGKILL! Perhaps out of memory?" Replacement worker (pid 216) booted within 1s but every MCP call in the window 500'd because =public_server.verify_token= 's =httpx.get(api/v1/me/)= hit =httpx.ReadTimeout=.
+
+*Memory limits today:* =docker-compose.prod.yml= caps the api service at 512 MiB. Post-restart, idle steady-state is 318 MiB / 512 MiB (62%). One SSE connection plus any other request burst pushes the worker past the limit.
+
+*Proposed fix:* bump api =mem_limit= (and the matching reservation) to 768 MiB or 1 GiB in =docker-compose.prod.yml=. Cheapest immediate stop-loss; pairs with the SSE-cleanup bug below.
+
+*Why P1:* OOM kills every in-flight request including MCP auth, so the user sees the whole api flicker red even for tools that have nothing to do with SSE.
+
+*Related:* SSE worker not releasing on client disconnect (sibling Bug entry).
