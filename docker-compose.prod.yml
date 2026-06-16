@@ -122,6 +122,16 @@ services:
       - default
     entrypoint: ""
     command: python manage.py qcluster
+    # The shared api image ships a HEALTHCHECK (api/Dockerfile) that curls
+    # http://127.0.0.1:8000/api/v1/healthcheck — correct for the gunicorn api,
+    # but the worker runs qcluster with no HTTP surface, so the probe can never
+    # connect and the container reports "unhealthy" forever despite processing
+    # tasks fine. No cheap worker-side probe catches the real failure mode (DB
+    # unreachable / cluster wedged), so disable the inherited check rather than
+    # ship a green-theater one. Liveness is covered by restart:unless-stopped +
+    # qcluster reincarnation; processing is observable via django_q_task.
+    healthcheck:
+      disable: true
     environment:
       DEBUG: "False"
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
