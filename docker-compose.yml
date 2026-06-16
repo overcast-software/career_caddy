@@ -80,6 +80,11 @@ services:
       context: ./api
     entrypoint: ""
     command: python manage.py qcluster
+    # Same image as api, which ships a HEALTHCHECK curling :8000. The worker has
+    # no HTTP surface, so the inherited probe always fails and the container
+    # shows "unhealthy". Disable it here too (parity with docker-compose.prod.yml).
+    healthcheck:
+      disable: true
     volumes:
       - ./api:/app
       - api_venv:/app/.venv
