@@ -101,10 +101,56 @@ services:
     labels:
       caddy: api.careercaddy.online
       caddy.import: cc_log
+      # The SSE stream runs on the separate ASGI `events` service (uvicorn,
+      # off the sync gunicorn pool) so a long-lived stream can't peg/SIGKILL
+      # an api worker — see api notes Plans/SSE off sync gunicorn (Option B).
+      # EXACT-path match (no trailing *) so POST /api/v1/events/token/ stays
+      # on the gunicorn api; only GET /api/v1/events/ (the stream) is split
+      # off. flush_interval -1 disables proxy buffering for text/event-stream.
+      # Mirrors the proven handle_N pattern on the frontend service below.
+      caddy.handle_0: /api/v1/events/
+      caddy.handle_0.reverse_proxy: events:8001
+      caddy.handle_0.reverse_proxy.flush_interval: "-1"
       caddy.reverse_proxy: "{{upstreams 8000}}"
       caddy.reverse_proxy.transport: http
       caddy.reverse_proxy.transport.read_timeout: 2m
       caddy.reverse_proxy.transport.write_timeout: 2m
+
+  # ── Events (SSE) ──────────────────────────────────────────────────────────
+  # Separate ASGI process serving ONLY the long-lived SSE stream
+  # (GET /api/v1/events/). Shares the api image (same SHA/code/env) but runs
+  # uvicorn instead of gunicorn, so the stream lives off the sync gunicorn
+  # pool: uvicorn has no arbiter SIGKILL, so a >120s stream survives and one
+  # stuck stream can't halve api request capacity. caddy routes the exact
+  # path /api/v1/events/ here (see the api service labels); the token POST
+  # and everything else stay on the gunicorn api. Option B of the api notes
+  # Plans/SSE off sync gunicorn — A-B-C tradeoff.
+  events:
+    image: ghcr.io/overcast-software/career_caddy_api:${IMAGE_TAG:-latest}
+    container_name: careercaddy-events
+    restart: unless-stopped
+    networks:
+      - default   # reach db for the LISTEN connection
+      - proxy     # so caddy resolves `events` as the SSE upstream
+    entrypoint: ""
+    command: ["uvicorn", "job_hunting.sse_asgi:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@db:5432/${DB_NAME:-job_hunting}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-careercaddy.online,api.careercaddy.online,localhost,127.0.0.1,events}
+      SA_SCHEMA_ON_POST_MIGRATE: "False"  # api runs migrations; events just LISTENs
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8001/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    mem_limit: 256m
 
   # ── Worker ──────────────────────────────────────────────────────────────
   # django-q2 task worker — Phase 1 of Plans/Job-queue integration. Shares
