@@ -79,19 +79,12 @@ The pieces worth a closer look:
 
 ## Architecture
 
-```
-              ┌──────────────────────────────────────────────────┐
-   Browser ──▶│ frontend   Ember 6 SPA  +  career-caddy-sender ext │
-              └─────────────────────┬────────────────────────────-┘
-                                    │  JSON:API  (JWT, auto-refresh)
-              ┌─────────────────────▼────────────────────────────┐
-              │ api   Django + DRF  ·  PostgreSQL  ·  MCP servers   │◀── Api-Key ──┐
-              └─────────────────────┬────────────────────────────┘               │
-                  hold scrapes      │  claim-next (SKIP LOCKED)        HTTP-only   │
-              ┌─────────────────────▼─────────┐        ┌─────────────────────────-┴┐
-              │ agents  Camoufox + scrape_graph│        │ automation (cc_auto)       │
-              │ runners · score poller · MCP   │        │ email triage · A2A · web   │
-              └───────────────────────────────┘        └────────────────────────────┘
+```mermaid
+flowchart TD
+    Browser["Browser"] --> Frontend["frontend — Ember 6 SPA<br/>+ career-caddy-sender extension"]
+    Frontend -->|"JSON:API · JWT (auto-refresh)"| API["api — Django + DRF<br/>PostgreSQL · JSON:API · MCP servers"]
+    Agents["agents — Camoufox + scrape_graph<br/>runners · score poller · MCP"] <-->|"claim-next (SKIP LOCKED) · Api-Key"| API
+    Automation["automation (cc_auto)<br/>email triage · A2A · copilot"] -->|"HTTP-only · Api-Key"| API
 ```
 
 Five independently deployable submodules (each has its own `CLAUDE.md`):
