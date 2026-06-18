@@ -1,199 +1,258 @@
 # Career Caddy
 
-A personal job hunt dashboard. Track applications, store job postings, manage your resume, and generate AI-assisted cover letters and application answers.
+**An AI-assisted, self-hostable platform for running a job hunt end-to-end** — capture
+postings from anywhere, extract and de-duplicate them, score them against your background, and
+draft cover letters and application answers. It's a production, multi-service system — a web
+SPA, a REST API, autonomous scraping agents, a browser extension, and an operator automation
+toolkit — built as a git-submodule monorepo.
 
-## What Is This?
+> **Core idea — Career Data is the center of everything.** You write one markdown document
+> (your background, skills, writing voice, goals) and refine it over time. Every AI feature —
+> scoring, cover letters, summaries, answer drafting, chat — uses it as foundational prompt
+> context. Better Career Data means better output everywhere.
 
-Career Caddy is an AI-assisted, self-hosted job search tracker. The core problem it solves:
-job hunting is fragmented across dozens of websites with no central place for your activity,
-applications, or documents.
+**Live:** [careercaddy.online](https://careercaddy.online) · **In-app docs:** `/docs` ·
+**Project board:** [plans.careercaddy.dev](https://plans.careercaddy.dev)
 
-The app is built around one philosophy: **Career Data is the center of everything.** Career
-Data is a markdown document you write once and refine over time — your professional background,
-skills, writing voice, and goals. Every AI feature (scoring, cover letters, summaries, answer
-drafting, chat) uses Career Data as its foundational prompt context. Better Career Data means
-better AI output across the board.
+---
 
-See the in-app documentation at `/docs` for the intended user workflow and explanation of
-every resource.
+## Engineering highlights
 
-## Architecture Overview
+The pieces worth a closer look:
 
-Three independently deployable submodules:
+- **Tiered, self-tuning extraction pipeline.** Each job-board domain carries a learned
+  `ScrapeProfile`. The scrape graph escalates only as far as it must — **Tier 0** pure-CSS
+  (BeautifulSoup, ~$0) → **Tier 1** small model → **Tier 2** Haiku → **Tier 3** Sonnet — and
+  records hit/miss metrics so "known-good" domains stay on the cheap tier. Implemented as a
+  **`pydantic-graph` state machine** (`agents/scrape_graph/`).
+- **Distributed, race-free scrape workers.** The production VPS runs no browser. Scrapes are
+  created with `status=hold`; external **runners** (a laptop, a Raspberry Pi) claim work
+  atomically via `POST /api/v1/scrapes/claim-next/` using Postgres
+  `SELECT FOR UPDATE SKIP LOCKED`, so N runners coexist with zero double-claims. Camoufox +
+  Playwright with stealth; Chromium fallback for ARM.
+- **Cross-platform JobPost de-duplication.** A LinkedIn listing and the same role on Greenhouse
+  collapse into one canonical record — URL canonicalization, per-recipient tracker-link
+  resolution, `apply_url`-based cross-platform matching, and a trust-aware overwrite so a
+  higher-trust source upgrades a stub in place instead of creating a duplicate.
+- **A browser extension that needs no password.** The MV3 `career-caddy-sender` reads your
+  existing signed-in SPA session, mints a scoped, revocable API key, and one-click sends the
+  active job page. A "known-good" fast path POSTs the pre-extracted title/company/description
+  straight to persistence (skipping the server-side browser entirely); otherwise it falls back
+  to text ingestion. Includes a staff-only tools tab gated on the server's `is_staff`.
+- **MCP-native AI layer.** Agents are `pydantic-ai` definitions wired to **Model Context
+  Protocol** servers; the public server is exposed at `mcp.careercaddy.online/mcp` for any MCP
+  client (Claude Desktop, Cursor, …). The product's own capabilities — job posts, scrapes,
+  scoring, dedupe — are themselves MCP tools.
+- **SSE that survives a synchronous app server.** Long-lived event streams run on a
+  **standalone uvicorn/Starlette ASGI process**, isolated from the synchronous gunicorn pool so
+  a multi-minute stream can't trip the worker-timeout SIGKILL.
+- **ActivityPub federation (phased).** Companies and job posts are addressable as ActivityPub
+  actors — webfinger, inbox/outbox, followers — for cross-instance distribution.
+- **Real-browser deploy canary + reproducible CI.** A Cypress canary hits the live public
+  surface (reverse-proxy routing, migrations, certs) as a pre-push gate. CI — lint + tests for
+  API / frontend / automation plus a security pass — runs through **Dagger**, so it's identical
+  on a laptop and in GitHub Actions.
+
+---
+
+## Architecture
+
+```
+              ┌──────────────────────────────────────────────────┐
+   Browser ──▶│ frontend   Ember 6 SPA  +  career-caddy-sender ext │
+              └─────────────────────┬────────────────────────────-┘
+                                    │  JSON:API  (JWT, auto-refresh)
+              ┌─────────────────────▼────────────────────────────┐
+              │ api   Django + DRF  ·  PostgreSQL  ·  MCP servers   │◀── Api-Key ──┐
+              └─────────────────────┬────────────────────────────┘               │
+                  hold scrapes      │  claim-next (SKIP LOCKED)        HTTP-only   │
+              ┌─────────────────────▼─────────┐        ┌─────────────────────────-┴┐
+              │ agents  Camoufox + scrape_graph│        │ automation (cc_auto)       │
+              │ runners · score poller · MCP   │        │ email triage · A2A · web   │
+              └───────────────────────────────┘        └────────────────────────────┘
+```
+
+Five independently deployable submodules (each has its own `CLAUDE.md`):
 
 | Submodule | Stack | Role |
 |-----------|-------|------|
-| `frontend/` | Ember.js 6.x SPA | User interface, JSON:API client |
-| `api/` | Django REST Framework + PostgreSQL | Data layer, extraction, AI orchestration |
-| `agents/` | Pydantic-AI + MCP + Camoufox | Agent runtime, MCP servers, browser scraper, hold-poller |
+| `frontend/` | Ember.js 6 + Ember Data + Tailwind | JSON:API client SPA; also ships the `career-caddy-sender` browser extension |
+| `api/` | Django + DRF + PostgreSQL | Domain models, extraction + dedupe, AI orchestration, JSON:API + the production MCP servers |
+| `agents/` | pydantic-ai + pydantic-graph + Camoufox/Playwright | Browser scraping, the tiered extraction state machine, scrape runners, the score poller, MCP server definitions |
+| `automation/` | Python (HTTP-only) | Operator-side toolkit (cc_auto): email→JobPost triage, A2A orchestration, copilot — runs on one user's machines |
+| `e2e/` | Cypress | Real-browser deploy canary |
 
-Inside `agents/` (see `agents/README.md` for full layout):
+**Authentication:** frontend → api is JWT (60-min, auto-refreshed on 401); agents/automation →
+api is a long-lived `Api-Key`. **Contract:** JSON:API (`application/vnd.api+json`) end to end.
 
-| Folder | Role |
-|--------|------|
-| `agents/agents/` | Pydantic-AI agent definitions (job_extractor, obstacle, onboarding, career_caddy CRUD) |
-| `agents/mcp_servers/` | 4 MCP servers — `chat_server` and `public_server` ship to **prod** (`:8031` chat, `:8030` public at `mcp.careercaddy.online`); `browser_server` and `career_caddy_server` are **local-only** |
-| `agents/browser/` | Camoufox + Playwright engine (local-only) |
-| `agents/scrape_graph/` | pydantic-graph state machine for scrape + extract |
-| `agents/pollers/` | Long-running daemons (`hold_poller`, `score_poller`) |
-| `agents/tools/` | One-shot operator scripts (`manual_login`, `discover_sites`, etc.) |
+### Why these choices
+- **Ember.js** — the app has deeply nested routes (job post → application → question → answer)
+  and many inter-resource relationships; Ember Data's store and JSON:API adapter handle that
+  complexity cleanly.
+- **Django** — 30+ domain models benefit from the ORM, plus first-class auth, migrations, admin.
+- **A separate AI layer** — browser automation (Camoufox) and local email access (notmuch) are
+  host-only capabilities that don't belong in a container. Exposing them as MCP servers makes
+  them composable with any MCP client.
+- **Service (`agents/`) vs operator (`automation/`)** — `agents/` runs as containers for
+  *everyone*; `automation/` runs on *one user's* machines and talks to the API strictly over
+  HTTP (no shared Python imports across the boundary).
 
-A sibling toolkit, [`career_caddy_automation`](https://github.com/overcast-software/career_caddy_automation) ("cc_auto"), drives Career Caddy entirely over HTTP for email triage and other personal automation. It's not a submodule — self-hosters point it at any Career Caddy domain via the `CC_API_BASE_URL` / `CC_MCP_URL` / `CC_API_TOKEN` env trio.
+---
 
-**Why Ember.js?** The app has complex nested routes (job post → application → question →
-answer) and many inter-resource relationships. Ember's conventions for nested routing, the
-Ember Data store, and the JSON:API adapter handle this complexity cleanly.
+## Tech stack
 
-**Why Django?** Django handles authentication, migrations, and admin.
-The 30+ domain models benefit from its ORM and ecosystem.
+Python 3.13 · Django + DRF · PostgreSQL · Ember.js 6 + Ember Data · Tailwind ·
+pydantic-ai · pydantic-graph · Model Context Protocol · Camoufox + Playwright ·
+Server-Sent Events (uvicorn/Starlette) · Docker Compose · **Dagger** (CI) ·
+Cypress · pytest · QUnit · ruff · `uv` · GitHub Actions → GHCR → VPS.
 
-**Why a separate AI layer?** The pipeline needs browser automation (Camoufox) and local
-email access (notmuch) — host-only capabilities that don't belong in a container. Running
-them as MCP servers makes them composable with any MCP client (Claude Desktop, etc.).
+---
 
-## Key Features
+## Getting started
 
-- **Tiered extraction** — Domain profiles learn from past scrapes, auto-selecting from CSS-only ($0) to full LLM ($0.10). See `agents/CLAUDE.md` for model config.
-- **Hold-poller** — Headless browser worker that runs on a desktop or Raspberry Pi, scraping jobs the VPS cannot handle. The VPS queues work; the poller executes it.
-- **AI chat** — SSE streaming assistant aware of your current page context, with elicitation buttons for guided workflows.
-- **MCP integration** — Public career data tools exposable to any MCP client (Claude Desktop, Cursor, etc.).
-- **Screenshots** — Browser captures stored during scraping, viewable in a staff-only gallery for debugging.
-- **Domain scrape profiles** — Per-hostname learning loop: auth requirements, CSS selectors, extraction hints. Staff-editable in admin.
-
-## Deployment Topology
-
-The system splits across two (optionally three) machines:
-
-| Target | Compose file | Services | Recommended hardware |
-|--------|-------------|----------|----------------------|
-| **VPS** (production) | `docker-compose.prod.yml` | db, api, frontend, chat, mcp | 2 GB RAM, 1–2 vCPU, no GPU |
-| **Local dev** | `docker-compose.yml` | db, api, frontend, chat, browser-mcp | 8+ GB RAM (Camoufox needs ~1 GB) |
-| **Raspberry Pi / NUC** (optional) | standalone script | hold-poller only | Pi 4/5 with 4+ GB RAM, 64-bit OS |
-
-**How hold-poller bridges the gap:** The VPS runs no browser. When a scrape is created with `status=hold`, the hold-poller (running locally or on a Pi) picks it up, scrapes the page with Camoufox, and posts the raw HTML back to the API. The API then handles extraction, job post creation, and scoring — no LLM runs on the poller.
-
-## The Data Model at a Glance
-
-- **Career Data** — singleton per user, markdown blob, read on every AI call
-- **Job Post** — root resource; Scores, Cover Letters, Summaries, Scrapes, and Applications all link to it
-- **Scrape** — raw HTML capture of a job page; **Job Post** is the structured extraction from a scrape
-- **Score** — AI fit assessment (0–100); run before writing a cover letter to prioritize your time
-- **Questions / Answers** — exist at both application level and globally (companies reuse questions; you can reuse answers)
-- **Favorite flag** — on Cover Letters and Answers, feeds those outputs back into Career Data to improve future AI generations
-
-## Prerequisites
-
-- [Docker](https://docs.docker.com/get-docker/) with Docker Compose v2
-- [Make](https://www.gnu.org/software/make/) (`make --version` to check)
-- An OpenAI or Anthropic API key (for AI features — cover letters, summaries, scoring, chat)
-- [uv](https://docs.astral.sh/uv/) (only if running the hold-poller outside Docker)
-
-## Quick Start
+**Prerequisites:** Docker (with Compose v2), `make`, and an OpenAI **or** Anthropic API key
+(for the AI features). `uv` only if you run a scrape runner outside Docker.
 
 ```bash
-# 1. Copy the environment file and fill in your API key
+# 1. Copy the environment file and set your API key
 cp .env.example .env
-# Open .env and set OPENAI_API_KEY=sk-... (or ANTHROPIC_API_KEY)
-# Everything else can stay as-is for local dev
+#    set OPENAI_API_KEY=sk-...  (or ANTHROPIC_API_KEY); the rest is fine for local dev
 
-# 2. Check your environment
+# 2. Sanity-check the environment
 make doctor
 
-# 3. Start the app
+# 3. Start the core stack (db + api + frontend + chat)
 make up
 
 # 4. Open the app
-# http://localhost:4200
+#    http://localhost:4200  →  a one-time setup wizard creates your admin user
 ```
 
-The first time you open the app, a setup wizard will appear. Enter a username, email, and password — this creates your admin account. The wizard only runs once.
+The first `make up` takes a few minutes (image builds + dependency installs); later starts are
+fast. The first page load compiles Tailwind once, then it's instant.
 
-> The first `make up` takes a few minutes while Docker builds the images and installs dependencies. Subsequent starts are fast.
+See `/docs` in the running app for the intended end-user workflow and an explanation of every
+resource.
 
-## Stopping
+---
+
+## Project layout
+
+```
+career_caddy/            parent repo — docker-compose, Makefile, Dagger CI, deploy workflows
+├── frontend/            Ember SPA  +  public/extensions/career-caddy-sender  (browser extension)
+├── api/                 Django + DRF + PostgreSQL  +  MCP servers
+├── agents/              Camoufox browser · scrape_graph · runners · score poller · MCP defs
+├── automation/          operator-side cc_auto (email triage, A2A, copilot) — HTTP-only
+├── e2e/                 Cypress deploy canary
+└── dagger/              CI pipeline definitions (Python)
+```
+
+Inside `agents/`: `agents/agents/` (pydantic-ai definitions), `agents/scrape_graph/` (the
+extraction state machine), `agents/runners/` (the `scrape_runner` that claims hold work),
+`agents/pollers/` (the `score_poller`), `agents/mcp_servers/` (four MCP servers — `chat_server`
+and `public_server` ship to prod; `browser_server` and `career_caddy_server` are local-only).
+
+---
+
+## Testing & CI
+
+| Area | Tests | Lint |
+|------|-------|------|
+| API | `make test-api` (pytest) | `make lint-api` (ruff) |
+| Frontend | `make test-frontend` (QUnit) | `make lint-frontend` (prettier) |
+| Automation | `make test-automation` (pytest) | `make lint-automation` (ruff) |
+| e2e | `make canary` (Cypress vs the live deploy) | — |
+
+- **`make ci`** runs lint + tests for api/frontend/automation locally via **Dagger** — the same
+  pipeline GitHub Actions runs, so "green locally" means "green in CI".
+- **`make install-hooks`** wires the Cypress canary as a `pre-push` gate: a broken staging
+  deploy blocks the push before it can become a production deploy.
+- **Deploy:** merging the parent repo to `main` triggers GitHub Actions → builds and publishes
+  GHCR images → deploys to the VPS. Submodules merge first; the parent bumps their pins after.
+
+---
+
+## Deployment topology
+
+The system spans two (optionally three) machines:
+
+| Target | Compose file | Services | Hardware |
+|--------|--------------|----------|----------|
+| **VPS** (production) | `docker-compose.prod.yml` | db, api, frontend, chat, MCP, SSE events | 2 GB RAM, 1–2 vCPU, no GPU |
+| **Local dev** | `docker-compose.yml` | db, api, frontend, chat, browser-MCP | 8+ GB RAM (Camoufox ~1 GB) |
+| **Raspberry Pi / NUC** (optional) | standalone runner | scrape runner only | Pi 4/5, 4+ GB, 64-bit |
+
+**How the runner bridges the gap:** the VPS runs no browser. A scrape created `hold` is claimed
+by a runner (laptop or Pi) via `claim-next`, fetched with Camoufox, and its HTML posted back;
+the API then handles extraction, JobPost creation, and scoring. No LLM runs on the runner.
 
 ```bash
-make down
+# Run a scrape runner against production (Camoufox by default)
+make runner
+make runner ARGS="--engine chrome"     # Chromium + stealth (ARM / Pi)
+make runner ARGS="--attended"          # headed; reuses one warm window so logins/captchas stick
+make runner-local                      # against localhost:8000
 ```
+
+---
+
+## The data model at a glance
+
+- **Career Data** — singleton per user; a markdown blob read on every AI call.
+- **Job Post** — the root resource; Scores, Cover Letters, Summaries, Scrapes, and Applications
+  all link to it. A **Scrape** is the raw HTML capture; the **Job Post** is its structured
+  extraction.
+- **Score** — an AI fit assessment (0–100); run it before writing a cover letter to prioritize.
+- **Questions / Answers** — exist both per-application and globally (companies reuse questions;
+  you reuse answers).
+- **Favorite flag** — on Cover Letters and Answers; favorited outputs feed back into Career Data
+  to improve future generations.
+
+---
+
+## Common commands
+
+```bash
+make up            # core dev stack (db + api + frontend + chat)
+make up-full       # + browser-MCP service (port 3004)
+make down          # stop everything
+make logs          # follow logs from all services
+make doctor        # verify local environment
+make demo-data     # seed a guest user (Danny Noonan) + demo data
+make migrate       # run Django migrations
+make shell-api     # bash shell in the api container
+make ci            # full lint + test (api + frontend + automation) via Dagger
+make runner        # run a scrape runner
+make help          # list every target
+```
+
+---
 
 ## Ports
 
 | Service | Local dev | Production |
 |---------|-----------|------------|
-| Frontend | :4200 | :8087 |
-| API | :8000 | :8025 |
-| Database | :5432 | :5432 |
-| Chat | internal | :8031 |
-| Browser MCP | :3004 | — |
-| MCP gateway | :3002 | — |
-| Public MCP | — | :8030 |
+| Frontend | 4200 | 8087 |
+| API | 8000 | 8025 |
+| Database | 5432 | 5432 |
+| Chat MCP | internal | 8031 |
+| Public MCP | — | 8030 (`mcp.careercaddy.online`) |
+| Browser MCP | 3004 | — |
 
-## Common Commands
+---
 
-```bash
-make up              # Start the full dev stack
-make up-full         # Dev stack + browser-mcp service (port 3004)
-make down            # Stop everything
-make logs            # Follow live logs from all services
-make doctor          # Check your environment is set up correctly
-make doctor-poller   # Check hold-poller environment specifically
-make poller          # Run the hold-poller standalone
-make shell-api       # Open a shell inside the API container
-make shell-db        # Open a psql shell in the database
-make migrate         # Run database migrations manually
-make demo-data       # Seed a guest user and demo data
-make ci              # Run API + frontend CI checks locally via Dagger
-make help            # List all available commands
-```
+## Project planning
 
-## Hold-Poller Setup
-
-The hold-poller is a standalone Python process that bridges the gap between the VPS (no browser) and sites that require JavaScript rendering.
-
-```bash
-# 1. Ensure these are set in .env:
-#    CC_API_BASE_URL=https://careercaddy.online  (or http://localhost:8000)
-#    CC_API_TOKEN=<your-api-key>                 (from /admin/api-keys)
-
-# 2. Run it
-make poller
-# Or directly: cd agents && uv run caddy-poller
-```
-
-The poller polls the API every 30 seconds (configurable via `HOLD_POLL_INTERVAL`). It backs off exponentially when there's no work, and resets on success.
-
-For Raspberry Pi deployment, see `~/Sandbox/caddy-browser-pi/`.
-
-## Optional: Logfire Tracing
-
-The browser MCP server supports [Logfire](https://logfire.pydantic.dev/) tracing. It is disabled by default and requires no setup to run without it.
-
-**Getting a token:**
-
-1. Sign up at [logfire.pydantic.dev](https://logfire.pydantic.dev/)
-2. Create a project (e.g. `career-caddy`)
-3. Go to **Settings → Write tokens** and create a new token
-4. Copy the token value
-
-Then set it in your `.env` file:
-
-```
-LOGFIRE_TOKEN=your-token-here
-```
+Roadmap, epics, and in-flight work are tracked on a project board at
+**[plans.careercaddy.dev](https://plans.careercaddy.dev)**.
 
 ## Troubleshooting
 
-**Port already in use** — `make up` stops existing containers before starting, but if another app on your machine uses port 4200, 8000, or 5432, you'll see an error. Stop the conflicting service and run `make up` again.
+- **Setup wizard doesn't appear** — the API may still be booting; wait ~30s and refresh.
+- **Port already in use** — stop whatever is on 4200 / 8000 / 5432 and re-run `make up`.
+- **Start fresh** — `make down`, remove the Postgres data volume (`docker volume ls` to find the `*_postgres_data` one), then `make up`.
 
-**Setup wizard doesn't appear** — the API may still be starting. Wait 30 seconds and refresh.
+## License
 
-**Slow first load** — the frontend compiles Tailwind CSS on first start. Subsequent reloads are instant.
-
-**Hold-poller can't reach the API** — run `make doctor-poller` to diagnose. Check that `CC_API_BASE_URL` and `CC_API_TOKEN` are set in `.env` and that the target API is running.
-
-**Want to start fresh** — stop the app, remove the database volume, and restart:
-```bash
-make down
-docker volume rm career_caddy_deploy_postgres_data
-make up
-```
+See [`LICENSE`](./LICENSE).
