@@ -16,6 +16,28 @@ toolkit — built as a git-submodule monorepo.
 
 ---
 
+## Key features
+
+- **Send a job from anywhere** — a one-click MV3 browser extension captures the active posting
+  (no password — it reuses your signed-in session); or paste the text, or submit a URL.
+- **Automatic extraction & de-duplication** — pages are parsed into structured Job Posts, and
+  the same role across LinkedIn, Greenhouse, Lever, etc. collapses into one canonical record.
+- **AI fit scoring** — score any posting 0–100 against your Career Data so you spend effort
+  where it actually counts.
+- **AI cover letters & application answers** — generate and refine drafts grounded in your
+  background and writing voice; favorite the good ones and they feed back into future output.
+- **Posting summaries** — fast AI summaries of long job descriptions.
+- **Career Data at the core** — one markdown profile (background, skills, voice, goals) that
+  powers every AI feature; improve it once, improve everything.
+- **Context-aware AI chat** — an SSE-streamed assistant aware of the page you're on, with
+  guided-workflow prompts.
+- **Resume & application tracking** — structure resumes (experience, education, skills) and
+  track each application's status against its job post.
+- **MCP integration & self-hostable** — expose your career tools to any MCP client (Claude
+  Desktop, Cursor, …), and run the whole stack on your own infrastructure with Docker.
+
+---
+
 ## Engineering highlights
 
 The pieces worth a closer look:
