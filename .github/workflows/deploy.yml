@@ -12,7 +12,10 @@ jobs:
   ci:
     name: Build and test (API + Frontend)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 40, not 20: matches ci.yml — the SSE-weight api image (uvicorn[standard] +
+    # django-q2) makes the cold build-api step exceed 20m on its own. Without
+    # this bump the post-merge Deploy gate would time out and never deploy.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,7 +37,9 @@ jobs:
     name: Publish images and deploy to VPS
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 30
+    # 40, not 30: the cold api image build for GHCR publish carries the same
+    # heavier SSE deps; give the build+publish+deploy chain headroom.
+    timeout-minutes: 40
     needs: ci
     steps:
       - uses: actions/checkout@v4

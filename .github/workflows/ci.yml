@@ -14,7 +14,11 @@ jobs:
   ci:
     name: Build and test (API + Frontend)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 40, not 20: the SSE split added uvicorn[standard] (native uvloop/httptools
+    # compiles) + django-q2 to the api image, pushing the cold `build-api` step
+    # (uv sync + full Django suite) past the old 20m cap on its own — frontend +
+    # AI steps never got to run. Real fix is Dagger uv-dep caching; this unblocks.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
