@@ -68,6 +68,42 @@ services:
       db:
         condition: service_healthy
 
+  # ── Events (SSE) ──────────────────────────────────────────────────────────
+  # ASGI SSE process (uvicorn) serving GET /api/v1/events/. Shares the api
+  # image/venv but runs off the sync gunicorn pool — see api notes
+  # Plans/SSE off sync gunicorn (Option B). Locally there is no caddy, so the
+  # Ember frontend still hits the sync events.py path on :8000; this service
+  # is exposed on :8001 to exercise the ASGI app directly
+  # (curl 'http://localhost:8001/api/v1/events/?token=...'). Needs `make build`
+  # after the pyproject adds uvicorn/starlette so they land in the api_venv.
+  events:
+    build:
+      context: ./api
+    entrypoint: ""
+    command: ["uvicorn", "job_hunting.sse_asgi:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+    volumes:
+      - ./api:/app
+      - api_venv:/app/.venv
+      - screenshots:/app/screenshots
+    ports:
+      - "8001:8001"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-job_hunting}
+      DEBUG: "True"
+      SECRET_KEY: ${SECRET_KEY:-dev-only-insecure-do-not-use-in-production}
+      ALLOWED_HOSTS: "localhost,127.0.0.1,events"
+      SA_SCHEMA_ON_POST_MIGRATE: "False"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8001/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    depends_on:
+      db:
+        condition: service_healthy
+
   # ── Worker ──────────────────────────────────────────────────────────────
   # django-q2 task worker — Phase 1 of Plans/Job-queue integration. Shares
   # the api image (same code, same venv, same env). Runs `manage.py qcluster`
