@@ -31,24 +31,73 @@ API_IMAGE = "career_caddy_api"
 FRONTEND_IMAGE = "career-caddy-frontend"
 AI_IMAGE = "career_caddy_ai"
 
+# ── Deps-baked CI base images (PACA #8 lever A — self-hosted base image) ────
+# Published siblings of the images above whose ONLY content is the heavy,
+# slowly-changing toolchain + deps layer (apt + `uv sync --no-install-project`
+# / `npm ci`). `_api_base` / `_frontend_base` / `_ai_base` `.from_()` these
+# instead of cold-building from python:3.11-slim / node:20-slim every CI run,
+# then run `uv sync --frozen` / `npm ci` on top as a self-healing reconcile.
+# Pure optimization — see `_pullable` + the cold fallbacks below: a missing or
+# stale base NEVER breaks CI and never tests stale deps. The pull ref uses a
+# fixed BASE_ORG; a fork under another org simply misses the cache and cold-
+# builds (the fallback covers it). `build_{api,frontend,ai}_base` publish them.
+BASE_ORG = "overcast-software"
+API_BASE_IMAGE = "career_caddy_api_base"
+FRONTEND_BASE_IMAGE = "career-caddy-frontend-base"
+AI_BASE_IMAGE = "career_caddy_ai_base"
+
 
 @object_type
 class CareerCaddy:
 
     # ── Shared base containers ─────────────────────────────────────────────
-    # `_api_base` and `_frontend_base` produce a container with toolchain +
-    # deps installed and the source mounted, but no test/lint executions yet.
-    # The lint-only and test-only functions below compose on top of them so
-    # Dagger's content-addressed cache reuses the apt/uv/npm steps across
-    # phases. That's what makes the lint-then-test split fast on second pass.
+    # `_api_base` / `_frontend_base` / `_ai_base` produce a container with the
+    # toolchain + deps installed and the source mounted, but no test/lint
+    # executions yet. The lint-only and test-only functions below compose on
+    # top of them so Dagger's content-addressed cache reuses the apt/uv/npm
+    # steps across phases — that's what makes the lint-then-test split fast on
+    # the second local pass.
+    #
+    # PACA #8 lever A (self-hosted base image): each base first tries to PULL a
+    # deps-baked base image (`build_api_base` / `build_frontend_base` /
+    # `build_ai_base` publish them to GHCR) and `.from_()`s it instead of cold-
+    # building the heavy apt + `uv sync --no-install-project` / `npm ci` layer
+    # every run. This matters in CI, where each GitHub-Actions run starts with a
+    # COLD Dagger engine (no persistent layer cache), so the heavy layer is paid
+    # on every PR today. It is a PURE OPTIMIZATION with two fail-safes:
+    #   1. If the base image is missing/unpullable (bootstrap, first run, GHCR
+    #      hiccup, private-without-creds), `_pullable` returns None and the base
+    #      falls back to the original cold build. CI can NEVER break because a
+    #      base is absent.
+    #   2. The `uv sync --frozen` / `npm ci` reconcile runs on top regardless,
+    #      so a STALE base self-heals to the current lockfile rather than testing
+    #      old deps. Worst case = today's cold speed; never broken, never stale.
 
-    def _api_base(self, src: dagger.Directory) -> dagger.Container:
-        src = (
-            src
-            .without_directory(".venv")
-            .without_directory("staticfiles")
-            .without_directory(".git")
-        )
+    async def _pullable(self, ref: str) -> dagger.Container | None:
+        """Return a synced container from `ref`, or None if it can't be pulled.
+
+        Forces the pull via `.sync()` so a missing image / auth / network
+        failure raises here and is swallowed — callers then cold-build. The
+        synced container is returned (not re-pulled), so the probe IS the pull,
+        not a wasted extra round-trip.
+        """
+        try:
+            return await dag.container().from_(ref).sync()
+        except Exception:
+            return None
+
+    def _api_deps_layer(self, src: dagger.Directory) -> dagger.Container:
+        """The heavy, slowly-changing api layer: python:3.11-slim + apt
+        (build-essential, libpq-dev) + uv + `uv sync --frozen
+        --no-install-project` (the uvloop/httptools native compiles).
+
+        Shared verbatim by `build_api_base` (which publishes it) and by
+        `_api_base`'s cold fallback (when no base is pullable) so the published
+        base and the cold path are byte-identical — a current base makes the
+        downstream `uv sync --frozen` reconcile a true no-op. Only reads
+        pyproject.toml + uv.lock from `src`, so it is independent of the source
+        strip its callers apply.
+        """
         return (
             dag.container()
             .from_("python:3.11-slim")
@@ -64,6 +113,28 @@ class CareerCaddy:
             .with_file("/app/pyproject.toml", src.file("pyproject.toml"))
             .with_file("/app/uv.lock", src.file("uv.lock"))
             .with_exec(["uv", "sync", "--frozen", "--no-install-project"])
+        )
+
+    async def _api_base(self, src: dagger.Directory) -> dagger.Container:
+        src = (
+            src
+            .without_directory(".venv")
+            .without_directory("staticfiles")
+            .without_directory(".git")
+        )
+        # Fast path: `.from_()` the deps-baked base; cold-build fallback if it
+        # can't be pulled. Both end in the same source-overlay + reconcile tail.
+        prebuilt = await self._pullable(
+            f"{REGISTRY}/{BASE_ORG}/{API_BASE_IMAGE}:latest"
+        )
+        layer = prebuilt if prebuilt is not None else self._api_deps_layer(src)
+        # `uv sync --frozen` is a near no-op when the base matches the current
+        # lockfile and a correct incremental install when it's stale — so this
+        # single tail is BOTH the original behavior (cold path) AND the
+        # self-heal (fast path). Never tests stale deps.
+        return (
+            layer
+            .with_workdir("/app")
             .with_directory("/app", src)
             .with_exec(["uv", "sync", "--frozen"])
         )
@@ -98,17 +169,16 @@ class CareerCaddy:
             .with_exec(["uv", "sync", "--frozen", "--group", "dev"])
         )
 
-    def _frontend_base(self, src: dagger.Directory) -> dagger.Container:
-        src = (
-            src
-            .without_directory("node_modules")
-            .without_directory("dist")
-            .without_directory(".git")
-        )
-        # Firefox in `node:20-slim` fails with
-        # "RenderCompositorSWGL failed mapping default framebuffer"
-        # under `-headless` because there's no /dev/dri. xvfb-run gives
-        # firefox a virtual framebuffer; xauth is needed for the cookie.
+    def _frontend_deps_layer(self, src: dagger.Directory) -> dagger.Container:
+        """The heavy, slowly-changing frontend layer: node:20-slim + the apt
+        firefox-esr/xvfb/X-libs stack + `npm ci`.
+
+        Published by `build_frontend_base` and used as `_frontend_base`'s cold
+        fallback. Firefox in `node:20-slim` fails with "RenderCompositorSWGL
+        failed mapping default framebuffer" under `-headless` because there's
+        no /dev/dri; xvfb-run gives it a virtual framebuffer and xauth supplies
+        the cookie. Only reads package.json + package-lock.json from `src`.
+        """
         return (
             dag.container()
             .from_("node:20-slim")
@@ -128,7 +198,86 @@ class CareerCaddy:
             .with_env_variable("CI", "true")
             .with_env_variable("MOZ_HEADLESS", "1")
             .with_exec(["npm", "ci"])
+        )
+
+    async def _frontend_base(self, src: dagger.Directory) -> dagger.Container:
+        src = (
+            src
+            .without_directory("node_modules")
+            .without_directory("dist")
+            .without_directory(".git")
+        )
+        prebuilt = await self._pullable(
+            f"{REGISTRY}/{BASE_ORG}/{FRONTEND_BASE_IMAGE}:latest"
+        )
+        if prebuilt is not None:
+            # Fast path: the baked apt firefox/X-libs stack (the genuinely heavy
+            # layer) + node_modules arrive as a registry pull. Re-run `npm ci`
+            # against the CURRENT package-lock so a stale base self-heals
+            # (re-resolves) rather than testing old node_modules. NOTE: unlike
+            # `uv sync --frozen`, `npm ci` always does a clean reinstall, so the
+            # frontend win is the baked apt layer + the parallel base-image pull,
+            # not skipping npm ci (a lockfile-cmp conditional could skip it when
+            # unchanged — left as a future optimization, see PR notes). CI=true /
+            # MOZ_HEADLESS=1 come baked in from the published base.
+            return (
+                prebuilt
+                .with_workdir("/app")
+                .with_directory("/app", src)
+                .with_exec(["npm", "ci"])
+            )
+        # Cold fallback — byte-identical to the pre-base build (apt + npm ci,
+        # then overlay the source over the installed node_modules; `src` already
+        # excludes node_modules so the install survives). CI never breaks when
+        # the base is absent.
+        return self._frontend_deps_layer(src).with_directory("/app", src)
+
+    def _ai_deps_layer(self, src: dagger.Directory) -> dagger.Container:
+        """The heavy, slowly-changing agents/ test layer: python:3.13-slim +
+        apt (build-essential) + uv + `uv sync --frozen --no-install-project`
+        (FULL deps incl. dev/pytest — this base serves `test_ai`).
+
+        Published by `build_ai_base` and used as `_ai_base`'s cold fallback. No
+        Camoufox — the AI CI image excludes the ~700 MB browser. Only reads
+        pyproject.toml + uv.lock from `src`, and never copies secrets.yml.
+        """
+        return (
+            dag.container()
+            .from_("python:3.13-slim")
+            .with_exec(
+                [
+                    "sh", "-c",
+                    "apt-get update && apt-get install -y --no-install-recommends "
+                    "build-essential curl && rm -rf /var/lib/apt/lists/*",
+                ]
+            )
+            .with_exec(["pip", "install", "uv"])
+            .with_workdir("/app")
+            .with_file("/app/pyproject.toml", src.file("pyproject.toml"))
+            .with_file("/app/uv.lock", src.file("uv.lock"))
+            .with_exec(["uv", "sync", "--frozen", "--no-install-project"])
+        )
+
+    async def _ai_base(self, src: dagger.Directory) -> dagger.Container:
+        """Deps-baked (or cold-fallback) base for the agents/ test suite.
+        Mirrors `_api_base`: pull the baked base else cold-build, then `uv sync
+        --frozen` over the full source as a self-healing reconcile."""
+        src = (
+            src
+            .without_directory(".venv")
+            .without_directory("screenshots")
+            .without_file("secrets.yml")
+            .without_directory(".git")
+        )
+        prebuilt = await self._pullable(
+            f"{REGISTRY}/{BASE_ORG}/{AI_BASE_IMAGE}:latest"
+        )
+        layer = prebuilt if prebuilt is not None else self._ai_deps_layer(src)
+        return (
+            layer
+            .with_workdir("/app")
             .with_directory("/app", src)
+            .with_exec(["uv", "sync", "--frozen"])
         )
 
     # ── Lint-only (cheap, fail-fast) ───────────────────────────────────────
@@ -140,7 +289,7 @@ class CareerCaddy:
     ) -> dagger.Container:
         """Ruff + bandit on the api source. No db, no test suite."""
         return (
-            self._api_base(src)
+            (await self._api_base(src))
             .with_exec(["uv", "run", "ruff", "check", "."])
             .with_exec(["uv", "run", "bandit", "-r", ".", "-x", "*/migrations/*,./.venv/*", "-ll"])
         )
@@ -151,7 +300,7 @@ class CareerCaddy:
         src: Annotated[dagger.Directory, DefaultPath("../frontend")],
     ) -> dagger.Container:
         """eslint + prettier + ember-template-lint + stylelint. No tests."""
-        return self._frontend_base(src).with_exec(["npm", "run", "lint"])
+        return (await self._frontend_base(src)).with_exec(["npm", "run", "lint"])
 
     @function
     async def lint_automation(
@@ -181,7 +330,7 @@ class CareerCaddy:
             .as_service()
         )
         return (
-            self._api_base(src)
+            (await self._api_base(src))
             .with_service_binding("db", pg)
             .with_env_variable(
                 "DATABASE_URL", "postgresql://postgres:postgres@db:5432/job_hunting_ci"
@@ -224,7 +373,7 @@ class CareerCaddy:
     ) -> dagger.Container:
         """Ember QUnit suite under xvfb. Skips lint."""
         return (
-            self._frontend_base(src)
+            (await self._frontend_base(src))
             # Tee TAP output to /tap.log so the assertion step below can
             # verify the summary lines. pipefail propagates `ember test`'s
             # exit past `tee`.
@@ -308,7 +457,7 @@ class CareerCaddy:
             .as_service()
         )
         return (
-            self._api_base(src)
+            (await self._api_base(src))
             .with_exec(["uv", "run", "ruff", "check", "."])
             .with_exec(["uv", "run", "bandit", "-r", ".", "-x", "*/migrations/*,./.venv/*", "-ll"])
             .with_service_binding("db", pg)
@@ -337,7 +486,7 @@ class CareerCaddy:
     ) -> dagger.Container:
         """Lint + test the frontend in one shot. Used by .github/workflows."""
         return (
-            self._frontend_base(src)
+            (await self._frontend_base(src))
             .with_exec(["npm", "run", "lint"])
             .with_exec([
                 "bash", "-c",
@@ -394,33 +543,107 @@ class CareerCaddy:
         src: Annotated[dagger.Directory, DefaultPath("../agents")],
     ) -> dagger.Container:
         """Run AI test suite (toolsets, api_tools, public_server security)."""
-        src = (
-            src
-            .without_directory(".venv")
-            .without_directory("screenshots")
-            .without_file("secrets.yml")
-            .without_directory(".git")
-        )
-
         return (
-            dag.container()
-            .from_("python:3.13-slim")
-            .with_exec(
-                [
-                    "sh", "-c",
-                    "apt-get update && apt-get install -y --no-install-recommends "
-                    "build-essential curl && rm -rf /var/lib/apt/lists/*",
-                ]
-            )
-            .with_exec(["pip", "install", "uv"])
-            .with_workdir("/app")
-            .with_file("/app/pyproject.toml", src.file("pyproject.toml"))
-            .with_file("/app/uv.lock", src.file("uv.lock"))
-            .with_exec(["uv", "sync", "--frozen", "--no-install-project"])
-            .with_directory("/app", src)
-            .with_exec(["uv", "sync", "--frozen"])
+            (await self._ai_base(src))
             .with_env_variable("LOGFIRE_SEND_TO_LOGFIRE", "false")
             .with_exec(["uv", "run", "pytest", "tests/", "-v"])
+        )
+
+    # ── Deps-baked base image builders (PACA #8 lever A) ───────────────────
+    # Publish the heavy deps layer so CI `.from_()`s it instead of cold-
+    # building. Rebuilt OUT OF BAND by .github/workflows/rebuild-base-images.yml
+    # (nightly + on a submodule-pin push + manual) — NEVER in the deploy-gating
+    # path. Staleness is safe (see `_pullable` + the `uv sync --frozen` / `npm
+    # ci` reconcile), so the rebuild trigger can be coarse without risking CI.
+    # These DO NOT touch `publish()` (lever B) or the Dockerfiles.
+
+    async def _publish_base(
+        self,
+        layer: dagger.Container,
+        ref: str,
+        username: str,
+        registry_token: Secret,
+    ) -> str:
+        """Auth + publish a deps-baked base container to `ref`."""
+        return await (
+            layer
+            .with_registry_auth(REGISTRY, username, registry_token)
+            .publish(ref)
+        )
+
+    @function
+    async def build_api_base(
+        self,
+        registry_token: Secret,
+        src: Annotated[dagger.Directory, DefaultPath("../api")],
+        org: str = "overcast-software",
+        tag: str = "latest",
+        registry_username: str = "",
+    ) -> str:
+        """Build + publish the api deps-baked base image to GHCR.
+
+        Bakes apt (build-essential, libpq-dev) + uv + `uv sync --frozen
+        --no-install-project` (the uvloop/httptools native compiles) so
+        `_api_base` can `.from_()` it. Pure optimization: `_api_base` cold-
+        builds when this image is absent and reconciles with `uv sync --frozen`
+        on top, so a missing/stale base is always safe. Only pyproject.toml +
+        uv.lock + installed deps land in the image — no source, no .git.
+
+        Args:
+            registry_token: GitHub token with packages:write permission
+            org: GitHub organization (image path)
+            tag: Image tag (the CI pull ref is `:latest`)
+            registry_username: GHCR actor username (defaults to org)
+        """
+        username = registry_username or org
+        ref = f"{REGISTRY}/{org}/{API_BASE_IMAGE}:{tag}"
+        return await self._publish_base(
+            self._api_deps_layer(src), ref, username, registry_token
+        )
+
+    @function
+    async def build_frontend_base(
+        self,
+        registry_token: Secret,
+        src: Annotated[dagger.Directory, DefaultPath("../frontend")],
+        org: str = "overcast-software",
+        tag: str = "latest",
+        registry_username: str = "",
+    ) -> str:
+        """Build + publish the frontend deps-baked base image to GHCR.
+
+        Bakes the apt firefox-esr/xvfb/X-libs stack + `npm ci` so
+        `_frontend_base` can `.from_()` it. `_frontend_base` re-runs `npm ci` on
+        top (clean reinstall) so a stale base self-heals; CI cold-builds when
+        this image is absent. Only package.json + package-lock.json + installed
+        node_modules land in the image — no source, no .git.
+        """
+        username = registry_username or org
+        ref = f"{REGISTRY}/{org}/{FRONTEND_BASE_IMAGE}:{tag}"
+        return await self._publish_base(
+            self._frontend_deps_layer(src), ref, username, registry_token
+        )
+
+    @function
+    async def build_ai_base(
+        self,
+        registry_token: Secret,
+        src: Annotated[dagger.Directory, DefaultPath("../agents")],
+        org: str = "overcast-software",
+        tag: str = "latest",
+        registry_username: str = "",
+    ) -> str:
+        """Build + publish the agents/ test deps-baked base image to GHCR.
+
+        Bakes apt (build-essential) + uv + `uv sync --frozen
+        --no-install-project` (full deps incl. dev/pytest) so `_ai_base` (used
+        by `test_ai`) can `.from_()` it. Cold fallback + `uv sync --frozen`
+        reconcile keep a missing/stale base safe. secrets.yml is never copied.
+        """
+        username = registry_username or org
+        ref = f"{REGISTRY}/{org}/{AI_BASE_IMAGE}:{tag}"
+        return await self._publish_base(
+            self._ai_deps_layer(src), ref, username, registry_token
         )
 
     @function
