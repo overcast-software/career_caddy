@@ -549,7 +549,7 @@ class CareerCaddy:
             .with_exec(["uv", "run", "pytest", "tests/", "-v"])
         )
 
-    # ── Deps-baked base image builders (PACA #8 lever A) ───────────────────
+    # ── Deps-baked CI base image publisher (PACA #8 lever A) ───────────────
     # Publish the heavy deps layer so CI `.from_()`s it instead of cold-
     # building. Rebuilt OUT OF BAND by .github/workflows/rebuild-base-images.yml
     # (nightly + on a submodule-pin push + manual) — NEVER in the deploy-gating
@@ -567,6 +567,26 @@ class CareerCaddy:
         """Auth + publish a deps-baked base container to `ref`."""
         return await (
             layer
+            .with_registry_auth(REGISTRY, username, registry_token)
+            .publish(ref)
+        )
+
+    async def _build_publish(
+        self,
+        src: dagger.Directory,
+        ref: str,
+        username: str,
+        registry_token: Secret,
+        build_args: list | None,
+        build_kwargs: dict,
+    ) -> str:
+        """Cold-build `src` and push it to `ref`. Returns the pushed ref."""
+        kwargs = dict(build_kwargs)
+        if build_args:
+            kwargs["build_args"] = build_args
+        return await (
+            src
+            .docker_build(**kwargs)
             .with_registry_auth(REGISTRY, username, registry_token)
             .publish(ref)
         )
@@ -646,6 +666,42 @@ class CareerCaddy:
             self._ai_deps_layer(src), ref, username, registry_token
         )
 
+    async def _retag(
+        self,
+        repo: str,
+        prev_tag: str,
+        tag: str,
+        username: str,
+        registry_token: Secret,
+    ) -> str:
+        """Copy `{repo}:{prev_tag}` → `{repo}:{tag}` in GHCR without rebuilding.
+
+        Uses crane (server-side manifest copy — no image pull/push of layers,
+        and platform-agnostic: it copies whatever the prev manifest was). The
+        `:debug` image is required because `crane auth login --password-stdin`
+        needs a shell to read the mounted token from stdin; the default crane
+        image is distroless with no shell.
+
+        Forces execution via `.sync()` so any failure (missing prev image,
+        auth error, network) raises — the caller catches and falls back to a
+        cold build, so a tag is NEVER left stale or missing.
+        """
+        src_ref = f"{repo}:{prev_tag}"
+        dst_ref = f"{repo}:{tag}"
+        await (
+            dag.container()
+            .from_("gcr.io/go-containerregistry/crane:debug")
+            .with_mounted_secret("/run/secrets/ghcr_token", registry_token)
+            .with_exec([
+                "sh", "-c",
+                f"crane auth login {REGISTRY} -u {username} --password-stdin "
+                f"< /run/secrets/ghcr_token "
+                f"&& crane copy {src_ref} {dst_ref}",
+            ])
+            .sync()
+        )
+        return dst_ref
+
     @function
     async def publish(
         self,
@@ -658,8 +714,27 @@ class CareerCaddy:
         registry_username: str = "",
         platform: str = "",
         frontend_api_host: str = "",
+        prev_tag: str = "",
+        changed: str = "api,frontend,ai",
     ) -> list[str]:
-        """Build all images and push to GHCR. Returns list of pushed image refs.
+        """Build changed images, retag unchanged ones, push to GHCR.
+
+        On a parent-main push that only bumped some submodule pins, the
+        unchanged submodules' images are byte-identical to the previous
+        deploy, so we copy (`crane copy`) the already-published
+        `{repo}:{prev_tag}` to `{repo}:{tag}` instead of cold-rebuilding —
+        keeping the single parent-SHA `IMAGE_TAG` contract (no
+        docker-compose.prod.yml change). Returns the list of resulting refs.
+
+        FAIL SAFE — an image reaches `:{tag}` only by (a) a fresh build, or
+        (b) a retag from a prev tag whose pin was byte-identical. Two layers:
+          1. `prev_tag == ""` forces a build for every image (the all-zeros /
+             first-push / force-push guard sets this in the workflow).
+          2. `changed` defaults to all three images, so any mis-call or empty
+             arg reproduces today's build-everything behavior.
+          3. If a retag throws for ANY reason (prev image missing, auth,
+             network) the per-image path falls back to a cold build.
+        Never stale, never missing.
 
         Args:
             registry_token: GitHub token with packages:write permission
@@ -672,42 +747,61 @@ class CareerCaddy:
                 build. Default is empty → same-origin (SPA emits /api/v1/...;
                 outer proxy routes /api/* to the api container). Pass a full
                 origin only for explicit cross-origin deployments.
+            prev_tag: Image tag of the previous deploy (the parent SHA before
+                this push). Empty → build every image (safe default).
+            changed: Comma list of image names that changed this push
+                (api / frontend / ai). Defaults to all three. The workflow
+                maps the changed submodule gitlinks (api→api, frontend→
+                frontend, agents→ai) into this list.
         """
         username = registry_username or org
-        api_ref = f"{REGISTRY}/{org}/{API_IMAGE}:{tag}"
-        frontend_ref = f"{REGISTRY}/{org}/{FRONTEND_IMAGE}:{tag}"
-        ai_ref = f"{REGISTRY}/{org}/{AI_IMAGE}:{tag}"
+        api_repo = f"{REGISTRY}/{org}/{API_IMAGE}"
+        frontend_repo = f"{REGISTRY}/{org}/{FRONTEND_IMAGE}"
+        ai_repo = f"{REGISTRY}/{org}/{AI_IMAGE}"
+
+        changed_set = {c.strip() for c in changed.split(",") if c.strip()}
 
         build_kwargs: dict = {}
         if platform:
             build_kwargs["platform"] = dagger.Platform(platform)
 
-        pushed_api = await (
-            api_src
-            .docker_build(**build_kwargs)
-            .with_registry_auth(REGISTRY, username, registry_token)
-            .publish(api_ref)
-        )
+        async def resolve(
+            name: str,
+            src: dagger.Directory,
+            repo: str,
+            build_args: list | None,
+        ) -> str:
+            ref = f"{repo}:{tag}"
+            # Build when there is no previous tag to copy from, or when this
+            # image's pin actually changed this push.
+            if not prev_tag or name in changed_set:
+                return await self._build_publish(
+                    src, ref, username, registry_token, build_args, build_kwargs
+                )
+            # Unchanged pin → retag prev→tag; fall back to a build on ANY
+            # failure so the tag is never left stale or missing.
+            try:
+                return await self._retag(
+                    repo, prev_tag, tag, username, registry_token
+                )
+            except Exception:
+                return await self._build_publish(
+                    src, ref, username, registry_token, build_args, build_kwargs
+                )
 
-        pushed_frontend = await (
-            frontend_src
-            .docker_build(
-                build_args=[dagger.BuildArg("API_HOST", frontend_api_host)],
-                **build_kwargs,
-            )
-            .with_registry_auth(REGISTRY, username, registry_token)
-            .publish(frontend_ref)
+        pushed_api = await resolve("api", api_src, api_repo, None)
+        pushed_frontend = await resolve(
+            "frontend",
+            frontend_src,
+            frontend_repo,
+            [dagger.BuildArg("API_HOST", frontend_api_host)],
         )
-
         # AI image: build without Camoufox (browser runs on Pi, not VPS)
-        pushed_ai = await (
-            ai_src
-            .docker_build(
-                build_args=[dagger.BuildArg("INSTALL_CAMOUFOX", "false")],
-                **build_kwargs,
-            )
-            .with_registry_auth(REGISTRY, username, registry_token)
-            .publish(ai_ref)
+        pushed_ai = await resolve(
+            "ai",
+            ai_src,
+            ai_repo,
+            [dagger.BuildArg("INSTALL_CAMOUFOX", "false")],
         )
 
         return [pushed_api, pushed_frontend, pushed_ai]
