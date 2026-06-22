@@ -40,21 +40,63 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          # Full history so we can diff the previous main tip against this
+          # push to see which submodule pins actually moved.
+          fetch-depth: 0
 
       - name: Install Dagger CLI
         run: curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=v0.20.8 BIN_DIR=/usr/local/bin sh
+
+      - name: Detect changed submodule pins
+        id: changed
+        # Compute which submodule gitlinks moved between the previous main tip
+        # (github.event.before) and this push (github.sha), mapping
+        # api->api, frontend->frontend, agents->ai. publish() then cold-builds
+        # only the changed images and retags the rest from prev_tag.
+        #
+        # FAIL SAFE: if `before` is all-zeros (first push), empty, or not a
+        # reachable ancestor (force-push / shallow / rewritten history) we
+        # cannot trust the diff, so we emit prev="" and changed=all three —
+        # forcing publish() to build every image (today's behavior).
+        run: |
+          BEFORE='${{ github.event.before }}'
+          SHA='${{ github.sha }}'
+          ZERO='0000000000000000000000000000000000000000'
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "$ZERO" ] || ! git merge-base --is-ancestor "$BEFORE" "$SHA" 2>/dev/null; then
+            echo "Previous sha unusable ($BEFORE) — fail-safe: building all images."
+            echo "prev=" >> "$GITHUB_OUTPUT"
+            echo "changed=api,frontend,ai" >> "$GITHUB_OUTPUT"
+          else
+            PATHS="$(git diff --name-only "$BEFORE" "$SHA" -- api frontend agents)"
+            echo "Changed gitlinks between $BEFORE and $SHA:"
+            echo "$PATHS"
+            CHANGED=""
+            echo "$PATHS" | grep -qx api && CHANGED="$CHANGED,api"
+            echo "$PATHS" | grep -qx frontend && CHANGED="$CHANGED,frontend"
+            echo "$PATHS" | grep -qx agents && CHANGED="$CHANGED,ai"
+            CHANGED="${CHANGED#,}"
+            echo "prev=$BEFORE" >> "$GITHUB_OUTPUT"
+            echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
+            echo "Resolved changed images: '$CHANGED'"
+          fi
 
       - name: Publish images to GHCR
         # Frontend builds with API_HOST="" (same-origin default). The SPA
         # emits /api/v1/... to its own host; racknerd's outer Caddy routes
         # /api/* on careercaddy.online to the api container via the
         # handle /api/* label on the frontend service.
+        #
+        # --changed / --prev-tag drive the build-changed / retag-unchanged
+        # split. Empty --changed with a real --prev-tag retags all three
+        # (parent-only push, no pin moved); empty --prev-tag builds all.
         run: |
           dagger -m ./dagger call publish \
             --registry-token=env:GHCR_TOKEN \
             --org=overcast-software \
             --tag=${{ github.sha }} \
-            --registry-username=${{ github.actor }}
+            --registry-username=${{ github.actor }} \
+            --prev-tag="${{ steps.changed.outputs.prev }}" \
+            --changed="${{ steps.changed.outputs.changed }}"
         env:
           GHCR_TOKEN: ${{ github.token }}
 
