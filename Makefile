@@ -98,6 +98,29 @@ install-hooks: ## Wire scripts/git-hooks/ as the active hooks dir. Enables the p
 	git config core.hooksPath scripts/git-hooks
 	@echo "Hooks installed. Bypass once with: CC_SKIP_CANARY=1 git push"
 
+# Demo-readiness smoke vs prod. Tier 1 (public) always runs; Tier 2 (MCP
+# handshake + authed API) runs only when CC_API_TOKEN is set. Tier 3
+# (adjacent/warn-only) is the scheduled workflow's job, not run here.
+# Same suite the post-deploy step and smoke.yml cron run — this is the
+# "about to demo, is it all green?" command.
+.PHONY: smoke
+smoke: ## Smoke vs prod (Tier1 always; Tier2 if CC_API_TOKEN set). Override CYPRESS_BASE_URL=...
+	@if [ ! -f e2e/package.json ]; then \
+		echo "e2e/ submodule not initialized — run 'git submodule update --init e2e' to enable smoke"; \
+	else \
+		base="$${CYPRESS_BASE_URL:-https://careercaddy.online}"; \
+		api="$${CYPRESS_API_URL:-https://api.careercaddy.online}"; \
+		mcp="$${MCP_URL:-https://mcp.careercaddy.online/mcp}"; \
+		cd e2e && npm ci && \
+		CYPRESS_BASE_URL="$$base" CYPRESS_API_URL="$$api" CYPRESS_MCP_URL="$$mcp" npm run smoke:tier1 && \
+		if [ -n "$$CC_API_TOKEN" ]; then \
+			MCP_URL="$$mcp" npm run smoke:mcp && \
+			CYPRESS_BASE_URL="$$base" CYPRESS_API_URL="$$api" CYPRESS_CC_API_TOKEN="$$CC_API_TOKEN" npm run smoke:tier2:api; \
+		else \
+			echo "CC_API_TOKEN not set — skipping Tier 2 (operator-only)."; \
+		fi; \
+	fi
+
 # ── CI (Dagger) ────────────────────────────────────────────────────────────
 # Requires Dagger CLI: curl -fsSL https://dl.dagger.io/dagger/install.sh | sh
 #

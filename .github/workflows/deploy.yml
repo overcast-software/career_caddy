@@ -115,3 +115,39 @@ jobs:
             --ssh-user=${{ secrets.DEPLOY_SSH_USER }}
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      # Post-deploy smoke. `docker compose up -d` returns before the
+      # containers are actually serving, so poll the api healthcheck first,
+      # then run Tier 1 (public) + Tier 2 (authed MCP handshake + /me/)
+      # against prod. A red smoke fails the Deploy run so the breakage is
+      # seen immediately. NOTE: detection, not prevention — there is no
+      # auto-rollback; recovery is still a manual pin-back. Tier 2 self-skips
+      # if CC_SMOKE_API_TOKEN is unset (Tier 1 still gates).
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Wait for prod to settle
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' https://api.careercaddy.online/api/v1/healthcheck/ || true)
+            if [ "$code" = "200" ]; then echo "api healthy"; exit 0; fi
+            echo "waiting for api ($code)…"; sleep 5
+          done
+          echo "api healthcheck never reached 200"; exit 1
+
+      - name: Post-deploy smoke (Tier 1 + Tier 2) against prod
+        working-directory: e2e
+        env:
+          CYPRESS_BASE_URL: https://careercaddy.online
+          CYPRESS_API_URL: https://api.careercaddy.online
+          CYPRESS_MCP_URL: https://mcp.careercaddy.online/mcp
+          CYPRESS_CC_API_TOKEN: ${{ secrets.CC_SMOKE_API_TOKEN }}
+          CC_API_TOKEN: ${{ secrets.CC_SMOKE_API_TOKEN }}
+          MCP_URL: https://mcp.careercaddy.online/mcp
+        run: |
+          npm ci
+          npm run smoke:tier1
+          npm run smoke:mcp
+          npm run smoke:tier2:api
