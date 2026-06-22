@@ -1,0 +1,135 @@
+name: Rebuild base images
+
+# Republishes the deps-baked CI base images consumed by the Dagger pipeline's
+# _api_base / _frontend_base / _ai_base (PACA #8 lever A — self-hosted base
+# image). The bases let CI `.from_()` a pre-built apt + `uv sync
+# --no-install-project` / `npm ci` layer instead of cold-building it on every
+# PR (each GitHub-Actions run starts with a COLD Dagger engine, so the heavy
+# layer is otherwise paid every time).
+#
+# This workflow is SEPARATE from Deploy and runs CONCURRENTLY with it — it
+# never gates or slows a deploy. Staleness is safe by construction: each base
+# is reconciled with `uv sync --frozen` / `npm ci` on top, and a missing base
+# falls back to a cold build, so CI can neither break nor go stale-wrong while
+# a base lags. That makes the rebuild trigger free to be coarse.
+on:
+  schedule:
+    # Nightly at 07:00 UTC (off-peak). Coarse on purpose — the in-pipeline
+    # self-heal makes intra-day staleness safe, so once a day is plenty.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      images:
+        description: 'Bases to rebuild: "all" or a comma list of api,frontend,ai'
+        default: all
+  push:
+    # On a parent-main push, rebuild only the base(s) whose submodule pin
+    # moved (api->api, frontend->frontend, agents->ai). A separate workflow,
+    # so it runs alongside Deploy without gating it.
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  # Never run two base rebuilds at once; let an in-flight one finish rather
+  # than cancel (a half-published base is undesirable).
+  group: rebuild-base-images
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    name: Rebuild + publish deps-baked base images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          # Full history so a push event can diff which submodule pins moved.
+          fetch-depth: 0
+
+      - name: Install Dagger CLI
+        run: curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=v0.20.8 BIN_DIR=/usr/local/bin sh
+
+      - name: Select which bases to rebuild
+        id: select
+        # schedule -> all three. workflow_dispatch -> honor the `images` input
+        # ("all" or a comma list). push -> only the bases whose submodule pin
+        # moved, mirroring deploy.yml's change detection (a parent-only push
+        # moves no pin -> rebuilds nothing). FAIL OPEN: if the push diff is
+        # untrustworthy (first push / force-push / shallow), rebuild all.
+        run: |
+          API=false
+          FRONTEND=false
+          AI=false
+          EVENT="${{ github.event_name }}"
+          case "$EVENT" in
+            schedule)
+              API=true; FRONTEND=true; AI=true
+              ;;
+            workflow_dispatch)
+              SEL="${{ github.event.inputs.images }}"
+              if [ -z "$SEL" ] || [ "$SEL" = "all" ]; then
+                API=true; FRONTEND=true; AI=true
+              else
+                echo "$SEL" | tr ',' '\n' | grep -qx api && API=true
+                echo "$SEL" | tr ',' '\n' | grep -qx frontend && FRONTEND=true
+                echo "$SEL" | tr ',' '\n' | grep -qx ai && AI=true
+              fi
+              ;;
+            *)
+              BEFORE="${{ github.event.before }}"
+              SHA="${{ github.sha }}"
+              ZERO="0000000000000000000000000000000000000000"
+              if [ -z "$BEFORE" ] || [ "$BEFORE" = "$ZERO" ] || ! git merge-base --is-ancestor "$BEFORE" "$SHA" 2>/dev/null; then
+                echo "Previous sha unusable ($BEFORE) — fail-open: rebuilding all bases."
+                API=true; FRONTEND=true; AI=true
+              else
+                PATHS="$(git diff --name-only "$BEFORE" "$SHA" -- api frontend agents)"
+                echo "Changed gitlinks between $BEFORE and $SHA:"
+                echo "$PATHS"
+                echo "$PATHS" | grep -qx api && API=true
+                echo "$PATHS" | grep -qx frontend && FRONTEND=true
+                echo "$PATHS" | grep -qx agents && AI=true
+              fi
+              ;;
+          esac
+          echo "api=$API" >> "$GITHUB_OUTPUT"
+          echo "frontend=$FRONTEND" >> "$GITHUB_OUTPUT"
+          echo "ai=$AI" >> "$GITHUB_OUTPUT"
+          echo "Rebuild selection -> api=$API frontend=$FRONTEND ai=$AI"
+
+      - name: Rebuild api base
+        if: steps.select.outputs.api == 'true'
+        run: |
+          dagger -m ./dagger call build-api-base \
+            --registry-token=env:GHCR_TOKEN \
+            --org=overcast-software \
+            --tag=latest \
+            --registry-username=${{ github.actor }}
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+
+      - name: Rebuild frontend base
+        if: steps.select.outputs.frontend == 'true'
+        run: |
+          dagger -m ./dagger call build-frontend-base \
+            --registry-token=env:GHCR_TOKEN \
+            --org=overcast-software \
+            --tag=latest \
+            --registry-username=${{ github.actor }}
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+
+      - name: Rebuild ai base
+        if: steps.select.outputs.ai == 'true'
+        run: |
+          dagger -m ./dagger call build-ai-base \
+            --registry-token=env:GHCR_TOKEN \
+            --org=overcast-software \
+            --tag=latest \
+            --registry-username=${{ github.actor }}
+        env:
+          GHCR_TOKEN: ${{ github.token }}
