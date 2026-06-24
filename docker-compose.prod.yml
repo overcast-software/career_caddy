@@ -200,6 +200,14 @@ services:
       SCREENSHOT_DIR: /app/screenshots
       LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
       CAREER_CADDY_INSTANCE: ${CAREER_CADDY_INSTANCE:-careercaddy.online}
+      # Full origin used to mint ActivityPub keyId / actor / object URIs. MUST
+      # be set on the worker too: it runs the async federation dispatch
+      # (dispatch_one), and an unset value falls back to settings' localhost
+      # default, signing Create(Note) with a keyId remote instances can't
+      # dereference → HTTP-signature 401 → posts never federate. The api
+      # service sets this; the worker omitting it is why sync Accept(Follow)
+      # worked but async post fan-out silently failed. Mirror of the api line.
+      INSTANCE_ORIGIN: ${INSTANCE_ORIGIN:-http://localhost:8000}
     volumes:
       - screenshots:/app/screenshots
     depends_on:
