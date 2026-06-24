@@ -248,8 +248,19 @@ services:
       # api/job_hunting/urls.py lines 135-152.
       caddy.@federation.path_0: /.well-known/webfinger
       caddy.@federation.path_1: /actors/*
+      # BACK-93: activity object ids have no human/SPA sibling — route all
+      # /activities/* to the api (same treatment as /actors/*), no Accept gate.
+      caddy.@federation.path_2: /activities/*
       caddy.handle_1: "@federation"
       caddy.handle_1.reverse_proxy: api:8000
+      # BACK-93: job-post object ids are DUAL-PURPOSE — the SPA serves the
+      # human /job-posts/<id> page; the api serves the AS2 Note at the same
+      # URI. Gate on an ActivityPub Accept header so only federation peers
+      # reach the api; browsers fall through to the SPA catch-all below.
+      caddy.@ap_objects.path: /job-posts/*
+      caddy.@ap_objects.header_regexp: Accept application/(activity|ld)\+json
+      caddy.handle_2: "@ap_objects"
+      caddy.handle_2.reverse_proxy: api:8000
       # Catch-all: SPA fallback for everything else.
       caddy.reverse_proxy: "{{upstreams 80}}"
 
