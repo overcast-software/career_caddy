@@ -173,7 +173,7 @@ The **AI layer** runs locally. Agents chain MCP servers as tool providers. Email
 
 **Authentication**:
 - Frontend → API: JWT (`Authorization: Bearer <token>`, 60-min lifetime, auto-refresh)
-- AI agents → API: API key (`Authorization: Api-Key <key>`, managed via `/api/v1/api-keys/`)
+- AI agents / automation → API: long-lived API key (`jh_*`) on the **same** Bearer header (`Authorization: Bearer <jh_key>`, managed via `/api/v1/api-keys/`). The API-key auth backend recognizes the `jh_` prefix — there is **no** `Api-Key` wire scheme; sending one returns 401.
 
 **Bootstrap detection**: Frontend GETs `/api/v1/healthcheck/` on every route. Response includes `bootstrap_open: true` when no users exist → routes to `/setup`. After initialization, `bootstrap_open` is always `false`.
 
