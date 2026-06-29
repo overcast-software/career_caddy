@@ -160,15 +160,35 @@ services:
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
-    # Build Tailwind once then start Ember dev server; proxy API calls to the api service
+    # Only reinstall deps when the lockfile changed (else go straight to
+    # ember serve). npm ci deletes and re-fetches node_modules on every run,
+    # so an unconditional `npm ci` wipes the frontend_node_modules volume and
+    # depends on a flawless burst of registry fetches at every boot — a single
+    # transient DNS blip (EAI_AGAIN) aborts the chain and crash-loops the
+    # container. The guard makes the persisted volume actually load-bearing;
+    # npm ci is retried once and NPM_CONFIG_FETCH_* hardens the install burst.
     command: >
-      sh -c "npm ci &&
-             npm run tailwind:build &&
-             npx ember serve --proxy http://api:8000"
+      sh -c '
+      if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
+      echo "[frontend] installing deps (lockfile changed or node_modules incomplete)...";
+      npm ci || npm ci;
+      else
+      echo "[frontend] deps present and lockfile unchanged - skipping npm ci";
+      fi;
+      npm run tailwind:build &&
+      npx ember serve --proxy http://api:8000
+      '
     ports:
       - "4200:4200"
     environment:
       CHOKIDAR_USEPOLLING: "true"
+      # Harden the install burst against marginal container DNS (EAI_AGAIN).
+      NPM_CONFIG_FETCH_RETRIES: "5"
+      NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "20000"
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "120000"
+      NPM_CONFIG_FETCH_TIMEOUT: "300000"
+    # A hard exit (e.g. an Ember crash) should self-recover.
+    restart: unless-stopped
     depends_on:
       - api
 
