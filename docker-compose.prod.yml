@@ -70,7 +70,16 @@ services:
       BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN:-}
       GUNICORN_HOST: "0.0.0.0"
       GUNICORN_PORT: "8000"
-      GUNICORN_WORKERS: "6"
+      # Keep <=2 at the 768m mem_limit below. Each gunicorn worker carries the
+      # full Django app (~124 MiB); at 6 the api idles ~765 MiB (99.6%) and the
+      # synchronous in-request LLM parse on POST /api/v1/scrapes/from-text/ tips
+      # the cgroup -> kernel OOM-kills the worker (SIGKILL / exit 137) -> caddy
+      # 502 + silent non-persist of the extension's job-post. CC-122 (2026-06-29)
+      # then recurred 2026-06-30 because a deploy reverted the racknerd-side
+      # hand-edit and re-shipped this literal "6". Do NOT re-bump for "worker
+      # headroom" without first raising mem_limit / host RAM. 2 workers x 2
+      # threads = 4 concurrent and leaves ~320 MiB for a parse.
+      GUNICORN_WORKERS: "2"
       GUNICORN_THREADS: "2"
       SA_SCHEMA_ON_POST_MIGRATE: "True"
       USE_MCP_BROWSER_AGENT: "False"
