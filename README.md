@@ -212,6 +212,49 @@ make runner-local                      # against localhost:8000
 
 ---
 
+## Develop tier (local staging)
+
+A staging tier between feature work and production: `feature/* → develop` (verify) →
+`main` (prod). Unlike prod — which pulls pinned GHCR images — the **develop tier is the
+local Docker Compose stack, built from source**, tracking the **bleeding edge of every
+submodule's `main`** rather than the parent's pinned gitlinks.
+
+```bash
+make dev-up         # float api/frontend/agents/automation to origin/main, then build+run locally
+                    #   → localhost:4200 (frontend)  ·  localhost:8000 (api)
+make dev-sync       # just float the submodules to their origin/main tips (no build)
+make develop        # alias for make dev-up
+```
+
+`dev-sync` runs `git submodule update --remote` against the four service submodules, so
+the stack is rebuilt from whatever is currently on each submodule's `main`.
+
+> **Heads up:** `dev-sync` moves your submodule checkouts to their `origin/main` tips
+> (detached HEAD). Commit/stash and note any in-flight submodule feature branch first —
+> git refuses to clobber uncommitted tracked changes, but it will leave a clean
+> feature-branch checkout detached at `origin/main`.
+
+**Serving it as `careercaddy.dev`.** The stack works at `localhost` out of the box.
+`docker-compose.develop.yml` additionally wires the api to accept the `careercaddy.dev`
+hostname (`ALLOWED_HOSTS` / CSRF / CORS):
+
+```bash
+make dev-up-ccdev   # dev-up + careercaddy.dev host wiring
+```
+
+This does **not** change DNS. `careercaddy.dev` currently resolves to a remote address,
+so pointing it at this local stack (a pihole local A record at pibu's caddy, which
+reverse-proxies to `omarchy:4200` — or an `/etc/hosts` entry for local-only testing) is a
+homelab-infra decision, intentionally out of this repo's scope. Once that mapping exists,
+`make canary` / `make smoke` (which already target `https://careercaddy.dev`) exercise the
+develop tier exactly as they do prod.
+
+> The arm64 image-publish workflow (`.github/workflows/publish-arm64-dev.yml`) is a
+> separate Raspberry Pi / operator-pull concern — it is **not** the develop-tier
+> mechanism — and is now run manually (`workflow_dispatch`).
+
+---
+
 ## The data model at a glance
 
 - **Career Data** — singleton per user; a markdown blob read on every AI call.
@@ -231,6 +274,7 @@ make runner-local                      # against localhost:8000
 ```bash
 make up            # core dev stack (db + api + frontend + chat)
 make up-full       # + browser-MCP service (port 3004)
+make dev-up        # develop tier — float submodules to main + build from source (staging)
 make down          # stop everything
 make logs          # follow logs from all services
 make doctor        # verify local environment
@@ -250,7 +294,7 @@ make help          # list every target
 |---------|-----------|------------|
 | Frontend | 4200 | 8087 |
 | API | 8000 | 8025 |
-| Database | 5432 | 5432 |
+| Database | 5433 (host-publish) | 5432 |
 | Chat MCP | internal | 8031 |
 | Public MCP | — | 8030 (`mcp.careercaddy.online`) |
 | Browser MCP | 3004 | — |
@@ -265,7 +309,7 @@ Roadmap, epics, and in-flight work are tracked on a project board at
 ## Troubleshooting
 
 - **Setup wizard doesn't appear** — the API may still be booting; wait ~30s and refresh.
-- **Port already in use** — stop whatever is on 4200 / 8000 / 5432 and re-run `make up`.
+- **Port already in use** — stop whatever is on 4200 / 8000 / 5433 and re-run `make up`.
 - **Start fresh** — `make down`, remove the Postgres data volume (`docker volume ls` to find the `*_postgres_data` one), then `make up`.
 
 ## License

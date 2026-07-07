@@ -1,12 +1,21 @@
 name: Publish arm64 dev images
 
-# Cross-builds arm64 images for the `dev` branch and publishes to GHCR
-# as `:dev-<sha>` (immutable) and `:dev` (moving). No SSH deploy step —
-# fetch is operator-driven (run `docker compose pull` wherever you want
-# the arm64 images, e.g. a Raspberry Pi).
+# Cross-builds arm64 images and publishes to GHCR as `:dev-<sha>` (immutable)
+# and `:dev` (moving). No SSH deploy step — fetch is operator-driven (run
+# `docker compose pull` wherever you want the arm64 images, e.g. a Raspberry Pi).
+#
+# MANUAL trigger only (workflow_dispatch). This is a Pi / arm64 operator-pull
+# concern and is DELIBERATELY NOT the develop-tier mechanism: the develop /
+# careercaddy.dev staging tier (PACA CC-126) is the LOCAL build-from-source
+# docker-compose stack on omarchy (`make dev-up`), which uses no GHCR images.
+# The branch trigger was `push: [dev]`, but the dev tier standardized on the
+# `develop` branch (ci.yml triggers on `develop`); rather than auto-publishing
+# arm64 images on every `develop` push (wrong consumer — develop is local), this
+# workflow is decoupled from branch semantics and run on demand when a Pi wants
+# fresh arm64 `:dev` images. Image tags stay `:dev` / `:dev-<sha>` so existing
+# operator-side `docker compose pull` references keep working.
 on:
-  push:
-    branches: [dev]
+  workflow_dispatch: {}
 
 permissions:
   contents: read

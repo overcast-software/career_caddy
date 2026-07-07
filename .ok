@@ -52,3 +52,11 @@ curl -s -X POST http://localhost:8000/api/v1/test-email/ -H "Authorization: Bear
 
 curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Api-Key $CC_API_TOKEN" "$CC_API_BASE_URL/api/v1/scrapes/?filter%5Bstatus%5D=hold"
 curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Api-Key $CC_API_TOKEN" http://localhost:8000/api/v1/scrapes/
+
+# ── CC Sender extension — package current source into an installable zip ─────
+# Reads the version from manifest.json (currently 1.7.6, the head of the 1.7
+# line) and zips the live source into public/extensions/career-caddy-sender-<v>.zip.
+# Files land at the archive root (manifest/popup.*/background.js/icons) — exactly
+# what Load-unpacked + AMO expect; README/store-assets/.claude excluded, matching
+# the 1.6.6 packaging. The 1.7.x line is merged but was never zipped — this builds it.
+( cd /home/oldbones/Network/syncthing/Projects/career_caddy/frontend/public/extensions/career-caddy-sender && V=$(grep -m1 '"version"' manifest.json | sed -E 's/.*"version": *"([^"]+)".*/\1/') && rm -f "../career-caddy-sender-$V.zip" && zip -rq "../career-caddy-sender-$V.zip" manifest.json popup.html popup.js background.js icons && echo "built public/extensions/career-caddy-sender-$V.zip" )

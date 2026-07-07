@@ -116,6 +116,9 @@ make scrape-url URL=https://example.com/job
 ```bash
 make up               # core stack (db + api + frontend + chat)
 make up-full          # + browser MCP server (port 3004); sets USE_MCP_BROWSER_AGENT=True
+make dev-up           # develop tier (CC-126): float submodules to origin/main, build+run local stack from source (localhost)
+make dev-sync         # just float api/frontend/agents/automation submodules to origin/main (no build) — moves your checkouts
+make dev-up-ccdev     # dev-up + careercaddy.dev host wiring (docker-compose.develop.yml; DNS→local is a dc-infra/Doug call)
 make down             # stop all services (removes orphans)
 make build            # rebuild all images (use after dependency changes)
 make logs             # follow all logs
@@ -144,7 +147,7 @@ make bootstrap                       # print API initialization status (curl /in
 
 | Service | Local dev | Docker dev | Production |
 |---------|-----------|------------|------------|
-| PostgreSQL | 5432 | 5432 | 5432 |
+| PostgreSQL | 5433 (host) | 5432 | 5432 |
 | Django API | 8000 | 8000 | 8025 |
 | Ember frontend | 4200 | 4200 | 8087 |
 | Browser MCP server | 3004 | 3004 | — |

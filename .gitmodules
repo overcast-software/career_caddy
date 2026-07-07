@@ -1,15 +1,24 @@
+# NOTE: the `branch = main` keys below ONLY affect `git submodule update --remote`
+# (the develop-tier float — see `make dev-sync` / `make dev-up`). They do NOT change
+# how prod or a normal checkout resolves submodules: `git submodule update` (no
+# --remote), clone, and CI all still use the parent's recorded gitlink SHA (the pin).
+# So prod stays pin-driven; only the develop tier floats to these mains on demand.
 [submodule "api"]
 	path = api
 	url = git@github.com:overcast-software/career_caddy_api.git
+	branch = main
 [submodule "frontend"]
 	path = frontend
 	url = git@github.com:overcast-software/career_caddy_frontend.git
+	branch = main
 [submodule "agents"]
 	path = agents
 	url = git@github.com:overcast-software/career_caddy_agents.git
+	branch = main
 [submodule "automation"]
 	path = automation
 	url = git@github.com:overcast-software/career_caddy_automation.git
+	branch = main
 [submodule "e2e"]
 	path = e2e
 	url = git@github.com:overcast-software/career_caddy_e2e.git

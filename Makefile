@@ -22,6 +22,7 @@
 export
 
 .PHONY: up up-core up-full down logs build shell-api shell-db migrate test-api test-frontend test-automation lint-api lint-frontend lint-automation format-frontend bootstrap ci ci-ai scrape-url runner runner-local poller poller-local doctor doctor-poller list help
+.PHONY: dev-sync dev-up dev-up-ccdev develop
 
 # ── Dev stack ──────────────────────────────────────────────────────────────
 
@@ -41,6 +42,35 @@ logs: ## Follow logs for all running services
 
 build: ## Rebuild all images (use after dependency changes)
 	docker compose build --no-cache
+
+# ── Develop tier (local staging on omarchy — PACA CC-126) ───────────────────
+# The cc.dev / careercaddy.dev staging tier is the LOCAL docker-compose stack
+# built FROM SOURCE on this host (omarchy) — NOT GHCR images, NOT the arm64/Pi
+# operator-pull model, NOT a remote SSH deploy. It tracks the BLEEDING EDGE of
+# every submodule's main, NOT the parent's pinned gitlinks: `dev-sync` floats
+# api/frontend/agents/automation to their origin/main tips, then `docker compose
+# up --build` rebuilds the api + agents (chat/worker) images and runs the Ember
+# dev server live from frontend/ source. Verify here, then promote develop ->
+# main (prod) — the parent pin bump + deploy stay Doug-gated.
+#
+# WARNING: `dev-sync` MOVES your submodule checkouts to their origin/main tips
+# (detached HEAD — by design, bleeding edge). Commit/stash and note any in-flight
+# submodule branch before running it. Git refuses to clobber uncommitted tracked
+# changes (it errors rather than losing work), but it WILL leave a clean
+# feature-branch checkout detached at origin/main.
+
+dev-sync: ## Float api/frontend/agents/automation submodules to their origin/main tips (bleeding edge — moves your checkouts)
+	git submodule update --remote --init --recursive api frontend agents automation
+
+dev-up: dev-sync ## Develop tier: float submodules to main, then build+run the local stack from source (localhost:4200 / :8000)
+	docker compose down --remove-orphans 2>/dev/null || true
+	docker compose up --build db api frontend chat worker
+
+dev-up-ccdev: dev-sync ## Develop tier + careercaddy.dev host wiring (use once cc.dev DNS points at this host — see docker-compose.develop.yml)
+	docker compose down --remove-orphans 2>/dev/null || true
+	docker compose -f docker-compose.yml -f docker-compose.develop.yml up --build db api frontend chat worker
+
+develop: dev-up ## Alias for `dev-up` (the local develop / staging tier)
 
 # ── Shells ─────────────────────────────────────────────────────────────────
 

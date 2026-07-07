@@ -1,0 +1,48 @@
+---
+# Develop tier overlay — careercaddy.dev (cc.dev) host wiring for the LOCAL stack.
+#
+# This is an OVERLAY on docker-compose.yml, not a standalone file. It is the
+# careercaddy.dev (cc.dev) staging tier described in PACA CC-126: the SAME local
+# build-from-source stack as `make dev-up`, but with the api configured to ACCEPT
+# requests for the careercaddy.dev hostname (Django ALLOWED_HOSTS / CSRF / CORS).
+#
+# Usage (see `make dev-up-ccdev`):
+#   docker compose -f docker-compose.yml -f docker-compose.develop.yml up --build \
+#     db api frontend chat worker
+#
+# IMPORTANT — this overlay does NOT make careercaddy.dev resolve to this host.
+# As of 2026-06-30 careercaddy.dev → 192.3.252.74 (a remote/public address), so
+# requests for it never reach this machine. Pointing careercaddy.dev at the local
+# omarchy stack is a dc-infra / Doug decision (a pihole local A record pointing at
+# pibu's caddy, which reverse-proxies to omarchy:4200 — or, for omarchy-only
+# testing, an /etc/hosts entry). This repo deliberately does NOT change live DNS.
+# Until that mapping exists, `make dev-up` (localhost:4200 / :8000) is the working
+# tier; this overlay only prepares the api so the cut-over is config-free.
+#
+# Frontend CSP note: the SPA is served same-origin (careercaddy.dev serves the app
+# AND proxies /api/* to the same host via `ember serve --proxy`), so the default
+# connect-src 'self' already covers it — no frontend/config/environment.js change
+# is expected. If a future cross-origin api host (e.g. api.careercaddy.dev) is
+# introduced, the CSP connect-src belongs to the frontend submodule (cc-frontend).
+
+services:
+
+  api:
+    environment:
+      # Base docker-compose.yml sets "localhost,127.0.0.1,api"; this REPLACES that
+      # key (compose merges environment maps per-key), so the localhost values are
+      # re-listed here. The leading-dot ".careercaddy.dev" wildcard also admits any
+      # subdomain (e.g. api.careercaddy.dev) should one be added later.
+      ALLOWED_HOSTS: "careercaddy.dev,.careercaddy.dev,localhost,127.0.0.1,api"
+      CORS_ALLOWED_ORIGINS: "https://careercaddy.dev"
+      CSRF_TRUSTED_ORIGINS: "https://careercaddy.dev"
+      FRONTEND_URL: "https://careercaddy.dev"
+      INSTANCE_ORIGIN: "https://careercaddy.dev"
+
+  worker:
+    environment:
+      # The worker mints federation actor/object URIs from INSTANCE_ORIGIN; keep it
+      # consistent with the api so cc.dev-originated posts sign with a cc.dev keyId.
+      ALLOWED_HOSTS: "careercaddy.dev,.careercaddy.dev,localhost,127.0.0.1,worker"
+      FRONTEND_URL: "https://careercaddy.dev"
+      INSTANCE_ORIGIN: "https://careercaddy.dev"

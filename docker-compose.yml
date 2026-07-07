@@ -21,7 +21,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql   # postgres 18+: mount the parent dir, not /data
     ports:
-      - "127.0.0.1:5432:5432"
+      # Host-publish on 5433, not 5432 — the long-lived `dev_postgres_container`
+      # (caddy_dev stack) squats 127.0.0.1:5432. This publish is only a host
+      # convenience (psql -h localhost -p 5433); in-network services reach the
+      # db via the `db:5432` service name, so this has no effect on the app.
+      - "127.0.0.1:5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 10s
