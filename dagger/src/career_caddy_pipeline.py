@@ -9,6 +9,7 @@ Usage (from repo root):
   dagger -m ./dagger call build-frontend
   dagger -m ./dagger call build-ai
   dagger -m ./dagger call publish --registry-token=env:GITHUB_TOKEN --org=overcast-software --tag=latest
+  dagger -m ./dagger call publish-ar --sa-key=env:GCP_SA_KEY --gcp-project=<project> --tag=latest
   dagger -m ./dagger call deploy --ssh-key=file:~/.ssh/id_ed25519 --host=your-vps-ip --app-dir=/opt/stacks/careercaddy.online --tag=latest
 
 In GitHub Actions, call via: dagger -m ./dagger call publish ...
@@ -30,6 +31,29 @@ REGISTRY = "ghcr.io"
 API_IMAGE = "career_caddy_api"
 FRONTEND_IMAGE = "career-caddy-frontend"
 AI_IMAGE = "career_caddy_ai"
+
+# ── Artifact Registry (AR) publish target — PACA #165 / epic #163 ──────────
+# Cloud Run (the GCP dev env) pulls from Google Artifact Registry, not GHCR.
+# `publish_ar()` pushes the SAME three images to AR alongside the GHCR
+# `publish()` path (which is untouched). The naming contract (standardized
+# 2026-07-13) is deliberate and asymmetric:
+#   - AR *repository id* uses HYPHENS — GCP resource ids forbid underscores:
+#         career-caddy
+#   - *Image names* use UNDERSCORES, matching the GHCR source names so a
+#     GHCR→AR mirror is a 1:1 path rename:
+#         career_caddy_api / career_caddy_frontend / career_caddy_ai
+#   - Full path: <host>/<project>/career-caddy/career_caddy_<svc>:<tag>
+#     e.g. us-central1-docker.pkg.dev/<project>/career-caddy/career_caddy_api
+# Host, GCP project id, repo id and tag are all args — NOTHING is hardcoded to
+# the lab project. Auth is a GCP service-account key JSON passed as a Dagger
+# Secret; AR accepts it as the `_json_key` docker username (see `publish_ar`).
+AR_REPO_ID = "career-caddy"
+AR_JSON_KEY_USERNAME = "_json_key"
+# Image names are shared with GHCR (underscore form). FRONTEND_IMAGE above is
+# the GHCR-historical hyphen name; AR standardizes on the underscore name.
+AR_API_IMAGE = "career_caddy_api"
+AR_FRONTEND_IMAGE = "career_caddy_frontend"
+AR_AI_IMAGE = "career_caddy_ai"
 
 # ── Deps-baked CI base images (PACA #8 lever A — self-hosted base image) ────
 # Published siblings of the images above whose ONLY content is the heavy,
@@ -805,6 +829,139 @@ class CareerCaddy:
         )
 
         return [pushed_api, pushed_frontend, pushed_ai]
+
+    # ── Artifact Registry publish (PACA #165) ──────────────────────────────
+    # Parallel path to `publish()` above. Builds the same three images and
+    # pushes them to Google Artifact Registry so Cloud Run (the GCP dev env)
+    # can pull them. GHCR `publish()` is untouched. This deliberately does NOT
+    # inherit the GHCR retag-unchanged optimization: AR is a fresh registry
+    # with no prior tags to copy from, so every requested image is built. The
+    # `changed` arg still lets a caller scope the push to a subset.
+
+    async def _build_publish_ar(
+        self,
+        src: dagger.Directory,
+        ref: str,
+        host: str,
+        sa_key: Secret,
+        build_args: list | None,
+        build_kwargs: dict,
+    ) -> str:
+        """Cold-build `src` and push it to `ref` in Artifact Registry.
+
+        AR authenticates a docker push with the GCP service-account key JSON
+        used as the password under the fixed `_json_key` username — no gcloud
+        binary or cred-helper needed inside the build container. Returns the
+        pushed ref.
+        """
+        kwargs = dict(build_kwargs)
+        if build_args:
+            kwargs["build_args"] = build_args
+        return await (
+            src
+            .docker_build(**kwargs)
+            .with_registry_auth(host, AR_JSON_KEY_USERNAME, sa_key)
+            .publish(ref)
+        )
+
+    @function
+    async def publish_ar(
+        self,
+        sa_key: Secret,
+        gcp_project: str,
+        api_src: Annotated[dagger.Directory, DefaultPath("../api")],
+        frontend_src: Annotated[dagger.Directory, DefaultPath("../frontend")],
+        ai_src: Annotated[dagger.Directory, DefaultPath("../agents")],
+        host: str = "us-central1-docker.pkg.dev",
+        repo_id: str = AR_REPO_ID,
+        tag: str = "latest",
+        platform: str = "",
+        frontend_api_host: str = "",
+        changed: str = "api,frontend,ai",
+    ) -> list[str]:
+        """Build the api/frontend/ai images and push them to Artifact Registry.
+
+        Mirrors GHCR `publish()` but targets AR (Cloud Run's source registry).
+        Every requested image is built — AR has no prior tag to retag from —
+        while `changed` lets a caller scope the push to a subset.
+
+        Naming contract (see AR_* constants): the AR repository id is
+        `career-caddy` (hyphens — GCP ids forbid underscores) and the image
+        names keep the GHCR underscore form (`career_caddy_api` /
+        `career_caddy_frontend` / `career_caddy_ai`). Full path:
+        `<host>/<gcp_project>/<repo_id>/career_caddy_<svc>:<tag>`.
+
+        Auth: `sa_key` is a GCP service-account key JSON with the
+        Artifact Registry Writer role, passed as a Dagger Secret. It is used
+        as the docker password under the `_json_key` username — no gcloud in
+        the container.
+          - CI supplies it from a repo/environment secret, e.g.
+                --sa-key=env:GCP_SA_KEY
+            where GCP_SA_KEY holds the raw JSON key (or file:/path/to/key.json).
+          - A local run authenticates the same way with a downloaded key:
+                dagger -m ./dagger call publish-ar \\
+                  --sa-key=file:$HOME/gcp-ar-writer.json \\
+                  --gcp-project=cc-gcp-lab-dkh --tag=latest
+            (Alternatively `gcloud auth configure-docker <host>` + ADC works
+            for a raw docker push, but the Dagger-native path is the SA key so
+            CI and local behave identically.)
+
+        Args:
+            sa_key: GCP service-account key JSON (Artifact Registry Writer).
+            gcp_project: GCP project id that owns the AR repository.
+            host: AR host, e.g. "us-central1-docker.pkg.dev".
+            repo_id: AR repository id (hyphens). Defaults to "career-caddy".
+            tag: Image tag (use a git SHA for immutable tags).
+            platform: Target platform (e.g. "linux/arm64"); empty = engine
+                native. Use with QEMU for cross-builds.
+            frontend_api_host: API origin baked into the frontend production
+                build. Empty = same-origin (SPA emits /api/v1/...).
+            changed: Comma list of image names to build+push (api / frontend /
+                ai). Defaults to all three.
+        """
+        base = f"{host}/{gcp_project}/{repo_id}"
+        api_repo = f"{base}/{AR_API_IMAGE}"
+        frontend_repo = f"{base}/{AR_FRONTEND_IMAGE}"
+        ai_repo = f"{base}/{AR_AI_IMAGE}"
+
+        changed_set = {c.strip() for c in changed.split(",") if c.strip()}
+
+        build_kwargs: dict = {}
+        if platform:
+            build_kwargs["platform"] = dagger.Platform(platform)
+
+        async def resolve(
+            name: str,
+            src: dagger.Directory,
+            repo: str,
+            build_args: list | None,
+        ) -> str | None:
+            if name not in changed_set:
+                return None
+            return await self._build_publish_ar(
+                src, f"{repo}:{tag}", host, sa_key, build_args, build_kwargs
+            )
+
+        pushed = []
+        for ref in (
+            await resolve("api", api_src, api_repo, None),
+            await resolve(
+                "frontend",
+                frontend_src,
+                frontend_repo,
+                [dagger.BuildArg("API_HOST", frontend_api_host)],
+            ),
+            await resolve(
+                "ai",
+                ai_src,
+                ai_repo,
+                [dagger.BuildArg("INSTALL_CAMOUFOX", "false")],
+            ),
+        ):
+            if ref is not None:
+                pushed.append(ref)
+
+        return pushed
 
     @function
     async def deploy(
