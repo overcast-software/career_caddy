@@ -23,6 +23,13 @@ emacsclient --eval '(claude/cc-todo-toc)'
 emacsclient --eval '(claude/cc-todo-by-state "STRT")'
 ```
 
+Consult the wiki (https://wiki.careercaddy.online) via the BookStack
+MCP `search_content` when answering "how does X work" — it is the
+canonical human-facing knowledge base. When you learn something
+durable that belongs in public docs, create/update the relevant wiki
+page (the docs analogue of storing a claudex memory). Keep it fresh as
+a per-session reflex, not a standing project.
+
 Submodule wikis (same drilldown shape, separate helper namespaces):
 
 | Submodule       | Wiki                       | Helper prefix     |

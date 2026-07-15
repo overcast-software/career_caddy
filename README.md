@@ -190,6 +190,12 @@ and `public_server` ship to prod; `browser_server` and `career_caddy_server` are
 
 ## Deployment topology
 
+> **Just want to run your own instance?** The simplest path is the standalone
+> **[career_caddy_deploy](https://github.com/overcast-software/career_caddy_deploy)** repo:
+> a one-box `docker compose up` on the published images (the job-hunt tracking loop with no
+> cloud account), plus reference Terraform (GCP/AWS) for cloud deploys. This monorepo is the
+> source; that repo is how you deploy it.
+
 The system spans two (optionally three) machines:
 
 | Target | Compose file | Services | Hardware |
