@@ -33,11 +33,11 @@ jobs:
         working-directory: e2e
         env:
           CYPRESS_BASE_URL: https://careercaddy.online
-          CYPRESS_API_URL: https://api.careercaddy.online
-          CYPRESS_MCP_URL: https://mcp.careercaddy.online/mcp
+          CYPRESS_API_URL: https://careercaddy.online
+          CYPRESS_MCP_URL: https://careercaddy.online/mcp
           CYPRESS_CC_API_TOKEN: ${{ secrets.CC_SMOKE_API_TOKEN }}
           CC_API_TOKEN: ${{ secrets.CC_SMOKE_API_TOKEN }}
-          MCP_URL: https://mcp.careercaddy.online/mcp
+          MCP_URL: https://careercaddy.online/mcp
         run: |
           npm ci
           npm run smoke:tier1

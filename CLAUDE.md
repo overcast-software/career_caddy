@@ -73,7 +73,7 @@ Test: *service for everyone* → `agents/`; *operator for one user* → `automat
 Top-level peer folders advertise the heterogeneity:
 
 - `agents/agents/` — Pydantic-AI agent definitions (the spine: job_extractor, obstacle, onboarding, career_caddy CRUD)
-- `agents/mcp_servers/` — Four MCP servers; `chat_server.py` and `public_server.py` ship to prod (`:8031` chat, `:8030` public at `mcp.careercaddy.online`); `browser_server.py` and `career_caddy_server.py` are local-only
+- `agents/mcp_servers/` — Four MCP servers; `chat_server.py` and `public_server.py` ship to prod (`:8031` chat, `:8030` public, served same-origin at `careercaddy.online/mcp`); `browser_server.py` and `career_caddy_server.py` are local-only
 - `agents/browser/` — Camoufox + Playwright engine, credentials, sessions (local-only)
 - `agents/scrape_graph/` — pydantic-graph state machine for scrape + extract
 - `agents/runners/` — external workers that claim work via the api (`scrape_runner.py`, formerly `pollers/hold_poller.py`)
@@ -172,7 +172,7 @@ The **frontend** is a JSON:API client. The `application` adapter injects JWT aut
 
 The **API** uses Django ORM for all models. Startup requires only `manage.py migrate`.
 
-The **AI layer** runs locally. Agents chain MCP servers as tool providers. Email→JobPost orchestration now lives in the sibling repo `~/Projects/career_caddy_automation`, which consumes tools from `mcp.careercaddy.online/mcp`; this repo's `agents/` only ships the local browser/scrape agents and the scrape runner. The AI layer authenticates to the API using a long-lived API key (`CC_API_TOKEN`), not a JWT.
+The **AI layer** runs locally. Agents chain MCP servers as tool providers. Email→JobPost orchestration now lives in the sibling repo `~/Projects/career_caddy_automation`, which consumes tools from `careercaddy.online/mcp` (same-origin apex); this repo's `agents/` only ships the local browser/scrape agents and the scrape runner. The AI layer authenticates to the API using a long-lived API key (`CC_API_TOKEN`), not a JWT.
 
 ## Cross-Component Contracts
 
