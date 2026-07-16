@@ -13,3 +13,6 @@
 [submodule "e2e"]
 	path = e2e
 	url = git@github.com:overcast-software/career_caddy_e2e.git
+[submodule "deploy"]
+	path = deploy
+	url = git@github.com:overcast-software/career_caddy_deploy.git
