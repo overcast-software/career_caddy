@@ -302,6 +302,13 @@ class CareerCaddy:
             .with_workdir("/app")
             .with_directory("/app", src)
             .with_exec(["uv", "sync", "--frozen"])
+            # CC-161: mirror agents/Dockerfile:75 — guard Playwright's Firefox
+            # pageError dispatcher against a location-less error. Must run after
+            # the final `uv sync` (needs the installed bundle + scripts/), else
+            # test_installed_bundle_is_guarded fails on the Dagger-built image.
+            .with_exec(
+                ["uv", "run", "python", "scripts/patch_playwright_pageerror.py"]
+            )
         )
 
     # ── Lint-only (cheap, fail-fast) ───────────────────────────────────────
