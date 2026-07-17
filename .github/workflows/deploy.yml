@@ -31,7 +31,7 @@ jobs:
         run: dagger -m ./dagger call test-ai
 
   publish-and-deploy:
-    name: Publish images and deploy to VPS
+    name: Publish images (GHCR) + smoke prod
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
@@ -82,9 +82,10 @@ jobs:
 
       - name: Publish images to GHCR
         # Frontend builds with API_HOST="" (same-origin default). The SPA
-        # emits /api/v1/... to its own host; racknerd's outer Caddy routes
-        # /api/* on careercaddy.online to the api container via the
-        # handle /api/* label on the frontend service.
+        # emits /api/v1/... to its own host; on GCP the frontend nginx
+        # path-routes /api and /mcp same-origin to the sibling Cloud Run
+        # services. GHCR images feed the public self-host bundle (and, in
+        # CC-178 Step B, get mirrored into us-west1 AR for Cloud Run).
         #
         # --changed / --prev-tag drive the build-changed / retag-unchanged
         # split. Empty --changed with a real --prev-tag retags all three
@@ -100,29 +101,13 @@ jobs:
         env:
           GHCR_TOKEN: ${{ github.token }}
 
-      - name: Deploy to VPS
-        # app_dir is intentionally NOT passed here. The deploy target lives in
-        # the dagger default (career_caddy_pipeline.py:498 ->
-        # /opt/stacks/careercaddy.online) so it is version-controlled and
-        # auditable. Threading it via a DEPLOY_APP_DIR secret previously drifted
-        # to a stale legacy path and broke every Deploy (5432 collision); the
-        # single source of truth removes that footgun.
-        run: |
-          dagger -m ./dagger call deploy \
-            --ssh-key=env:DEPLOY_SSH_KEY \
-            --host=${{ secrets.DEPLOY_SSH_HOST }} \
-            --tag=${{ github.sha }} \
-            --ssh-user=${{ secrets.DEPLOY_SSH_USER }}
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-
-      # Post-deploy smoke. `docker compose up -d` returns before the
-      # containers are actually serving, so poll the api healthcheck first,
-      # then run Tier 1 (public) + Tier 2 (authed MCP handshake + /me/)
-      # against prod. A red smoke fails the Deploy run so the breakage is
-      # seen immediately. NOTE: detection, not prevention — there is no
-      # auto-rollback; recovery is still a manual pin-back. Tier 2 self-skips
-      # if CC_SMOKE_API_TOKEN is unset (Tier 1 still gates).
+      # Prod runs on GCP Cloud Run (us-west1) and is rolled via `tofu apply`
+      # (manual today; the merge->GCP CI inversion is CC-178 Step B). The
+      # racknerd SSH "Deploy to VPS" step was removed at the GCP cutover — it
+      # targeted a now-dev box and smoked retired api./mcp. subdomains. This
+      # job publishes the GHCR images for the public self-host bundle, then
+      # smokes LIVE prod on the apex (detection, not a deploy). Tier 2
+      # self-skips if CC_SMOKE_API_TOKEN is unset (Tier 1 still gates).
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -131,21 +116,21 @@ jobs:
       - name: Wait for prod to settle
         run: |
           for i in $(seq 1 30); do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' https://api.careercaddy.online/api/v1/healthcheck/ || true)
+            code=$(curl -sS -o /dev/null -w '%{http_code}' https://careercaddy.online/api/v1/healthcheck/ || true)
             if [ "$code" = "200" ]; then echo "api healthy"; exit 0; fi
             echo "waiting for api ($code)…"; sleep 5
           done
           echo "api healthcheck never reached 200"; exit 1
 
-      - name: Post-deploy smoke (Tier 1 + Tier 2) against prod
+      - name: Smoke prod (Tier 1 + Tier 2) against the apex
         working-directory: e2e
         env:
           CYPRESS_BASE_URL: https://careercaddy.online
-          CYPRESS_API_URL: https://api.careercaddy.online
-          CYPRESS_MCP_URL: https://mcp.careercaddy.online/mcp
+          CYPRESS_API_URL: https://careercaddy.online
+          CYPRESS_MCP_URL: https://careercaddy.online/mcp
           CYPRESS_CC_API_TOKEN: ${{ secrets.CC_SMOKE_API_TOKEN }}
           CC_API_TOKEN: ${{ secrets.CC_SMOKE_API_TOKEN }}
-          MCP_URL: https://mcp.careercaddy.online/mcp
+          MCP_URL: https://careercaddy.online/mcp
         run: |
           npm ci
           npm run smoke:tier1
