@@ -303,11 +303,15 @@ class CareerCaddy:
             .with_directory("/app", src)
             .with_exec(["uv", "sync", "--frozen"])
             # CC-161: mirror agents/Dockerfile:75 — guard Playwright's Firefox
-            # pageError dispatcher against a location-less error. Must run after
-            # the final `uv sync` (needs the installed bundle + scripts/), else
-            # test_installed_bundle_is_guarded fails on the Dagger-built image.
+            # pageError dispatcher against a location-less error. Runs on the
+            # env from the `uv sync --frozen` above; --no-sync so `uv run`
+            # doesn't re-materialize (and thereby un-patch) the Playwright
+            # bundle before the script runs.
             .with_exec(
-                ["uv", "run", "python", "scripts/patch_playwright_pageerror.py"]
+                [
+                    "uv", "run", "--no-sync", "python",
+                    "scripts/patch_playwright_pageerror.py",
+                ]
             )
         )
 
@@ -577,7 +581,10 @@ class CareerCaddy:
         return (
             (await self._ai_base(src))
             .with_env_variable("LOGFIRE_SEND_TO_LOGFIRE", "false")
-            .with_exec(["uv", "run", "pytest", "tests/", "-v"])
+            # --no-sync: a bare `uv run` re-syncs the venv before pytest, which
+            # re-materializes Playwright and reverts the CC-161 bundle patch
+            # applied in _ai_base — test_installed_bundle_is_guarded then fails.
+            .with_exec(["uv", "run", "--no-sync", "pytest", "tests/", "-v"])
         )
 
     # ── Deps-baked CI base image publisher (PACA #8 lever A) ───────────────
