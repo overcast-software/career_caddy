@@ -109,8 +109,8 @@ smoke: ## Smoke vs prod (Tier1 always; Tier2 if CC_API_TOKEN set). Override CYPR
 		echo "e2e/ submodule not initialized — run 'git submodule update --init e2e' to enable smoke"; \
 	else \
 		base="$${CYPRESS_BASE_URL:-https://careercaddy.online}"; \
-		api="$${CYPRESS_API_URL:-https://api.careercaddy.online}"; \
-		mcp="$${MCP_URL:-https://mcp.careercaddy.online/mcp}"; \
+		api="$${CYPRESS_API_URL:-https://careercaddy.online}"; \
+		mcp="$${MCP_URL:-https://careercaddy.online/mcp}"; \
 		cd e2e && npm ci && \
 		CYPRESS_BASE_URL="$$base" CYPRESS_API_URL="$$api" CYPRESS_MCP_URL="$$mcp" npm run smoke:tier1 && \
 		if [ -n "$$CC_API_TOKEN" ]; then \

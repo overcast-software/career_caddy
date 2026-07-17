@@ -62,7 +62,7 @@ The pieces worth a closer look:
   straight to persistence (skipping the server-side browser entirely); otherwise it falls back
   to text ingestion. Includes a staff-only tools tab gated on the server's `is_staff`.
 - **MCP-native AI layer.** Agents are `pydantic-ai` definitions wired to **Model Context
-  Protocol** servers; the public server is exposed at `mcp.careercaddy.online/mcp` for any MCP
+  Protocol** servers; the public server is exposed same-origin at `careercaddy.online/mcp` for any MCP
   client (Claude Desktop, Cursor, …). The product's own capabilities — job posts, scrapes,
   scoring, dedupe — are themselves MCP tools.
 - **SSE that survives a synchronous app server.** Long-lived event streams run on a
@@ -258,7 +258,7 @@ make help          # list every target
 | API | 8000 | 8025 |
 | Database | 5432 | 5432 |
 | Chat MCP | internal | 8031 |
-| Public MCP | — | 8030 (`mcp.careercaddy.online`) |
+| Public MCP | — | 8030 (`careercaddy.online/mcp`) |
 | Browser MCP | 3004 | — |
 
 ---
