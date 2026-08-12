@@ -263,10 +263,24 @@ make help          # list every target
 
 ---
 
+## Contributing
+
+Start with **[CONTRIBUTING.md](./CONTRIBUTING.md)** — clone (mind the
+submodules), run the stack, run the tests, and open a PR. It also covers the
+conventions worth knowing before writing code: the JSON:API shape, the
+dedupe-first rule on job posts, the two auth schemes, and why the browser
+extension isn't covered by lint or tests.
+
+Each submodule has a `CLAUDE.md` with the architecture and gotchas for that
+surface.
+
 ## Project planning
 
 Roadmap, epics, and in-flight work are tracked on a project board at
-**[plans.careercaddy.dev](https://plans.careercaddy.dev)**.
+**[plans.careercaddy.dev](https://plans.careercaddy.dev)**. Ticket ids like
+`CC-123` and `CCEXT-26` appear throughout commits and code comments. Public
+read access is being rolled out — if it still asks you to sign in, that hasn't
+landed yet; nothing in the repo requires the board.
 
 ## Troubleshooting
 
