@@ -2,24 +2,46 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Source of truth — read FIRST
+## Start here
 
-CLAUDE.md is a quickstart. Anything below it is a pointer that may
-drift. The authoritative surfaces for an agent are:
+**New to the project? Read [CONTRIBUTING.md](CONTRIBUTING.md) first.** It gets
+you from clone to a running stack and a merged PR without needing anything the
+maintainers have that you don't.
 
-- **claudex MCP** — durable agent memory (architecture, conventions,
-  decisions, error patterns). Boot with `get_project_context` then
-  `recall_memory` key `bootstrap`. **Always pass `projectId`
-  explicitly** — the dockerized MCP CWD-detects to a bogus `-app`.
-  Parent + `agents/`: `-home-oldbones-Network-syncthing-Projects-career-caddy`;
-  submodules append `-api` / `-frontend` / `-automation`.
-- **PACA board** — work-in-flight and cross-agent coordination.
-  Careercaddy/Platform project `438e9c51-1c71-4cad-b597-8356b0b600ec`
-  (prefix `CC`). One ticket = one active worker. File product work here.
-- **The code** — ground truth for structure; each submodule's
-  `CLAUDE.md` is its quickstart.
+**The code is the source of truth for how things work**, and these `CLAUDE.md`
+files are where the reasoning behind it is written down — architecture,
+conventions, and the gotchas that cost someone a day. Each submodule has its
+own. If something isn't written down here, treat that as a documentation bug
+worth fixing rather than knowledge you're expected to already have.
 
-Run `/gitup` to prime a session; it does the above in order.
+### Maintainer tooling (optional — skip if you don't have it)
+
+The maintainers drive this repo with two extra surfaces. **Neither is required
+to build, test, or contribute**, and nothing in this repo should depend on
+them. If you find a doc that only makes sense with them, that doc is wrong.
+
+- **PACA board** — planned and in-flight work, at
+  [plans.careercaddy.dev](https://plans.careercaddy.dev). Ticket ids (`CC-123`,
+  `CCEXT-26`, `BACK-…`) appear throughout commits and comments as context.
+  Public read access is being rolled out; until it lands you may hit a login.
+  Platform project `438e9c51-1c71-4cad-b597-8356b0b600ec` (prefix `CC`);
+  extension work is `CCEXT`. One ticket = one active worker.
+- **claudex MCP** — the maintainers' private agent-memory service, holding
+  operational state across sessions (what's deployed, what broke last time).
+  Boot with `get_project_context` then `recall_memory` key `bootstrap`, always
+  passing `projectId` explicitly — the dockerized MCP CWD-detects to a bogus
+  `-app`. Parent + `agents/`:
+  `-home-oldbones-Network-syncthing-Projects-career-caddy`; submodules append
+  `-api` / `-frontend` / `-automation`.
+
+  **Durable engineering knowledge belongs in these `CLAUDE.md` files, not
+  only in claudex.** Anything a contributor would need to do the work right —
+  how to run the tests, what the real gate is, which footgun bites here —
+  goes in the repo. claudex is for the maintainers' fleet state on top of
+  that. Knowledge that lives only in claudex is invisible to everyone else,
+  which is how this file got hollowed out once already.
+
+Run `/gitup` to prime a maintainer session.
 
 ### RETIRED for agents — do not use
 
