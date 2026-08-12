@@ -43,7 +43,7 @@ AI_IMAGE = "career_caddy_ai"
 #     GHCR→AR mirror is a 1:1 path rename:
 #         career_caddy_api / career_caddy_frontend / career_caddy_ai
 #   - Full path: <host>/<project>/career-caddy/career_caddy_<svc>:<tag>
-#     e.g. us-central1-docker.pkg.dev/<project>/career-caddy/career_caddy_api
+#     e.g. us-west1-docker.pkg.dev/<project>/career-caddy/career_caddy_api
 # Host, GCP project id, repo id and tag are all args — NOTHING is hardcoded to
 # the lab project. Auth is a GCP service-account key JSON passed as a Dagger
 # Secret; AR accepts it as the `_json_key` docker username (see `publish_ar`).
@@ -886,7 +886,7 @@ class CareerCaddy:
         api_src: Annotated[dagger.Directory, DefaultPath("../api")],
         frontend_src: Annotated[dagger.Directory, DefaultPath("../frontend")],
         ai_src: Annotated[dagger.Directory, DefaultPath("../agents")],
-        host: str = "us-central1-docker.pkg.dev",
+        host: str = "us-west1-docker.pkg.dev",
         repo_id: str = AR_REPO_ID,
         tag: str = "latest",
         platform: str = "",
@@ -923,7 +923,9 @@ class CareerCaddy:
         Args:
             sa_key: GCP service-account key JSON (Artifact Registry Writer).
             gcp_project: GCP project id that owns the AR repository.
-            host: AR host, e.g. "us-central1-docker.pkg.dev".
+            host: AR host. Defaults to us-west1-docker.pkg.dev — compute and
+                the AR repo both moved to us-west1 on 2026-07-17; the
+                us-central1 repo is orphaned (kept only as a rollback net).
             repo_id: AR repository id (hyphens). Defaults to "career-caddy".
             tag: Image tag (use a git SHA for immutable tags).
             platform: Target platform (e.g. "linux/arm64"); empty = engine
