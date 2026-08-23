@@ -16,3 +16,6 @@
 [submodule "deploy"]
 	path = deploy
 	url = git@github.com:overcast-software/career_caddy_deploy.git
+[submodule "extension"]
+	path = extension
+	url = git@github.com:overcast-software/career_caddy_extension.git
