@@ -47,7 +47,7 @@ The pieces worth a closer look:
   (BeautifulSoup, ~$0) → **Tier 1** small model → **Tier 2** Haiku → **Tier 3** Sonnet — and
   records hit/miss metrics so "known-good" domains stay on the cheap tier. Implemented as a
   **`pydantic-graph` state machine** (`agents/scrape_graph/`).
-- **Distributed, race-free scrape workers.** The production VPS runs no browser. Scrapes are
+- **Distributed, race-free scrape workers.** Production runs no browser. Scrapes are
   created with `status=hold`; external **runners** (a laptop, a Raspberry Pi) claim work
   atomically via `POST /api/v1/scrapes/claim-next/` using Postgres
   `SELECT FOR UPDATE SKIP LOCKED`, so N runners coexist with zero double-claims. Camoufox +
@@ -81,24 +81,34 @@ The pieces worth a closer look:
 
 ```mermaid
 flowchart TD
-    Browser["Browser"] --> Frontend["frontend — Ember 6 SPA<br/>+ career-caddy-sender extension"]
-    Frontend -->|"JSON:API · JWT (auto-refresh)"| API["api — Django + DRF<br/>PostgreSQL · JSON:API · MCP servers"]
-    Agents["agents — Camoufox + scrape_graph<br/>runners · score poller · MCP"] <-->|"claim-next (SKIP LOCKED) · Api-Key"| API
-    Automation["automation (cc_auto)<br/>email triage · A2A · copilot"] -->|"HTTP-only · Api-Key"| API
+    Browser["Browser"] --> Frontend["frontend — Ember 6 SPA"]
+    Browser --> Extension["extension — career-caddy-sender<br/>MV3 side panel (Glimmer)"]
+    Frontend -->|"JSON:API · Bearer JWT (auto-refresh)"| API["api — Django + DRF<br/>PostgreSQL · JSON:API · MCP servers"]
+    Extension -->|"JSON:API · Bearer jh_ key"| API
+    Agents["agents — Camoufox + scrape_graph<br/>runners · score poller · MCP"] <-->|"claim-next (SKIP LOCKED) · Bearer jh_ key"| API
+    Automation["automation (cc_auto)<br/>email triage · A2A · copilot"] -->|"HTTP-only · Bearer jh_ key"| API
 ```
 
-Five independently deployable submodules (each has its own `CLAUDE.md`):
+The extension is an API client in its own right, not a frontend feature — it calls the API
+directly, with its own key.
+
+Seven independently deployable submodules (each has its own `CLAUDE.md`):
 
 | Submodule | Stack | Role |
 |-----------|-------|------|
-| `frontend/` | Ember.js 6 + Ember Data + Tailwind | JSON:API client SPA; also ships the `career-caddy-sender` browser extension |
+| `frontend/` | Ember.js 6 + Ember Data + Tailwind | JSON:API client SPA; its nginx also same-origin proxies `/api` and `/mcp` |
 | `api/` | Django + DRF + PostgreSQL | Domain models, extraction + dedupe, AI orchestration, JSON:API + the production MCP servers |
 | `agents/` | pydantic-ai + pydantic-graph + Camoufox/Playwright | Browser scraping, the tiered extraction state machine, scrape runners, the score poller, MCP server definitions |
 | `automation/` | Python (HTTP-only) | Operator-side toolkit (cc_auto): email→JobPost triage, A2A orchestration, copilot — runs on one user's machines |
+| `deploy/` | Terraform/OpenTofu + Docker Compose | Reference deploy config: Cloud Run terraform, an AWS ECS reference, and a one-box compose + Caddyfile |
+| `extension/` | MV3 + Glimmer + TypeScript | The `career-caddy-sender` browser extension — a side panel that reads the job page and answers application questions. Published to the Chrome Web Store and Firefox AMO |
 | `e2e/` | Cypress | Real-browser deploy canary |
 
-**Authentication:** frontend → api is JWT (60-min, auto-refreshed on 401); agents/automation →
-api is a long-lived `Api-Key`. **Contract:** JSON:API (`application/vnd.api+json`) end to end.
+**Authentication:** two credential shapes, both on `Authorization: Bearer <credential>` and told
+apart by prefix — the frontend sends a JWT (60-min, auto-refreshed on 401); the extension, agents
+and automation send a long-lived `jh_` API key. An API key is also accepted as an `X-API-Key`
+header or an `?api_key=` query parameter, but `Bearer` is what every first-party client uses.
+**Contract:** JSON:API (`application/vnd.api+json`) end to end, snake_case attribute keys.
 
 ### Why these choices
 - **Ember.js** — the app has deeply nested routes (job post → application → question → answer)
@@ -119,7 +129,7 @@ api is a long-lived `Api-Key`. **Contract:** JSON:API (`application/vnd.api+json
 Python 3.13 · Django + DRF · PostgreSQL · Ember.js 6 + Ember Data · Tailwind ·
 pydantic-ai · pydantic-graph · Model Context Protocol · Camoufox + Playwright ·
 Server-Sent Events (uvicorn/Starlette) · Docker Compose · **Dagger** (CI) ·
-Cypress · pytest · QUnit · ruff · `uv` · GitHub Actions → GHCR → VPS.
+Cypress · pytest · QUnit · ruff · `uv` · GitHub Actions → GHCR · Terraform/OpenTofu → GCP Cloud Run.
 
 ---
 
@@ -155,13 +165,20 @@ resource.
 
 ```
 career_caddy/            parent repo — docker-compose, Makefile, Dagger CI, deploy workflows
-├── frontend/            Ember SPA  +  public/extensions/career-caddy-sender  (browser extension)
+├── frontend/            Ember SPA (nginx also proxies /api and /mcp same-origin)
 ├── api/                 Django + DRF + PostgreSQL  +  MCP servers
 ├── agents/              Camoufox browser · scrape_graph · runners · score poller · MCP defs
 ├── automation/          operator-side cc_auto (email triage, A2A, copilot) — HTTP-only
+├── deploy/              reference deploy config — Cloud Run terraform, AWS ECS ref, one-box compose
+├── extension/           career-caddy-sender — MV3 side panel, Glimmer + TypeScript
 ├── e2e/                 Cypress deploy canary
 └── dagger/              CI pipeline definitions (Python)
 ```
+
+The `career-caddy-sender` browser extension lives in
+[career_caddy_extension](https://github.com/overcast-software/career_caddy_extension) and is
+wired in as the `extension/` submodule. It was moved out of `frontend/public/extensions/` in
+August 2026 and rewritten on Glimmer.
 
 Inside `agents/`: `agents/agents/` (pydantic-ai definitions), `agents/scrape_graph/` (the
 extraction state machine), `agents/runners/` (the `scrape_runner` that claims hold work),
@@ -183,8 +200,9 @@ and `public_server` ship to prod; `browser_server` and `career_caddy_server` are
   pipeline GitHub Actions runs, so "green locally" means "green in CI".
 - **`make install-hooks`** wires the Cypress canary as a `pre-push` gate: a broken staging
   deploy blocks the push before it can become a production deploy.
-- **Deploy:** merging the parent repo to `main` triggers GitHub Actions → builds and publishes
-  GHCR images → deploys to the VPS. Submodules merge first; the parent bumps their pins after.
+- **Deploy:** merging the parent repo to `main` builds and tests, publishes images to GHCR, and
+  smoke-tests the live site — it does **not** roll production. Promoting an image is a separate,
+  deliberate step. Submodules merge first; the parent bumps their pins after.
 
 ---
 
@@ -200,11 +218,11 @@ The system spans two (optionally three) machines:
 
 | Target | Compose file | Services | Hardware |
 |--------|--------------|----------|----------|
-| **VPS** (production) | `docker-compose.prod.yml` | db, api, frontend, chat, MCP, SSE events | 2 GB RAM, 1–2 vCPU, no GPU |
+| **Production** | Cloud Run services (see `deploy/`) | db, api, frontend, chat, MCP, SSE events | managed; a one-box `docker-compose.prod.yml` is the self-host equivalent |
 | **Local dev** | `docker-compose.yml` | db, api, frontend, chat, browser-MCP | 8+ GB RAM (Camoufox ~1 GB) |
 | **Raspberry Pi / NUC** (optional) | standalone runner | scrape runner only | Pi 4/5, 4+ GB, 64-bit |
 
-**How the runner bridges the gap:** the VPS runs no browser. A scrape created `hold` is claimed
+**How the runner bridges the gap:** production runs no browser. A scrape created `hold` is claimed
 by a runner (laptop or Pi) via `claim-next`, fetched with Camoufox, and its HTML posted back;
 the API then handles extraction, JobPost creation, and scoring. No LLM runs on the runner.
 
