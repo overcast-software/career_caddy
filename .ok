@@ -21,8 +21,20 @@ dagger -m /home/oldbones/Network/syncthing/Projects/career_caddy/dagger call bui
 # ── Publish images to GHCR ────────────────────────────────────────────────
 dagger -m /home/oldbones/Network/syncthing/Projects/career_caddy/dagger call publish --registry-token=env:GITHUB_TOKEN --org=overcast-software --tag=latest
 
-# ── Deploy to VPS ─────────────────────────────────────────────────────────
-dagger -m /home/oldbones/Network/syncthing/Projects/career_caddy/dagger call deploy --ssh-key=file:/home/oldbones/.ssh/id_ed25519 --host=192.3.252.74 --ssh-user=oldbones --app-dir=/home/oldbones/Projects/career_caddy --tag=latest
+# ── Deploy ────────────────────────────────────────────────────────────────
+# PROD IS GCP CLOUD RUN (us-west1) — deploy with `ok tofu apply`, above.
+# Rolling an image is manual and image-based: build at the SHA, docker push,
+# `gcloud artifacts docker tags add :<sha> :latest`, then `ok tofu apply`.
+# Merging a PR or bumping a submodule pin does NOT deploy anything.
+#
+# RETIRED — the one-box VPS path. 192.3.252.74 is the racknerd box now being
+# repurposed as dev, so running this deploys prod images over the dev host.
+# Kept as a record of the self-host shape; uncomment only for a real one-box
+# target, with --host/--app-dir pointed at it.
+# dagger -m /home/oldbones/Network/syncthing/Projects/career_caddy/dagger call deploy --ssh-key=file:/home/oldbones/.ssh/id_ed25519 --host=<your-host> --ssh-user=<user> --app-dir=<app-dir> --tag=latest
+
+# ── Terraform / GCP (prod) ─────────────────────────────────────────────────
+tofu:a="${*:-plan}"; [ "$a" = list ] && a="state list"; tofu -chdir=deploy/terraform/gcp $a
 
 # ── AI pipeline ────────────────────────────────────────────────────────────
 make pipeline
@@ -48,7 +60,7 @@ gh run view --web
 make help
 curl -s http://localhost:8000/api/v1/healthcheck/ | python3 -m json.tool
 
-curl -s -X POST http://localhost:8000/api/v1/test-email/ -H "Authorization: Bearer $CC_API_TOKEN" -H "Content-Type: application/json" -d '{"email":"doug@overcastsoftware.com"}'
+curl -s -X POST http://localhost:8000/api/v1/test-email/ -H "Authorization: Bearer $CC_API_TOKEN" -H "Content-Type: application/json" -d "{\"email\":\"${CC_TEST_EMAIL:?set CC_TEST_EMAIL to the address you want the test mail sent to}\"}"
 
-curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Api-Key $CC_API_TOKEN" "$CC_API_BASE_URL/api/v1/scrapes/?filter%5Bstatus%5D=hold"
-curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Api-Key $CC_API_TOKEN" http://localhost:8000/api/v1/scrapes/
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $CC_API_TOKEN" "$CC_API_BASE_URL/api/v1/scrapes/?filter%5Bstatus%5D=hold"
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $CC_API_TOKEN" http://localhost:8000/api/v1/scrapes/
