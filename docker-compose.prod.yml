@@ -61,7 +61,7 @@ services:
       DEBUG: "False"
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@db:5432/${DB_NAME:-job_hunting}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-careercaddy.online,api.careercaddy.online,localhost,127.0.0.1,api}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-careercaddy.online,localhost,127.0.0.1,api}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://careercaddy.online}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://careercaddy.online}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -159,7 +159,7 @@ services:
       DEBUG: "False"
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@db:5432/${DB_NAME:-job_hunting}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-careercaddy.online,api.careercaddy.online,localhost,127.0.0.1,events}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-careercaddy.online,localhost,127.0.0.1,events}
       SA_SCHEMA_ON_POST_MIGRATE: "False"  # api runs migrations; events just LISTENs
       LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
     depends_on:
@@ -203,7 +203,7 @@ services:
       DEBUG: "False"
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@db:5432/${DB_NAME:-job_hunting}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-careercaddy.online,api.careercaddy.online,localhost,127.0.0.1,worker}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-careercaddy.online,localhost,127.0.0.1,worker}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       SCRAPING_ENABLED: ${SCRAPING_ENABLED:-False}
       SA_SCHEMA_ON_POST_MIGRATE: "False"  # api runs migrations; worker just consumes
@@ -286,7 +286,9 @@ services:
       caddy.reverse_proxy: "{{upstreams 80}}"
 
   # ── Public MCP Server ────────────────────────────────────────────────────
-  # Exposes career-data tools via MCP protocol at mcp.careercaddy.online.
+  # Exposes career-data tools via MCP protocol. In production this is served
+  # same-origin at <domain>/mcp — the mcp.* subdomain was retired at the GCP
+  # cutover (CC-188) and no longer resolves.
   # Auth: clients supply their own jh_* API key — no CC_API_TOKEN needed.
   # Security: no secrets.yml, no mail volumes, no browser automation.
 
